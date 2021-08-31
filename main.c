@@ -22,7 +22,9 @@
 #include <linux/coresight.h>
 #include <soc/qcom/ramdump.h>
 #include <soc/qcom/subsystem_notif.h>
+#ifdef CONFIG_CNSS2_QGIC2M
 #include <soc/qcom/qgic2m.h>
+#endif
 
 #include "main.h"
 #include "debug.h"
@@ -59,6 +61,10 @@ int plat_env_index;
 #ifdef CONFIG_CNSS2_PM
 static DECLARE_RWSEM(cnss_pm_sem);
 #endif
+
+static unsigned int qmi_timeout;
+module_param(qmi_timeout, uint, 0600);
+MODULE_PARM_DESC(qmi_timeout, "Timeout for QMI message in milliseconds");
 
 bool ramdump_enabled;
 module_param(ramdump_enabled, bool, 0600);
@@ -1208,9 +1214,11 @@ int cnss_unregister_qca8074_cb(struct cnss_plat_data *plat_priv)
 	void *handler = plat_priv->esoc_info.modem_notify_handler;
 
 	if (handler) {
+#ifdef CONFIG_CNSS2_KERNEL_IPQ
 		/* unregister atomic handler first */
 		subsys_notif_unregister_atomic_notifier(handler,
 			&plat_priv->modem_atomic_nb);
+#endif
 		subsys_notif_unregister_notifier(handler, &plat_priv->modem_nb);
 		memset(&plat_priv->modem_nb, 0, sizeof(struct notifier_block));
 		plat_priv->esoc_info.modem_notify_handler = NULL;
@@ -1223,9 +1231,11 @@ int cnss_unregister_qcn9000_cb(struct cnss_plat_data *plat_priv)
 	void *handler = plat_priv->esoc_info.modem_notify_handler;
 
 	if (handler) {
+#ifdef CONFIG_CNSS2_KERNEL_IPQ
 		/* unregister atomic handler first */
 		subsys_notif_unregister_atomic_notifier(handler,
 						&plat_priv->modem_atomic_nb);
+#endif
 		subsys_notif_unregister_notifier(handler, &plat_priv->modem_nb);
 		memset(&plat_priv->modem_nb, 0, sizeof(struct notifier_block));
 		plat_priv->esoc_info.modem_notify_handler = NULL;
@@ -1233,6 +1243,7 @@ int cnss_unregister_qcn9000_cb(struct cnss_plat_data *plat_priv)
 	return 0;
 }
 
+#ifdef CONFIG_CNSS2_KERNEL_IPQ
 static int cnss_qcn9000_notifier_atomic_nb(struct notifier_block *nb,
 					   unsigned long code,
 					   void *ss_handle)
@@ -1267,6 +1278,7 @@ static int cnss_qca8074_notifier_atomic_nb(struct notifier_block *nb,
 
 	return NOTIFY_OK;
 }
+#endif
 
 static int cnss_qcn9000_notifier_nb(struct notifier_block *nb,
 				    unsigned long code,
@@ -1290,7 +1302,6 @@ static int cnss_qcn9000_notifier_nb(struct notifier_block *nb,
 		clear_bit(CNSS_DRIVER_PROBED, &plat_priv->driver_state);
 		clear_bit(CNSS_DEV_ERR_NOTIFY, &plat_priv->driver_state);
 	} else if (code == SUBSYS_RAMDUMP_NOTIFICATION) {
-		coresight_abort();
 		driver_ops->reinit((struct pci_dev *)plat_priv->plat_dev,
 				   (const struct pci_device_id *)
 				   plat_priv->plat_dev_id);
@@ -1309,7 +1320,7 @@ void *cnss_register_qcn9000_cb(struct cnss_plat_data *plat_priv)
 {
 	struct cnss_subsys_info *subsys_info;
 	void *ss_handle = NULL;
-	int ret = 0, index;
+	int index;
 
 	subsys_info = &plat_priv->subsys_info;
 	index = plat_priv->wlfw_service_instance_id - NODE_ID_BASE;
@@ -1317,6 +1328,7 @@ void *cnss_register_qcn9000_cb(struct cnss_plat_data *plat_priv)
 	plat_priv->modem_nb.notifier_call = cnss_qcn9000_notifier_nb;
 	ss_handle = subsys_notif_register_notifier(
 		subsys_info->subsys_desc.name, &plat_priv->modem_nb);
+#ifdef CONFIG_CNSS2_KERNEL_IPQ
 	/* register the atomic notifier as well */
 	if (ss_handle) {
 		plat_priv->modem_atomic_nb.notifier_call =
@@ -1328,6 +1340,7 @@ void *cnss_register_qcn9000_cb(struct cnss_plat_data *plat_priv)
 	} else {
 		pr_err("notifier registration failed\n");
 	}
+#endif
 
 	return ss_handle;
 }
@@ -1351,7 +1364,9 @@ static int cnss_qca8074_notifier_nb(struct notifier_block *nb,
 		cnss_bus_free_qdss_mem(plat_priv);
 		driver_ops->remove((struct pci_dev *)plat_priv->plat_dev);
 	} else if (code == SUBSYS_RAMDUMP_NOTIFICATION) {
+#ifdef CONFIG_CNSS2_KERNEL_IPQ
 		coresight_abort();
+#endif
 		driver_ops->reinit((struct pci_dev *)plat_priv->plat_dev,
 				   (const struct pci_device_id *)
 				   plat_priv->plat_dev_id);
@@ -1379,6 +1394,7 @@ void *cnss_register_qca8074_cb(struct cnss_plat_data *plat_priv)
 	plat_priv->modem_nb.notifier_call = cnss_qca8074_notifier_nb;
 	ss_handle = subsys_notif_register_notifier(
 		subsys_info->subsys_desc.name, &plat_priv->modem_nb);
+#ifdef CONFIG_CNSS2_KERNEL_IPQ
 	/* register the atomic notifier as well */
 	if (ss_handle) {
 		plat_priv->modem_atomic_nb.notifier_call =
@@ -1386,6 +1402,7 @@ void *cnss_register_qca8074_cb(struct cnss_plat_data *plat_priv)
 		subsys_notif_register_atomic_notifier(ss_handle,
 			&plat_priv->modem_atomic_nb);
 	}
+#endif
 
 	return ss_handle;
 }
@@ -2385,27 +2402,37 @@ static int cnss_qdss_trace_free_hdlr(struct cnss_plat_data *plat_priv)
 	return 0;
 }
 
-static void m3_dump_open_timeout_func(unsigned long data)
+static void m3_dump_open_timeout_func(struct timer_list *timer)
 {
-	struct cnss_plat_data *plat_priv = (struct cnss_plat_data *)data;
-	struct m3_dump *m3_dump_data = &plat_priv->m3_dump_data;
+	struct m3_dump *m3_dump_data =
+			from_timer(m3_dump_data, timer, open_timer);
+
+	if (!m3_dump_data) {
+		pr_err("%s: Invalid m3_dump_data from timer\n", __func__);
+		return;
+	}
 
 	atomic_set(&m3_dump_data->open_timedout, 1);
 	complete(&m3_dump_data->open_complete);
-	cnss_pr_err("M3 dump open failed\n");
+	pr_err("M3 dump open failed\n");
 }
 
-static void m3_dump_read_timeout_func(unsigned long data)
+static void m3_dump_read_timeout_func(struct timer_list *timer)
 {
-	struct cnss_plat_data *plat_priv = (struct cnss_plat_data *)data;
-	struct m3_dump *m3_dump_data = &plat_priv->m3_dump_data;
+	struct m3_dump *m3_dump_data =
+			from_timer(m3_dump_data, timer, read_timer);
+
+	if (!m3_dump_data) {
+		pr_err("%s: Invalid m3_dump_data from timer\n", __func__);
+		return;
+	}
 
 	if (m3_dump_data->task)
 		send_sig(SIGKILL, m3_dump_data->task, 0);
 
 	atomic_set(&m3_dump_data->read_timedout, 1);
 	complete(&m3_dump_data->read_complete);
-	cnss_pr_err("M3 dump collection failed\n");
+	pr_err("M3 dump collection failed\n");
 }
 
 static int m3_dump_open(struct inode *inode, struct file *file)
@@ -2435,8 +2462,7 @@ static int m3_dump_open(struct inode *inode, struct file *file)
 	nonseekable_open(inode, file);
 
 	init_completion(&m3_dump_data->read_complete);
-	setup_timer(&m3_dump_data->read_timer, m3_dump_read_timeout_func,
-		    (unsigned long)plat_priv);
+	timer_setup(&m3_dump_data->read_timer, m3_dump_read_timeout_func, 0);
 	mod_timer(&m3_dump_data->read_timer,
 		  jiffies + msecs_to_jiffies(M3_DUMP_READ_TIMER_TIMEOUT));
 
@@ -2559,8 +2585,7 @@ static int cnss_do_m3_dump_upload(struct cnss_plat_data *plat_priv,
 	/* This avoids race condition between the scheduled timer and the opened
 	 * file discriptor during delay in user space app execution.
 	 */
-	setup_timer(&m3_dump_data->open_timer, m3_dump_open_timeout_func,
-		    (unsigned long)plat_priv);
+	timer_setup(&m3_dump_data->open_timer, m3_dump_open_timeout_func, 0);
 
 	mod_timer(&m3_dump_data->open_timer,
 		  jiffies + msecs_to_jiffies(M3_DUMP_OPEN_TIMEOUT));
@@ -3263,9 +3288,8 @@ static int cnss_misc_init(struct cnss_plat_data *plat_priv)
 {
 	int ret;
 
-	setup_timer(&plat_priv->fw_boot_timer,
-		    cnss_bus_fw_boot_timeout_hdlr,
-		    (unsigned long)plat_priv);
+	timer_setup(&plat_priv->fw_boot_timer,
+		    cnss_bus_fw_boot_timeout_hdlr, 0);
 #ifdef CONFIG_CNSS2_PM
 	register_pm_notifier(&cnss_pm_notifier);
 #endif
@@ -3301,7 +3325,12 @@ static void cnss_init_control_params(struct cnss_plat_data *plat_priv)
 {
 	plat_priv->ctrl_params.quirks = CNSS_QUIRKS_DEFAULT;
 	plat_priv->ctrl_params.mhi_timeout = CNSS_MHI_TIMEOUT_DEFAULT;
-	plat_priv->ctrl_params.qmi_timeout = CNSS_QMI_TIMEOUT_DEFAULT;
+
+	if (qmi_timeout)
+		plat_priv->ctrl_params.qmi_timeout = qmi_timeout;
+	else
+		plat_priv->ctrl_params.qmi_timeout = CNSS_QMI_TIMEOUT_DEFAULT;
+
 	plat_priv->ctrl_params.bdf_type = 0;
 	plat_priv->ctrl_params.time_sync_period = CNSS_TIME_SYNC_PERIOD_DEFAULT;
 }
@@ -3555,12 +3584,17 @@ cnss_check_skip_target_probe(const struct platform_device_id *device_id,
 
 static int cnss_probe(struct platform_device *plat_dev)
 {
-	int ret = 0, qgicm_id;
+	int ret = 0;
 	struct cnss_plat_data *plat_priv = NULL;
 	const struct of_device_id *of_id;
 	const struct platform_device_id *device_id;
 	u32 node_id = 0, userpd_id = 0;
+#ifdef CONFIG_CNSS2_KERNEL_IPQ
 	const int *soc_version;
+#endif
+#ifdef CONFIG_CNSS2_QGIC2M
+	int qgicm_id;
+#endif
 
 	if (cnss_get_plat_priv(plat_dev)) {
 		pr_err("Driver is already initialized!\n");
@@ -3610,6 +3644,7 @@ static int cnss_probe(struct platform_device *plat_dev)
 	}
 #endif
 
+#ifdef CONFIG_CNSS2_KERNEL_IPQ
 	soc_version = of_get_property(of_find_node_by_path("/"),
 				      "soc_version_major", NULL);
 	if (!soc_version) {
@@ -3637,6 +3672,7 @@ static int cnss_probe(struct platform_device *plat_dev)
 			goto out;
 		}
 	}
+#endif
 
 	plat_priv = devm_kzalloc(&plat_dev->dev, sizeof(*plat_priv),
 				 GFP_KERNEL);
@@ -3662,6 +3698,9 @@ static int cnss_probe(struct platform_device *plat_dev)
 			 NODE_ID_BASE + 1)
 			plat_priv->board_info.board_id_override = bdf_pci1;
 
+#ifdef CONFIG_CNSS2_DMA_ALLOC
+		plat_priv->dma_alloc_supported = true;
+#endif
 		break;
 	case QCA8074_DEVICE_ID:
 	case QCA8074V2_DEVICE_ID:
@@ -3685,6 +3724,7 @@ static int cnss_probe(struct platform_device *plat_dev)
 			WLFW_SERVICE_INS_ID_V01_QCN6122 + QCN6122_1)
 			plat_priv->board_info.board_id_override = bdf_pci1;
 
+#ifdef CONFIG_CNSS2_QGIC2M
 		/* init qgic msi */
 		if (userpd_id == QCN6122_0) {
 			qgicm_id = APCS_QGIC2M_0;
@@ -3704,6 +3744,7 @@ static int cnss_probe(struct platform_device *plat_dev)
 			ret = -ENODEV;
 			goto out;
 		}
+#endif
 		break;
 	default:
 		cnss_pr_err("No such device id %p\n", device_id);
@@ -3770,7 +3811,7 @@ static int cnss_probe(struct platform_device *plat_dev)
 	if (ret < 0)
 		cnss_pr_err("CNSS genl init failed %d\n", ret);
 
-	cnss_pr_info("Platform driver probed successfully. plat %p tgt 0x%lx\n",
+	cnss_pr_info("Platform driver probed successfully. plat %pK tgt 0x%lx\n",
 		     plat_priv, plat_priv->device_id);
 
 	return 0;

@@ -40,16 +40,7 @@
 #define DEFAULT_CAL_FILE_PREFIX         "caldata_"
 #define DEFAULT_CAL_FILE_SUFFIX         ".bin"
 
-#ifdef CONFIG_CNSS2_DEBUG
-static unsigned int qmi_timeout = 5000;
-module_param(qmi_timeout, uint, 0600);
-MODULE_PARM_DESC(qmi_timeout, "Timeout for QMI message in milliseconds");
-EXPORT_SYMBOL(qmi_timeout);
-
-#define QMI_WLFW_TIMEOUT_MS		qmi_timeout
-#else
 #define QMI_WLFW_TIMEOUT_MS		(plat_priv->ctrl_params.qmi_timeout)
-#endif
 
 #define QMI_WLFW_TIMEOUT_JF		msecs_to_jiffies(QMI_WLFW_TIMEOUT_MS)
 #define COEX_TIMEOUT			QMI_WLFW_TIMEOUT_JF
@@ -59,12 +50,6 @@ EXPORT_SYMBOL(qmi_timeout);
 unsigned int qca8074_fw_mem_mode = 0xFF;
 module_param(qca8074_fw_mem_mode, uint, 0600);
 MODULE_PARM_DESC(qca8074_fw_mem_mode, "qca8074_fw_mem_mode");
-
-#ifdef CONFIG_CNSS2_DEBUG
-static bool bdf_bypass = true;
-module_param(bdf_bypass, bool, 0600);
-MODULE_PARM_DESC(bdf_bypass, "If BDF is not found, send dummy BDF to FW");
-#endif
 
 unsigned int num_wlan_clients;
 module_param(num_wlan_clients, uint, 0600);

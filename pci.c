@@ -21,7 +21,14 @@
 #include <linux/completion.h>
 #include <soc/qcom/ramdump.h>
 #include <linux/of_address.h>
+#ifdef CONFIG_CNSS2_DMA_ALLOC
+#include <linux/cma.h>
+#include <linux/of_reserved_mem.h>
+#endif
+
+#ifdef KERNEL_SUPPORTS_QGIC2M
 #include <soc/qcom/qgic2m.h>
+#endif
 
 #include "main.h"
 #include "debug.h"
@@ -77,8 +84,9 @@ MODULE_PARM_DESC(pci1_num_msi_bmap,
 
 #define PCI_BAR_NUM			0
 
-#define PCI_DMA_MASK_32_BIT		32
-#define PCI_DMA_MASK_64_BIT		64
+#define PCI_DMA_MASK_32_BIT		DMA_BIT_MASK(32)
+#define PCI_DMA_MASK_36_BIT		DMA_BIT_MASK(36)
+#define PCI_DMA_MASK_64_BIT		DMA_BIT_MASK(64)
 
 #define MHI_NODE_NAME			"qcom,mhi"
 #define MHI_MSI_NAME			"MHI"
@@ -214,6 +222,7 @@ static DEFINE_SPINLOCK(pci_reg_window_lock);
 #define QCN9000_PCIE_BHI_ERRDBG3_REG		0x1E0B23C
 
 #define QCN9000_SBL_LOG_SIZE			44
+#define MHI_RAMDUMP_DUMP_COMPLETE		0x5000
 
 /* Timeout, to print boot debug logs, in seconds */
 static int boot_debug_timeout = 7;
@@ -489,13 +498,6 @@ MODULE_PARM_DESC(pci_link_down_panic,
 
 struct paging_header hdr;
 
-#ifdef CONFIG_CNSS2_DEBUG
-static bool fbc_bypass;
-module_param(fbc_bypass, bool, 0600);
-MODULE_PARM_DESC(fbc_bypass,
-		 "Bypass firmware download when loading WLAN driver");
-#endif
-
 int cnss_pcie_rescan(void)
 {
 #ifdef CONFIG_PCIE_QCOM
@@ -572,7 +574,7 @@ static int cnss_pci_get_link_status(struct cnss_pci_data *pci_priv)
 	return 0;
 }
 
-#ifdef CONFIG_PCI_MSM
+#ifdef CONFIG_CNSS2_PCI_MSM
 static int cnss_set_pci_link_status(struct cnss_pci_data *pci_priv,
 				    enum pci_link_status status)
 {
@@ -611,7 +613,7 @@ static int cnss_set_pci_link_status(struct cnss_pci_data *pci_priv,
 #ifdef CONFIG_PCI_SUSPENDRESUME
 static int cnss_set_pci_link(struct cnss_pci_data *pci_priv, bool link_up)
 {
-#ifdef CONFIG_PCI_MSM
+#ifdef CONFIG_CNSS2_PCI_MSM
 	int ret = 0;
 	struct pci_dev *pci_dev = pci_priv->pci_dev;
 	enum msm_pcie_pm_opt pm_ops;
@@ -1071,7 +1073,7 @@ out:
 		 * mode and is able to do RDDM, RDDM cookie would be set.
 		 * Dump SBL SRAM memory only if RDDM cookie is not set.
 		 */
-		if (!mhi_scan_rddm_cookie(pci_priv->mhi_ctrl, BHI_ERRDBG3,
+		if (!mhi_scan_rddm_cookie(pci_priv->mhi_ctrl,
 					  DEVICE_RDDM_COOKIE))
 			cnss_pci_dump_bl_sram_mem(pci_priv);
 	}
@@ -1484,18 +1486,6 @@ force_wake_put:
 	cnss_pci_force_wake_put(pci_priv);
 }
 
-#ifdef CONFIG_CNSS2_DEBUG
-static void cnss_pci_collect_dump(struct cnss_pci_data *pci_priv)
-{
-	cnss_pci_collect_dump_info(pci_priv, false);
-	CNSS_ASSERT(0);
-}
-#else
-static void cnss_pci_collect_dump(struct cnss_pci_data *pci_priv)
-{
-}
-#endif
-
 static int cnss_qca6174_powerup(struct cnss_pci_data *pci_priv)
 {
 	int ret = 0;
@@ -1674,7 +1664,6 @@ static int cnss_qcn9000_shutdown(struct cnss_pci_data *pci_priv)
 	     test_bit(CNSS_DRIVER_IDLE_SHUTDOWN, &plat_priv->driver_state)) &&
 	    test_bit(CNSS_DEV_ERR_NOTIFY, &plat_priv->driver_state)) {
 		del_timer(&pci_priv->dev_rddm_timer);
-		cnss_pci_collect_dump(pci_priv);
 	}
 
 	cnss_pci_power_off_mhi(pci_priv);
@@ -1770,12 +1759,14 @@ static int cnss_qcn9000_ramdump(struct cnss_pci_data *pci_priv)
 		dump_seg++;
 	}
 
+#ifdef CONFIG_CNSS2_KERNEL_IPQ
 	ret = create_ramdump_device_file(info_v2->ramdump_dev);
 	if (ret) {
 		kfree(meta_info);
 		kfree(ramdump_segs);
 		return ret;
 	}
+#endif
 
 	ret = do_elf_ramdump(info_v2->ramdump_dev, ramdump_segs,
 			     dump_data->nentries + CNSS_NUM_META_INFO_SEGMENTS);
@@ -2043,7 +2034,7 @@ int cnss_pci_unregister_driver_hdlr(struct cnss_pci_data *pci_priv)
 	return 0;
 }
 
-#ifdef CONFIG_PCI_MSM
+#ifdef CONFIG_CNSS2_PCI_MSM
 static bool cnss_pci_is_drv_supported(struct cnss_pci_data *pci_priv)
 {
 	struct pci_dev *root_port = pci_find_pcie_root_port(pci_priv->pci_dev);
@@ -3033,9 +3024,32 @@ int cnss_pci_alloc_fw_mem(struct cnss_plat_data *plat_priv)
 	struct device *dev;
 	int i;
 	struct cnss_pci_data *pci_priv = plat_priv->bus_priv;
+	struct pci_dev *pci_dev = (struct pci_dev *)plat_priv->pci_dev;
 
 	dev = &plat_priv->plat_dev->dev;
 
+	if (plat_priv->dma_alloc_supported) {
+		for (i = 0; i < plat_priv->fw_mem_seg_len; i++) {
+			if (!fw_mem[i].va && fw_mem[i].size) {
+				fw_mem[i].va =
+					dma_alloc_attrs(&pci_dev->dev,
+						fw_mem[i].size, &fw_mem[i].pa,
+						GFP_KERNEL,
+						DMA_ATTR_FORCE_CONTIGUOUS);
+
+				if (!fw_mem[i].va) {
+					cnss_pr_err("Failed to allocate memory for FW, size: 0x%zx, type: %u\n",
+						    fw_mem[i].size,
+						    fw_mem[i].type);
+					return -ENOMEM;
+				}
+			}
+		}
+
+		return 0;
+	}
+
+	/* IPQ Reserved memory model */
 	for (i = 0; i < plat_priv->fw_mem_seg_len; i++) {
 		switch (fw_mem[i].type) {
 		case CALDB_MEM_REGION_TYPE:
@@ -3177,23 +3191,6 @@ int cnss_pci_alloc_fw_mem(struct cnss_plat_data *plat_priv)
 		}
 	}
 
-#ifdef CONFIG_CNSS2_SMMU
-	for (i = 0; i < plat_priv->fw_mem_seg_len; i++) {
-		if (!fw_mem[i].va && fw_mem[i].size) {
-			fw_mem[i].va =
-				dma_alloc_coherent(&pci_priv->pci_dev->dev,
-						   fw_mem[i].size,
-						   &fw_mem[i].pa, GFP_KERNEL);
-			if (!fw_mem[i].va) {
-				cnss_pr_err("Failed to allocate memory for FW, size: 0x%zx, type: %u\n",
-					    fw_mem[i].size, fw_mem[i].type);
-
-				return -ENOMEM;
-			}
-		}
-	}
-#endif
-
 	return 0;
 }
 
@@ -3261,25 +3258,6 @@ void cnss_pci_free_qdss_mem(struct cnss_plat_data *plat_priv)
 	struct cnss_fw_mem *qdss_mem = plat_priv->qdss_mem;
 	int i;
 
-#ifdef CONFIG_CNSS2_SMMU
-	struct cnss_pci_data *pci_priv =
-			(struct cnss_pci_data *)plat_priv->bus_priv;
-
-	for (i = 0; i < plat_priv->qdss_mem_seg_len; i++) {
-		if (qdss_mem[i].va && qdss_mem[i].size) {
-			cnss_pr_dbg("Freeing memory for QDSS: pa: %pa, size: 0x%zx, type: %u\n",
-				    &qdss_mem[i].pa, qdss_mem[i].size,
-				    qdss_mem[i].type);
-			dma_free_coherent(&pci_priv->pci_dev->dev,
-					  qdss_mem[i].size, qdss_mem[i].va,
-					  qdss_mem[i].pa);
-			qdss_mem[i].va = NULL;
-			qdss_mem[i].pa = 0;
-			qdss_mem[i].size = 0;
-			qdss_mem[i].type = 0;
-		}
-	}
-#endif
 	for (i = 0; i < plat_priv->qdss_mem_seg_len; i++) {
 		if (qdss_mem[i].va) {
 			cnss_pr_dbg("Freeing QDSS Memory\n");
@@ -3294,28 +3272,28 @@ void cnss_pci_free_qdss_mem(struct cnss_plat_data *plat_priv)
 
 void cnss_pci_free_fw_mem(struct cnss_plat_data *plat_priv)
 {
+	struct cnss_pci_data *pci_priv = plat_priv->bus_priv;
 	struct cnss_fw_mem *fw_mem = plat_priv->fw_mem;
+	struct device *dev = &pci_priv->pci_dev->dev;
 	int i;
 
-#ifdef CONFIG_CNSS2_SMMU
-	struct cnss_pci_data *pci_priv =
-			(struct cnss_pci_data *)plat_priv->bus_priv;
-
-	for (i = 0; i < plat_priv->fw_mem_seg_len; i++) {
-		if (fw_mem[i].va && fw_mem[i].size) {
-			cnss_pr_dbg("Freeing memory for FW, va: 0x%pK, pa: %pa, size: 0x%zx, type: %u\n",
-				    fw_mem[i].va, fw_mem[i].pa,
-				    fw_mem[i].size, fw_mem[i].type);
-			dma_free_coherent(&pci_priv->pci_dev->dev,
-					  fw_mem[i].size, fw_mem[i].va,
-					  fw_mem[i].pa);
-			fw_mem[i].va = NULL;
-			fw_mem[i].pa = 0;
-			fw_mem[i].size = 0;
-			fw_mem[i].type = 0;
+	if (plat_priv->dma_alloc_supported) {
+		for (i = 0; i < plat_priv->fw_mem_seg_len; i++) {
+			if (fw_mem[i].va && fw_mem[i].size) {
+				cnss_pr_dbg("Freeing memory for FW, va: 0x%pK, pa: %d, size: 0x%zx, type: %u\n",
+					    fw_mem[i].va, fw_mem[i].pa,
+					    fw_mem[i].size, fw_mem[i].type);
+				dma_free_attrs(dev, fw_mem[i].size,
+					       fw_mem[i].va, fw_mem[i].pa,
+					       DMA_ATTR_FORCE_CONTIGUOUS);
+				fw_mem[i].va = NULL;
+				fw_mem[i].pa = 0;
+				fw_mem[i].size = 0;
+				fw_mem[i].type = 0;
+			}
 		}
+		goto out;
 	}
-#endif
 
 	for (i = 0; i < plat_priv->fw_mem_seg_len; i++) {
 		if (fw_mem[i].va) {
@@ -3330,6 +3308,7 @@ void cnss_pci_free_fw_mem(struct cnss_plat_data *plat_priv)
 			}
 		}
 	}
+out:
 	plat_priv->fw_mem_seg_len = 0;
 }
 
@@ -3490,12 +3469,12 @@ void cnss_pci_fw_boot_timeout_hdlr(struct cnss_pci_data *pci_priv)
 }
 
 #ifdef CONFIG_CNSS2_SMMU
-
 static int cnss_pci_smmu_fault_handler(struct iommu_domain *domain,
 				       struct device *dev, unsigned long iova,
 				       int flags, void *handler_token)
 {
 	struct cnss_pci_data *pci_priv = handler_token;
+	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 
 	cnss_pr_err("SMMU fault happened with IOVA 0x%lx\n", iova);
 
@@ -3521,12 +3500,19 @@ static int cnss_pci_init_smmu(struct cnss_pci_data *pci_priv)
 	int ret = 0;
 
 	of_node = of_parse_phandle(pci_dev->dev.of_node, "qcom,iommu-group", 0);
-	if (!of_node)
+	if (!of_node) {
+		cnss_pr_err("No iommu group configuration\n");
 		return ret;
+	}
 
 	cnss_pr_dbg("Initializing SMMU\n");
 
 	pci_priv->iommu_domain = iommu_get_domain_for_dev(&pci_dev->dev);
+	if (!pci_priv->iommu_domain) {
+		cnss_pr_err("No iommu domain found\n");
+		return -EINVAL;
+	}
+
 	ret = of_property_read_string(of_node, "qcom,iommu-dma",
 				      &iommu_dma_type);
 	if (!ret && !strcmp("fastmap", iommu_dma_type)) {
@@ -3564,9 +3550,7 @@ static int cnss_pci_init_smmu(struct cnss_pci_data *pci_priv)
 
 	return 0;
 }
-#endif
 
-#ifdef CONFIG_CNSS2_SMMU
 static void cnss_pci_deinit_smmu(struct cnss_pci_data *pci_priv)
 {
 	pci_priv->iommu_domain = NULL;
@@ -3592,6 +3576,7 @@ int cnss_smmu_map(struct device *dev,
 {
 #ifdef CONFIG_CNSS2_SMMU
 	struct cnss_pci_data *pci_priv = cnss_get_pci_priv(to_pci_dev(dev));
+	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 	unsigned long iova;
 	size_t len;
 	int ret = 0;
@@ -3716,6 +3701,7 @@ static struct cnss_msi_config msi_config_qcn9000_pci1 = {
 	},
 };
 
+#ifdef CONFIG_CNSS2_QGIC2M
 static struct cnss_msi_config msi_config_qcn6122_pci0 = {
 	.total_vectors = 13,
 	.total_users = 2,
@@ -3733,6 +3719,7 @@ static struct cnss_msi_config msi_config_qcn6122_pci1 = {
 		{ .name = "DP", .num_vectors = 8, .base_vector = 5 },
 	},
 };
+#endif
 
 static void pci_update_msi_vectors(struct cnss_msi_config *msi_config,
 				   char *user_name, int num_vectors,
@@ -3839,7 +3826,7 @@ static int cnss_pci_enable_msi(struct cnss_pci_data *pci_priv)
 	num_vectors = pci_alloc_irq_vectors(pci_dev,
 					    msi_config->total_vectors,
 					    msi_config->total_vectors,
-					    PCI_IRQ_NOMSIX);
+					    PCI_IRQ_MSI);
 	if (num_vectors != msi_config->total_vectors) {
 		cnss_pr_err("Failed to get enough MSI vectors (%d), available vectors = %d",
 			    msi_config->total_vectors, num_vectors);
@@ -3856,11 +3843,13 @@ static int cnss_pci_enable_msi(struct cnss_pci_data *pci_priv)
 	}
 
 	pci_priv->msi_ep_base_data = msi_desc->msg.data;
+
+#ifdef CONFIG_CNSS2_KERNEL_IPQ
 	if (!pci_priv->msi_ep_base_data) {
 		cnss_pr_err("Got 0 MSI base data!\n");
 		CNSS_ASSERT(0);
 	}
-
+#endif
 	cnss_pr_dbg("MSI base data is %d\n", pci_priv->msi_ep_base_data);
 
 	return 0;
@@ -3881,8 +3870,9 @@ static void cnss_pci_disable_msi(struct cnss_pci_data *pci_priv)
 struct qgic2_msi *cnss_qgic2_enable_msi(struct cnss_plat_data *plat_priv,
 					int qgicm_id)
 {
-	struct qgic2_msi *qgic2_msi;
+	struct qgic2_msi *qgic2_msi = NULL;
 
+#ifdef CONFIG_CNSS2_QGIC2M
 	if (plat_priv->userpd_id == QCN6122_0) {
 		pci_override_msi_assignment(plat_priv,
 					    &msi_config_qcn6122_pci0);
@@ -3903,6 +3893,7 @@ struct qgic2_msi *cnss_qgic2_enable_msi(struct cnss_plat_data *plat_priv,
 		pr_err("qgic2_enable_msi fails %ld\n", PTR_ERR(qgic2_msi));
 		return NULL;
 	}
+#endif
 
 	return qgic2_msi;
 }
@@ -3915,15 +3906,17 @@ int cnss_get_user_msi_assignment(struct device *dev, char *user_name,
 	int idx;
 	u32 msi_ep_base_data = 0;
 	struct pci_dev *pci_dev = NULL;
-	struct qgic2_msi *qgic2_msi = NULL;
 	struct cnss_pci_data *pci_priv = NULL;
 	struct cnss_msi_config *msi_config;
-	struct cnss_plat_data *plat_priv =
-		cnss_bus_dev_to_plat_priv(dev);
+	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
+#ifdef CONFIG_CNSS2_QGIC2M
+	struct qgic2_msi *qgic2_msi = NULL;
+#endif
 
 	if (!plat_priv)
 		return -ENODEV;
 
+#ifdef CONFIG_CNSS2_QGIC2M
 	if (plat_priv->device_id == QCN6122_DEVICE_ID) {
 		qgic2_msi = plat_priv->qcn6122.qgic2_msi;
 		if (!qgic2_msi) {
@@ -3941,7 +3934,10 @@ int cnss_get_user_msi_assignment(struct device *dev, char *user_name,
 		}
 
 		msi_ep_base_data = qgic2_msi->msi_gicm_base;
-	} else if (plat_priv->device_id == QCN9000_DEVICE_ID) {
+	}
+#endif
+
+	if (plat_priv->device_id == QCN9000_DEVICE_ID) {
 		pci_dev = to_pci_dev(dev);
 		pci_priv = cnss_get_pci_priv(pci_dev);
 		if (!pci_priv) {
@@ -4003,13 +3999,15 @@ int cnss_get_msi_irq(struct device *dev, unsigned int vector)
 {
 	int irq_num;
 	struct pci_dev *pci_dev = NULL;
+	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
+#ifdef CONFIG_CNSS2_QGIC2M
 	struct qgic2_msi *qgic2_msi = NULL;
-	struct cnss_plat_data *plat_priv =
-		cnss_bus_dev_to_plat_priv(dev);
+#endif
 
 	if (!plat_priv)
 		return -ENODEV;
 
+#ifdef CONFIG_CNSS2_QGIC2M
 	if (plat_priv->device_id == QCN6122_DEVICE_ID) {
 		qgic2_msi = plat_priv->qcn6122.qgic2_msi;
 		if (!qgic2_msi) {
@@ -4024,6 +4022,7 @@ int cnss_get_msi_irq(struct device *dev, unsigned int vector)
 		}
 		return qgic2_msi->msi[vector];
 	}
+#endif
 
 	pci_dev = to_pci_dev(dev);
 	irq_num = pci_irq_vector(pci_dev, vector);
@@ -4035,20 +4034,23 @@ void cnss_get_msi_address(struct device *dev, u32 *msi_addr_low,
 			  u32 *msi_addr_high)
 {
 	struct pci_dev *pci_dev = NULL;
+	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
+#ifdef CONFIG_CNSS2_QGIC2M
 	struct qgic2_msi *qgic2_msi = NULL;
-	struct cnss_plat_data *plat_priv =
-		cnss_bus_dev_to_plat_priv(dev);
+#endif
 
 	if (!plat_priv)
 		return;
 
 	if (plat_priv->device_id == QCN6122_DEVICE_ID) {
+#ifdef CONFIG_CNSS2_QGIC2M
 		qgic2_msi = plat_priv->qcn6122.qgic2_msi;
 		if (!qgic2_msi) {
 			cnss_pr_err("%s: qgic2_msi NULL", __func__);
 			return;
 		}
 		*msi_addr_low = qgic2_msi->msi_gicm_addr;
+#endif
 	} else if (plat_priv->device_id == QCN9000_DEVICE_ID) {
 		pci_dev = to_pci_dev(dev);
 		pci_read_config_dword(pci_dev, pci_dev->msi_cap +
@@ -4099,7 +4101,6 @@ static int cnss_pci_enable_bus(struct cnss_pci_data *pci_priv)
 	struct pci_dev *pci_dev = pci_priv->pci_dev;
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 	u16 device_id;
-	u32 pci_dma_mask = PCI_DMA_MASK_64_BIT;
 
 	pci_read_config_word(pci_dev, PCI_DEVICE_ID, &device_id);
 	if (device_id != pci_priv->pci_device_id->device)  {
@@ -4127,35 +4128,37 @@ static int cnss_pci_enable_bus(struct cnss_pci_data *pci_priv)
 		goto disable_device;
 	}
 
-	if (device_id == QCA6174_DEVICE_ID)
-		pci_dma_mask = PCI_DMA_MASK_32_BIT;
+#ifdef CONFIG_CNSS2_KERNEL_MSM
+	pci_priv->dma_bit_mask = PCI_DMA_MASK_36_BIT;
+#else
+	pci_priv->dma_bit_mask = PCI_DMA_MASK_64_BIT;
+#endif
 
-	ret = pci_set_dma_mask(pci_dev, DMA_BIT_MASK(pci_dma_mask));
+	ret = pci_set_dma_mask(pci_dev, pci_priv->dma_bit_mask);
 	if (ret) {
-		cnss_pr_err("Failed to set PCI DMA mask (%d), err = %d\n",
-			    ret, pci_dma_mask);
+		cnss_pr_err("Failed to set PCI DMA mask (%lld), err = %d\n",
+			    pci_priv->dma_bit_mask, ret);
 		goto release_region;
 	}
 
-	ret = pci_set_consistent_dma_mask(pci_dev, DMA_BIT_MASK(pci_dma_mask));
+	ret = pci_set_consistent_dma_mask(pci_dev, pci_priv->dma_bit_mask);
 	if (ret) {
-		cnss_pr_err("Failed to set PCI consistent DMA mask (%d), err = %d\n",
-			    ret, pci_dma_mask);
+		cnss_pr_err("Failed to set PCI consistent DMA mask (%lld), err = %d\n",
+			    pci_priv->dma_bit_mask, ret);
 		goto release_region;
 	}
-
-	pci_set_master(pci_dev);
 
 	pci_priv->bar = pci_iomap(pci_dev, PCI_BAR_NUM, 0);
 	if (!pci_priv->bar) {
 		cnss_pr_err("Failed to do PCI IO map!\n");
 		ret = -EIO;
-		goto clear_master;
+		goto release_region;
 	}
+
+	pci_set_master(pci_dev);
+
 	return 0;
 
-clear_master:
-	pci_clear_master(pci_dev);
 release_region:
 	pci_release_region(pci_dev, PCI_BAR_NUM);
 disable_device:
@@ -4496,21 +4499,42 @@ void cnss_pci_clear_dump_info(struct cnss_pci_data *pci_priv)
 	plat_priv->ramdump_info_v2.dump_data_valid = false;
 }
 
+#ifdef CONFIG_CNSS2_KERNEL_MSM
+static int cnss_mhi_pm_runtime_get(struct mhi_controller *mhi_ctrl, void *priv)
+#else
 static int cnss_mhi_pm_runtime_get(struct mhi_controller *mhi_ctrl)
+#endif
 {
+#ifdef CONFIG_CNSS2_KERNEL_MSM
+	struct cnss_pci_data *pci_priv = priv;
+#else
 	struct cnss_pci_data *pci_priv = mhi_ctrl->priv_data;
+#endif
 
 	return cnss_pci_pm_runtime_get(pci_priv);
 }
 
+#ifdef CONFIG_CNSS2_KERNEL_MSM
+static void cnss_mhi_pm_runtime_put_noidle(struct mhi_controller *mhi_ctrl,
+					   void *priv)
+#else
 static void cnss_mhi_pm_runtime_put_noidle(struct mhi_controller *mhi_ctrl)
+#endif
 {
+#ifdef CONFIG_CNSS2_KERNEL_MSM
+	struct cnss_pci_data *pci_priv = priv;
+#else
 	struct cnss_pci_data *pci_priv = mhi_ctrl->priv_data;
+#endif
 
 	cnss_pci_pm_runtime_put_noidle(pci_priv);
 }
 
+#ifdef CONFIG_CNSS2_KERNEL_MSM
+static char *cnss_mhi_notify_status_to_str(enum MHI_CB status)
+#else
 static char *cnss_mhi_notify_status_to_str(enum mhi_callback status)
+#endif
 {
 	switch (status) {
 	case MHI_CB_IDLE:
@@ -4526,10 +4550,11 @@ static char *cnss_mhi_notify_status_to_str(enum mhi_callback status)
 	}
 };
 
-static void cnss_dev_rddm_timeout_hdlr(unsigned long data)
+static void cnss_dev_rddm_timeout_hdlr(struct timer_list *timer)
 {
-	struct cnss_pci_data *pci_priv = (struct cnss_pci_data *)data;
 	struct cnss_plat_data *plat_priv = NULL;
+	struct cnss_pci_data *pci_priv =
+			from_timer(pci_priv, timer, dev_rddm_timer);
 
 	if (!pci_priv)
 		return;
@@ -4540,9 +4565,17 @@ static void cnss_dev_rddm_timeout_hdlr(unsigned long data)
 	cnss_schedule_recovery(&pci_priv->pci_dev->dev, CNSS_REASON_TIMEOUT);
 }
 
+#ifdef CONFIG_CNSS2_KERNEL_MSM
+static int cnss_mhi_link_status(struct mhi_controller *mhi_ctrl, void *priv)
+#else
 static int cnss_mhi_link_status(struct mhi_controller *mhi_ctrl)
+#endif
 {
+#ifdef CONFIG_CNSS2_KERNEL_MSM
+	struct cnss_pci_data *pci_priv = priv;
+#else
 	struct cnss_pci_data *pci_priv = mhi_ctrl->priv_data;
+#endif
 
 	if (!pci_priv) {
 		pr_err("%s: pci_priv is NULL\n", __func__);
@@ -4552,10 +4585,19 @@ static int cnss_mhi_link_status(struct mhi_controller *mhi_ctrl)
 	return cnss_pci_check_link_status(pci_priv);
 }
 
+#ifdef CONFIG_CNSS2_KERNEL_MSM
+static void cnss_mhi_notify_status(struct mhi_controller *mhi_ctrl, void *priv,
+				   enum MHI_CB reason)
+#else
 static void cnss_mhi_notify_status(struct mhi_controller *mhi_ctrl,
 				   enum mhi_callback reason)
+#endif
 {
+#ifdef CONFIG_CNSS2_KERNEL_MSM
+	struct cnss_pci_data *pci_priv = priv;
+#else
 	struct cnss_pci_data *pci_priv = mhi_ctrl->priv_data;
+#endif
 	struct cnss_plat_data *plat_priv = NULL;
 	enum cnss_recovery_reason cnss_reason;
 
@@ -4707,16 +4749,34 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 	mhi_ctrl->fw_image = plat_priv->firmware_name;
 
 	mhi_ctrl->regs = pci_priv->bar;
+
+#ifdef CONFIG_CNSS2_KERNEL_MSM
+	mhi_ctrl->len = pci_resource_len(pci_priv->pci_dev, PCI_BAR_NUM);
+	cnss_pr_dbg("BAR length %x\n", mhi_ctrl->len);
+#endif
+
 	cnss_pr_dbg("BAR starts at %pa\n",
 		    &pci_resource_start(pci_priv->pci_dev, PCI_BAR_NUM));
 
 	ret = cnss_pci_get_mhi_msi(pci_priv);
 	if (ret) {
 		cnss_pr_err("Failed to get MSI for MHI\n");
-		return ret;
+		goto free_mhi_ctrl;
 	}
+
+#ifdef CONFIG_CNSS2_SMMU
+	if (pci_priv->smmu_s1_enable) {
+		mhi_ctrl->iova_start = pci_priv->smmu_iova_start;
+		mhi_ctrl->iova_stop = pci_priv->smmu_iova_start +
+					pci_priv->smmu_iova_len;
+	} else {
+		mhi_ctrl->iova_start = 0;
+		mhi_ctrl->iova_stop = pci_priv->dma_bit_mask;
+	}
+#else
 	mhi_ctrl->iova_start = memblock_start_of_DRAM();
 	mhi_ctrl->iova_stop = memblock_end_of_DRAM();
+#endif
 
 	mhi_ctrl->link_status = cnss_mhi_link_status;
 	mhi_ctrl->status_cb = cnss_mhi_notify_status;
@@ -4727,6 +4787,9 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 	mhi_ctrl->sbl_size = SZ_512K;
 	mhi_ctrl->seg_len = SZ_512K;
 	mhi_ctrl->fbc_download = true;
+#ifdef CONFIG_CNSS2_KERNEL_MSM
+	mhi_ctrl->rddm_supported = true;
+#endif
 
 	mhi_ctrl->log_buf = ipc_log_context_create(CNSS_IPC_LOG_PAGES,
 						   "cnss-mhi", 0);
@@ -4737,13 +4800,18 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 	if (ret) {
 		cnss_pr_err("Failed to register to MHI bus, err = %d\n", ret);
 		CNSS_ASSERT(0);
-		return ret;
+		goto free_mhi_ctrl;
 	}
 
 	cnss_pci_update_fw_name(pci_priv);
 	cnss_update_soc_version(pci_priv);
 
 	return 0;
+
+free_mhi_ctrl:
+	mhi_free_controller(mhi_ctrl);
+
+	return ret;
 }
 
 static void cnss_pci_unregister_mhi(struct cnss_pci_data *pci_priv)
@@ -4755,10 +4823,11 @@ static void cnss_pci_unregister_mhi(struct cnss_pci_data *pci_priv)
 	kfree(mhi_ctrl->irq);
 }
 
-static void cnss_boot_debug_timeout_hdlr(unsigned long data)
+static void cnss_boot_debug_timeout_hdlr(struct timer_list *timer)
 {
 	struct cnss_plat_data *plat_priv = NULL;
-	struct cnss_pci_data *pci_priv = (struct cnss_pci_data *)data;
+	struct cnss_pci_data *pci_priv = from_timer(pci_priv, timer,
+						    boot_debug_timer);
 
 	if (!pci_priv)
 		return;
@@ -4773,7 +4842,7 @@ static void cnss_boot_debug_timeout_hdlr(unsigned long data)
 	if (test_bit(CNSS_MHI_POWER_ON, &pci_priv->mhi_state))
 		return;
 
-	if (mhi_scan_rddm_cookie(pci_priv->mhi_ctrl, BHI_ERRDBG3,
+	if (mhi_scan_rddm_cookie(pci_priv->mhi_ctrl,
 				 DEVICE_RDDM_COOKIE))
 		return;
 
@@ -4787,15 +4856,35 @@ static void cnss_boot_debug_timeout_hdlr(unsigned long data)
 		  jiffies + msecs_to_jiffies(BOOT_DEBUG_TIMEOUT_MS));
 }
 
+#ifdef CONFIG_CNSS2_DMA_ALLOC
+static
+int cnss_pci_of_reserved_mem_device_init(struct cnss_plat_data *plat_priv)
+{
+	struct pci_dev *pci_dev = (struct pci_dev *)plat_priv->pci_dev;
+	struct device *dev = &pci_dev->dev;
+	int ret;
+
+	/* Use of_reserved_mem_device_init_by_idx() if reserved memory is
+	 * attached to platform device of_node.
+	 */
+	ret = of_reserved_mem_device_init(dev);
+	if (ret)
+		cnss_pr_err("Failed to init reserved mem device, err = %d\n",
+			    ret);
+	if (dev->cma_area)
+		cnss_pr_info("CMA area is %s\n",
+			    cma_get_name(dev->cma_area));
+
+	return ret;
+}
+#endif
+
 int cnss_pci_probe(struct pci_dev *pci_dev,
 		   const struct pci_device_id *id,
 		   struct cnss_plat_data *plat_priv)
 {
 	int ret = 0;
 	struct cnss_pci_data *pci_priv;
-#ifdef CONFIG_CNSS2_SMMU
-	struct resource *res;
-#endif
 	if (!pci_dev) {
 		pr_err("%s: ERROR: PCI device is NULL\n", __func__);
 		return -EINVAL;
@@ -4816,6 +4905,9 @@ int cnss_pci_probe(struct pci_dev *pci_dev,
 		goto out;
 	}
 
+#ifdef CONFIG_CNSS2_KERNEL_MSM
+	pci_dev->no_d3hot = true;
+#endif
 	pci_priv->pci_link_state = PCI_LINK_UP;
 	pci_priv->plat_priv = plat_priv;
 	pci_priv->pci_dev = pci_dev;
@@ -4838,7 +4930,7 @@ int cnss_pci_probe(struct pci_dev *pci_dev,
 		goto unregister_ramdump;
 #endif
 
-#ifdef CONFIG_PCI_MSM
+#ifdef CONFIG_CNSS2_PCI_MSM
 	ret = cnss_reg_pci_event(pci_priv);
 	if (ret) {
 		cnss_pr_err("Failed to register PCI event, err = %d\n", ret);
@@ -4867,12 +4959,10 @@ int cnss_pci_probe(struct pci_dev *pci_dev,
 	case QCN9000_DEVICE_ID:
 	case QCA6390_DEVICE_ID:
 	case QCA6490_DEVICE_ID:
-		setup_timer(&pci_priv->dev_rddm_timer,
-			    cnss_dev_rddm_timeout_hdlr,
-			    (unsigned long)pci_priv);
-		setup_timer(&pci_priv->boot_debug_timer,
-			    cnss_boot_debug_timeout_hdlr,
-			    (unsigned long)pci_priv);
+		timer_setup(&pci_priv->dev_rddm_timer,
+			    cnss_dev_rddm_timeout_hdlr, 0);
+		timer_setup(&pci_priv->boot_debug_timer,
+			    cnss_boot_debug_timeout_hdlr, 0);
 		INIT_DELAYED_WORK(&pci_priv->time_sync_work,
 				  cnss_pci_time_sync_work_hdlr);
 
@@ -4905,11 +4995,11 @@ int cnss_pci_probe(struct pci_dev *pci_dev,
 disable_bus:
 	cnss_pci_disable_bus(pci_priv);
 dereg_pci_event:
-#ifdef CONFIG_PCI_MSM
+#ifdef CONFIG_CNSS2_PCI_MSM
 	cnss_dereg_pci_event(pci_priv);
+deinit_smmu:
 #endif
 #ifdef CONFIG_CNSS2_SMMU
-deinit_smmu:
 	cnss_pci_deinit_smmu(pci_priv);
 unregister_ramdump:
 #endif
@@ -4954,7 +5044,7 @@ void cnss_pci_remove(struct pci_dev *pci_dev)
 	pci_load_and_free_saved_state(pci_dev, &pci_priv->saved_state);
 
 	cnss_pci_disable_bus(pci_priv);
-#ifdef CONFIG_PCI_MSM
+#ifdef CONFIG_CNSS2_PCI_MSM
 	cnss_dereg_pci_event(pci_priv);
 #endif
 #ifdef CONFIG_CNSS2_SMMU
@@ -5016,9 +5106,19 @@ int cnss_pci_probe_basic(struct pci_dev *pci_dev,
 		return -EINVAL;
 	}
 
-	plat_priv->pci_dev = (struct platform_device *)pci_dev;
-	plat_priv->pci_dev_id = (struct platform_device_id *)id;
-	cnss_pr_info("PCI device %p probed successfully\n", plat_priv->pci_dev);
+	plat_priv->pci_dev = (void *)pci_dev;
+	plat_priv->pci_dev_id = (void *)id;
+
+#ifdef CONFIG_CNSS2_DMA_ALLOC
+	ret = cnss_pci_of_reserved_mem_device_init(plat_priv);
+	if (ret) {
+		cnss_pr_err("Failed to initialize reserved mem %d", ret);
+		return ret;
+	}
+#endif
+
+	cnss_pr_info("PCI device %pK probed successfully\n",
+		     plat_priv->pci_dev);
 
 	return 0;
 }
@@ -5061,7 +5161,7 @@ struct pci_driver cnss_pci_driver = {
 int cnss_pci_init(struct cnss_plat_data *plat_priv)
 {
 	int ret = 0;
-#ifdef CONFIG_PCI_MSM
+#ifdef CONFIG_CNSS2_PCI_MSM
 	struct device *dev = &plat_priv->plat_dev->dev;
 	u32 rc_num;
 

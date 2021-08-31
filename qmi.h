@@ -30,12 +30,23 @@
 #define QCN6122_0	1
 #define QCN6122_1	2
 
+#ifdef CONFIG_CNSS2_KERNEL_MSM
+/* Temp config till QRTR ID Programming for QCN9000 is done in MSM kernel */
+/* node_id for QCN9000 */
+#define QCN9000_0	0x0
+#define QCN9000_1	0x1
+
+/*NODE_ID_BASE is derived by qrtr_node_id in DTS + FW base node id 7 */
+#define NODE_ID_BASE 0x7
+#else
 /* node_id for QCN9000 */
 #define QCN9000_0	0x20
 #define QCN9000_1	0x21
 
 /*NODE_ID_BASE is derived by qrtr_node_id in DTS + FW base node id 7 */
 #define NODE_ID_BASE 0x27
+#endif
+
 #define FW_ID_BASE 7
 
 struct qmi_history {

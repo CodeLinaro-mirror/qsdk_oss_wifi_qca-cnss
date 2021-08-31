@@ -12,12 +12,13 @@
 
 #ifndef _CNSS_MAIN_H
 #define _CNSS_MAIN_H
+#include <linux/version.h>
 #include <asm/arch_timer.h>
 #include <linux/esoc_client.h>
 #include <linux/etherdevice.h>
-#include <linux/msm-bus.h>
 #include <linux/pm_qos.h>
-#include <net/cnss2.h>
+#include <linux/platform_device.h>
+#include <cnss2.h>
 #include <soc/qcom/memory_dump.h>
 #include <soc/qcom/subsystem_restart.h>
 
@@ -531,6 +532,7 @@ struct cnss_plat_data {
 	u32 cold_boot_support;
 	u32 caldata_support;
 	u32 eeprom_caldata_read_timeout;
+	bool dma_alloc_supported;
 	struct m3_dump m3_dump_data;
 	union {
 		struct target_qcn6122 qcn6122;
@@ -540,7 +542,7 @@ struct cnss_plat_data {
 #ifdef CONFIG_ARCH_QCOM
 static inline u64 cnss_get_host_timestamp(struct cnss_plat_data *plat_priv)
 {
-	u64 ticks = arch_counter_get_cntvct();
+	u64 ticks = __arch_counter_get_cntvct();
 	u32 freq = arch_timer_get_cntfrq();
 
 	do_div(ticks, freq / 100000);

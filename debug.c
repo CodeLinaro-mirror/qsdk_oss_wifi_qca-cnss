@@ -13,6 +13,7 @@
 #include <linux/err.h>
 #include <linux/seq_file.h>
 #include <linux/debugfs.h>
+#include <linux/module.h>
 #include "main.h"
 #include "debug.h"
 #include "pci.h"
