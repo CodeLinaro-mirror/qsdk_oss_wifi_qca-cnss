@@ -156,6 +156,71 @@ static const struct file_operations cnss_stats_fops = {
 	.llseek		= seq_lseek,
 };
 
+static int cnss_debug_probe(struct pci_dev *pdev,
+			     const struct pci_device_id *id)
+{
+	struct platform_device *plat_dev = (struct platform_device *)pdev;
+	struct cnss_plat_data *plat_priv = cnss_get_plat_priv(plat_dev);
+	struct pci_dev *pci_dev = plat_priv->pci_dev;
+
+	cnss_pr_err("%s: %d: plat_priv %pK device %pK\n",
+		    __func__, __LINE__, plat_priv, pci_dev);
+
+	cnss_wait_for_fw_ready(&pci_dev->dev);
+
+	return 0;
+}
+
+static void cnss_debug_remove(struct pci_dev *pdev)
+{
+	struct platform_device *plat_dev = (struct platform_device *)pdev;
+	struct cnss_plat_data *plat_priv = cnss_get_plat_priv(plat_dev);
+
+	cnss_pr_err("%s: %d: plat_priv %pK\n",
+		    __func__, __LINE__, plat_priv);
+}
+
+static void cnss_debug_shutdown(struct pci_dev *pdev)
+{
+	struct platform_device *plat_dev = (struct platform_device *)pdev;
+	struct cnss_plat_data *plat_priv = cnss_get_plat_priv(plat_dev);
+
+	cnss_pr_err("%s: %d: plat_priv %pK\n",
+		    __func__, __LINE__, plat_priv);
+}
+
+static void cnss_debug_update_status(struct pci_dev *pdev,
+				     const struct pci_device_id *id,
+				     int status)
+{
+	struct platform_device *plat_dev = (struct platform_device *)pdev;
+	struct cnss_plat_data *plat_priv = cnss_get_plat_priv(plat_dev);
+
+	cnss_pr_err("%s: %d: plat_priv %pK status %d\n",
+		    __func__, __LINE__, plat_priv, status);
+}
+
+static int  cnss_debug_fatal(struct pci_dev *pdev,
+			     const struct pci_device_id *id)
+{
+	struct platform_device *plat_dev = (struct platform_device *)pdev;
+	struct cnss_plat_data *plat_priv = cnss_get_plat_priv(plat_dev);
+
+	cnss_pr_err("%s: %d: device %x\n",
+		    __func__, __LINE__, id->device);
+
+	return 0;
+}
+
+struct cnss_wlan_driver debug_driver_ops = {
+	.name		= "pld_pcie",
+	.probe		= cnss_debug_probe,
+	.remove		= cnss_debug_remove,
+	.update_status	= cnss_debug_update_status,
+	.fatal		= cnss_debug_fatal,
+	.shutdown	= cnss_debug_shutdown,
+};
+
 static ssize_t cnss_dev_boot_debug_write(struct file *fp,
 					 const char __user *user_buf,
 					 size_t count, loff_t *off)
@@ -168,6 +233,18 @@ static ssize_t cnss_dev_boot_debug_write(struct file *fp,
 	unsigned int len = 0;
 	int ret = 0;
 
+	len = min(count, sizeof(buf) - 1);
+	if (copy_from_user(buf, user_buf, len))
+		return -EFAULT;
+
+	buf[len] = '\0';
+	cmd = (char *)buf;
+
+	if (sysfs_streq("test_driver_load", cmd)) {
+		cnss_wlan_register_driver(&debug_driver_ops);
+		return count;
+	}
+
 	if (!plat_priv)
 		return -ENODEV;
 
@@ -175,12 +252,6 @@ static ssize_t cnss_dev_boot_debug_write(struct file *fp,
 	if (!pci_priv)
 		return -ENODEV;
 
-	len = min(count, sizeof(buf) - 1);
-	if (copy_from_user(buf, user_buf, len))
-		return -EFAULT;
-
-	buf[len] = '\0';
-	cmd = (char *)buf;
 	if (sysfs_streq("on", cmd)) {
 		ret = cnss_power_on_device(plat_priv, 0);
 	} else if (sysfs_streq("off", cmd)) {
