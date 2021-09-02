@@ -200,6 +200,9 @@ static DEFINE_SPINLOCK(pci_reg_window_lock);
 #define WINDOW_VALUE_MASK			0x3F
 #define WINDOW_START				MAX_UNWINDOWED_ADDRESS
 #define WINDOW_RANGE_MASK			0x7FFFF
+#define MHISTATUS				0x48
+#define MHICTRL					0x38
+#define MHICTRL_RESET_MASK			0x2
 
 #define FORCE_WAKE_DELAY_MIN_US			4000
 #define FORCE_WAKE_DELAY_MAX_US			6000
@@ -4236,6 +4239,17 @@ void cnss_pci_global_reset(struct cnss_pci_data *pci_priv)
 		cnss_pr_warn("SOC_GLOBAL_RESET at rst cnt %d tx_cnt %d\n",
 			     resetcount, tx_count);
 }
+
+static void cnss_reset_mhi_state(struct cnss_pci_data *pci_priv)
+{
+	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
+	u32 val = 0;
+
+	cnss_pci_reg_read(pci_priv, MHISTATUS, &val);
+	cnss_pr_info("Setting MHI State to reset, current state: 0x%x", val);
+	cnss_pci_reg_write(pci_priv, MHICTRL, MHICTRL_RESET_MASK);
+}
+
 static void cnss_pci_disable_bus(struct cnss_pci_data *pci_priv)
 {
 	struct pci_dev *pci_dev = pci_priv->pci_dev;
@@ -4243,8 +4257,10 @@ static void cnss_pci_disable_bus(struct cnss_pci_data *pci_priv)
 	/* Call global reset here */
 	cnss_pci_global_reset(pci_priv);
 
-
-	mhi_set_mhi_state(pci_priv->mhi_ctrl, MHI_STATE_RESET);
+	/* On SOC_GLOBAL_RESET, target waits in PBL for host to set the
+	 * MHI_RESET bit to 1.
+	 */
+	cnss_reset_mhi_state(pci_priv);
 
 	if (pci_priv->bar) {
 		pci_iounmap(pci_dev, pci_priv->bar);
