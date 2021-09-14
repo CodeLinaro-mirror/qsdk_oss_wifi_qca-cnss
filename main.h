@@ -377,6 +377,7 @@ enum cnss_bdf_type {
 	CNSS_BDF_REGDB = 4,
 	CNSS_BDF_WIN,
 	CNSS_CALDATA_WIN,
+	CNSS_BDF_HDS,
 	CNSS_BDF_DUMMY = 255,
 };
 
@@ -420,6 +421,11 @@ enum cnss_ce_index {
 	CNSS_CE_10,
 	CNSS_CE_11,
 	CNSS_CE_COMMON,
+};
+
+enum cnss_module_param_feature {
+	CALDATA,
+	REGDB,
 };
 
 /* M3 SSR Dump related constants and structure */
@@ -530,13 +536,15 @@ struct cnss_plat_data {
 	u8 target_asserted;
 	u32 daemon_support;
 	u32 cold_boot_support;
-	u32 caldata_support;
+	bool caldata_support;
 	u32 eeprom_caldata_read_timeout;
 	bool dma_alloc_supported;
 	struct m3_dump m3_dump_data;
 	union {
 		struct target_qcn6122 qcn6122;
 	};
+	bool hds_support;
+	bool regdb_support;
 };
 
 #ifdef CONFIG_ARCH_QCOM
