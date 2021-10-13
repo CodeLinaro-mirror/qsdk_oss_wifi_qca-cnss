@@ -4389,6 +4389,89 @@ static void cnss_pci_dump_registers(struct cnss_pci_data *pci_priv)
 	cnss_pci_dump_ce_reg(pci_priv, CNSS_CE_10);
 }
 
+#ifdef CONFIG_CNSS2_KERNEL_MSM
+#define MAX_RAMDUMP_TABLE_SIZE	6
+#define COREDUMP_DESC		"Q6-COREDUMP"
+#define Q6_SFR_DESC		"Q6-SFR"
+struct cnss_ramdump_entry {
+	__le64 base_address;
+	__le64 actual_phys_address;
+	__le64 size;
+	char description[20];
+	char file_name[20];
+};
+
+struct cnss_ramdump_header {
+	__le32 version;
+	__le32 header_size;
+	struct cnss_ramdump_entry ramdump_table[MAX_RAMDUMP_TABLE_SIZE];
+};
+
+void cnss_get_crash_reason(struct cnss_pci_data *pci_priv)
+{
+	int i;
+	uint64_t coredump_offset = 0;
+	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
+	struct mhi_controller *mhi_cntrl;
+	struct mhi_buf *mhi_buf;
+	struct image_info *rddm_image;
+	struct cnss_ramdump_header *ramdump_header;
+	struct cnss_ramdump_entry *ramdump_table;
+	char *msg = ERR_PTR(-EPROBE_DEFER);
+
+	mhi_cntrl = pci_priv->mhi_ctrl;
+	rddm_image = mhi_cntrl->rddm_image;
+	mhi_buf = rddm_image->mhi_buf;
+
+	cnss_pr_err("CRASHED - [DID:DOMAIN:BUS:SLOT] - %x:%04u:%02u:%02u\n",
+		    mhi_cntrl->dev_id, mhi_cntrl->domain, mhi_cntrl->bus,
+		    mhi_cntrl->slot);
+
+	/* Get RDDM header size */
+	ramdump_header = (struct cnss_ramdump_header *)mhi_buf[0].buf;
+	ramdump_table = ramdump_header->ramdump_table;
+	coredump_offset += le32_to_cpu(ramdump_header->header_size);
+
+	/* Traverse ramdump table to get coredump offset */
+	i = 0;
+	while (i < MAX_RAMDUMP_TABLE_SIZE) {
+		if (!strncmp(ramdump_table->description, COREDUMP_DESC,
+			     sizeof(COREDUMP_DESC)) ||
+		    !strncmp(ramdump_table->description, Q6_SFR_DESC,
+			     sizeof(Q6_SFR_DESC))) {
+			break;
+		}
+		coredump_offset += le64_to_cpu(ramdump_table->size);
+		ramdump_table++;
+		i++;
+	}
+
+	if (i == MAX_RAMDUMP_TABLE_SIZE) {
+		cnss_pr_err("Cannot find '%s' entry in ramdump\n",
+			    COREDUMP_DESC);
+		return;
+	}
+
+	/* Locate coredump data from the ramdump segments */
+	for (i = 0; i < rddm_image->entries; i++) {
+		if (coredump_offset < mhi_buf[i].len) {
+			msg = mhi_buf[i].buf + coredump_offset;
+			break;
+		}
+
+		coredump_offset -= mhi_buf[i].len;
+	}
+
+	if (!IS_ERR(msg) && msg && msg[0])
+		cnss_pr_err("Fatal error received from wcss software!\n%s\n",
+			    msg);
+}
+#else
+void cnss_get_crash_reason(struct cnss_pci_data *pci_priv)
+{
+}
+#endif
+
 void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 {
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
@@ -4419,6 +4502,8 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 		cnss_pci_dump_registers(pci_priv);
 		return;
 	}
+
+	cnss_get_crash_reason(pci_priv);
 
 	fw_image = pci_priv->mhi_ctrl->fbc_image;
 	rddm_image = pci_priv->mhi_ctrl->rddm_image;
