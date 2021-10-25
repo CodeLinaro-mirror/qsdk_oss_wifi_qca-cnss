@@ -4756,7 +4756,8 @@ static void cnss_mhi_notify_status(struct mhi_controller *mhi_ctrl,
 		cnss_pr_dbg("MHI status cb is called with reason %s(%d)\n",
 			    cnss_mhi_notify_status_to_str(reason), reason);
 
-	if (reason == MHI_CB_FATAL_ERROR || reason == MHI_CB_SYS_ERROR) {
+	if (reason == MHI_CB_FATAL_ERROR || reason == MHI_CB_SYS_ERROR ||
+	    (reason == MHI_CB_EE_RDDM && !plat_priv->target_asserted)) {
 		cnss_pr_err("XXX TARGET ASSERTED XXX\n");
 		cnss_pr_err("XXX TARGET %s instance_id 0x%x plat_env idx %d XXX\n",
 			    plat_priv->device_name,
