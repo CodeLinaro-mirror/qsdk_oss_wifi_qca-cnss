@@ -228,6 +228,10 @@ static DEFINE_SPINLOCK(pci_reg_window_lock);
 #define QCN9000_SBL_LOG_SIZE			44
 #define MHI_RAMDUMP_DUMP_COMPLETE		0x5000
 
+#define PCIE_PCIE_LOCAL_REG_PCIE_LOCAL_RSV0	0x1E03164
+#define QRTR_NODE_ID_REG_MASK			0x7FFFF
+#define QRTR_NODE_ID_REG		PCIE_PCIE_LOCAL_REG_PCIE_LOCAL_RSV0
+
 /* Timeout, to print boot debug logs, in seconds */
 static int boot_debug_timeout = 7;
 module_param(boot_debug_timeout, int, 0644);
@@ -1038,6 +1042,40 @@ out:
 	return ret;
 }
 
+static int cnss_pci_set_qrtr_node_id(struct cnss_pci_data *pci_priv)
+{
+	int ret = 0;
+	u32 val = 0;
+	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
+
+	switch (plat_priv->device_id) {
+	case QCN9000_DEVICE_ID:
+		cnss_pr_info("Setting 0x%x to QRTR_NODE_ID_REG\n",
+			     plat_priv->qrtr_node_id);
+
+		writel_relaxed(plat_priv->qrtr_node_id,
+			       pci_priv->bar +
+			       (QRTR_NODE_ID_REG & QRTR_NODE_ID_REG_MASK));
+
+		val = readl_relaxed(pci_priv->bar +
+				    (QRTR_NODE_ID_REG & QRTR_NODE_ID_REG_MASK));
+
+		cnss_pr_info("Value from QRTR_NODE_ID_REG: 0x%x\n", val);
+
+		if (val != plat_priv->qrtr_node_id) {
+			cnss_pr_err("%s: QRTR Node ID write to QRTR_NODE_ID_REG failed 0x%x",
+				    __func__, val);
+			ret = -EINVAL;
+		}
+		break;
+	default:
+		cnss_pr_dbg("Invalid device id 0x%lx", plat_priv->device_id);
+		ret = -ENODEV;
+	}
+
+	return ret;
+}
+
 int cnss_pci_start_mhi(struct cnss_pci_data *pci_priv)
 {
 	int ret = 0;
@@ -1056,6 +1094,10 @@ int cnss_pci_start_mhi(struct cnss_pci_data *pci_priv)
 		pci_priv->mhi_ctrl->timeout_ms = MHI_TIMEOUT_OVERWRITE_MS * 1000;
 
 	ret = cnss_pci_set_mhi_state(pci_priv, CNSS_MHI_INIT);
+	if (ret)
+		goto out;
+
+	ret = cnss_pci_set_qrtr_node_id(pci_priv);
 	if (ret)
 		goto out;
 
