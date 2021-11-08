@@ -907,7 +907,8 @@ int cnss_debugfs_create(struct cnss_plat_data *plat_priv)
 				    &cnss_qmi_record_debug_fops);
 	}
 
-	root_dentry = debugfs_create_dir((char *)&plat_priv->device_name, cnss_root_dentry);
+	root_dentry = debugfs_create_dir((char *)&plat_priv->device_name,
+					 cnss_root_dentry);
 	if (IS_ERR(root_dentry)) {
 		ret = PTR_ERR(root_dentry);
 		cnss_pr_err("Unable to create debugfs %d\n", ret);

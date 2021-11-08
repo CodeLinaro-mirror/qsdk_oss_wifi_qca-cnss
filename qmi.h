@@ -35,10 +35,17 @@
 /* node_id for QCN9000 */
 #define QCN9000_0	0x20
 #define QCN9000_1	0x21
+#define QCN9000_2	0x22
+#define QCN9000_3	0x23
+
+#define QCN9224_0	0x30
+#define QCN9224_1	0x31
+#define QCN9224_2	0x32
+#define QCN9224_3	0x33
 
 /*NODE_ID_BASE is derived by qrtr_node_id in DTS + FW base node id 7 */
-#define NODE_ID_BASE 0x27
-
+#define QCN9000_NODE_ID_BASE 0x27
+#define QCN9224_NODE_ID_BASE 0x37
 #define FW_ID_BASE 7
 
 struct qmi_history {
