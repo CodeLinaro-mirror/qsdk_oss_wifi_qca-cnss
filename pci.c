@@ -17,7 +17,6 @@
 #include <linux/msi.h>
 #include <linux/of.h>
 #include <linux/pm_runtime.h>
-#include <linux/memblock.h>
 #include <linux/completion.h>
 #include <soc/qcom/ramdump.h>
 #include <linux/of_address.h>
@@ -242,6 +241,7 @@ static DEFINE_SPINLOCK(pci_reg_window_lock);
 #define PCIE_PCIE_LOCAL_REG_PCIE_LOCAL_RSV0	0x1E03164
 #define QRTR_NODE_ID_REG_MASK			0x7FFFF
 #define QRTR_NODE_ID_REG		PCIE_PCIE_LOCAL_REG_PCIE_LOCAL_RSV0
+#define VALID_IOVA_START_OFFSET		0x1000000
 
 /* Timeout, to print boot debug logs, in seconds */
 static int boot_debug_timeout = 7;
@@ -5118,6 +5118,10 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 	struct pci_dev *pci_dev = pci_priv->pci_dev;
 	struct mhi_controller *mhi_ctrl;
+#ifndef CONFIG_CNSS2_SMMU
+	struct device_node *dev_node;
+	struct resource memory;
+#endif
 
 	mhi_ctrl = mhi_alloc_controller(0);
 	if (!mhi_ctrl) {
@@ -5163,8 +5167,23 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 		mhi_ctrl->iova_stop = pci_priv->dma_bit_mask;
 	}
 #else
-	mhi_ctrl->iova_start = memblock_start_of_DRAM();
-	mhi_ctrl->iova_stop = memblock_end_of_DRAM();
+	dev_node = of_find_node_by_type(NULL, "memory");
+	if (dev_node) {
+		if (of_address_to_resource(dev_node, 0, &memory)) {
+			cnss_pr_err("%s: Unable to get resource: memory",
+				    __func__);
+			goto out;
+		}
+
+		mhi_ctrl->iova_start = (dma_addr_t)(memory.start +
+						    VALID_IOVA_START_OFFSET);
+		mhi_ctrl->iova_stop = (dma_addr_t)(memory.start +
+						   resource_size(&memory));
+	} else {
+		/* No Memory DT node, assign full 32-bit region as iova */
+		mhi_ctrl->iova_start = 0;
+		mhi_ctrl->iova_stop = 0xFFFFFFFF;
+	}
 #endif
 
 	mhi_ctrl->link_status = cnss_mhi_link_status;
