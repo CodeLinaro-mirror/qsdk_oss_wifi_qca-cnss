@@ -3368,7 +3368,7 @@ int cnss_pci_alloc_fw_mem(struct cnss_plat_data *plat_priv)
 				    !test_bit(CNSS_DRIVER_RECOVERY,
 					      &plat_priv->driver_state)) {
 					memset_io(mlo_global_mem, 0,
-						  mlo_global_mem_size);
+						  fw_mem[i].size);
 				}
 			}
 			break;
