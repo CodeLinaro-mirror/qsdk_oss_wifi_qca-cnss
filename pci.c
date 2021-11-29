@@ -58,6 +58,12 @@ static int pci3_num_msi_bmap;
 module_param(pci3_num_msi_bmap, int, 0644);
 MODULE_PARM_DESC(pci3_num_msi_bmap,
 		 "Bitmap to indicate number of available MSIs for PCI 3");
+
+#define PCI_BAR_WINDOW0_BASE	0x1E00000
+#define PCI_BAR_WINDOW0_END	0x1E7FFFC
+#define PCI_MHIREGLEN_REG	0x1E0E100
+#define PCI_MHI_REGION_END	0x1E0EFFC
+
 #define MSI_MHI_VECTOR_MASK 0xFF
 #define MSI_MHI_VECTOR_SHIFT 0
 
@@ -375,8 +381,15 @@ static int cnss_pci_reg_read(struct cnss_pci_data *pci_priv,
 	spin_lock_irqsave(&pci_reg_window_lock, flags);
 	cnss_pci_select_window(pci_priv, addr);
 
-	*val = readl_relaxed(pci_priv->bar + WINDOW_START +
-			     (addr & WINDOW_RANGE_MASK));
+	if (addr >= PCI_BAR_WINDOW0_BASE && addr <= PCI_BAR_WINDOW0_END) {
+		if (addr >= PCI_MHIREGLEN_REG && addr <= PCI_MHI_REGION_END)
+			addr = addr - PCI_MHIREGLEN_REG;
+		*val = readl_relaxed(pci_priv->bar +
+				     (addr & WINDOW_RANGE_MASK));
+	} else {
+		*val = readl_relaxed(pci_priv->bar + WINDOW_START +
+				     (addr & WINDOW_RANGE_MASK));
+	}
 	spin_unlock_irqrestore(&pci_reg_window_lock, flags);
 
 	return 0;
@@ -407,8 +420,15 @@ static int cnss_pci_reg_write(struct cnss_pci_data *pci_priv, u32 addr,
 	spin_lock_irqsave(&pci_reg_window_lock, flags);
 	cnss_pci_select_window(pci_priv, addr);
 
-	writel_relaxed(val, pci_priv->bar + WINDOW_START +
-		       (addr & WINDOW_RANGE_MASK));
+	if (addr >= PCI_BAR_WINDOW0_BASE && addr <= PCI_BAR_WINDOW0_END) {
+		if (addr >= PCI_MHIREGLEN_REG && addr <= PCI_MHI_REGION_END)
+			addr = addr - PCI_MHIREGLEN_REG;
+		writel_relaxed(val, pci_priv->bar +
+			       (addr & WINDOW_RANGE_MASK));
+	} else {
+		writel_relaxed(val, pci_priv->bar + WINDOW_START +
+			       (addr & WINDOW_RANGE_MASK));
+	}
 	spin_unlock_irqrestore(&pci_reg_window_lock, flags);
 
 	return 0;
