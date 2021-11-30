@@ -230,7 +230,6 @@ static DEFINE_SPINLOCK(pci_reg_window_lock);
 #define PCIE_PCIE_LOCAL_REG_PCIE_LOCAL_RSV0	0x1E03164
 #define QRTR_NODE_ID_REG_MASK			0x7FFFF
 #define QRTR_NODE_ID_REG		PCIE_PCIE_LOCAL_REG_PCIE_LOCAL_RSV0
-#define VALID_IOVA_START_OFFSET		0x1000000
 
 /* Timeout, to print boot debug logs, in seconds */
 static int boot_debug_timeout = 7;
@@ -4973,8 +4972,7 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 			goto out;
 		}
 
-		mhi_ctrl->iova_start = (dma_addr_t)(memory.start +
-						    VALID_IOVA_START_OFFSET);
+		mhi_ctrl->iova_start = (dma_addr_t)memory.start;
 		mhi_ctrl->iova_stop = (dma_addr_t)(memory.start +
 						   resource_size(&memory));
 	} else {
