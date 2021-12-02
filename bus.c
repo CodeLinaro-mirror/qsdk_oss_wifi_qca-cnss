@@ -37,6 +37,7 @@ enum cnss_dev_bus_type cnss_get_bus_type(unsigned long device_id)
 	switch (device_id) {
 	case QCA6174_DEVICE_ID:
 	case QCN9000_DEVICE_ID:
+	case QCN9224_DEVICE_ID:
 	case QCA6390_DEVICE_ID:
 	case QCA6490_DEVICE_ID:
 		return CNSS_BUS_PCI;
@@ -79,7 +80,8 @@ struct cnss_plat_data *cnss_bus_dev_to_plat_priv(struct device *dev)
 	switch (cnss_get_dev_bus_type(dev)) {
 	case CNSS_BUS_PCI:
 		pdev = to_pci_dev(dev);
-		if (pdev->device != QCN9000_DEVICE_ID)
+		if (pdev->device != QCN9000_DEVICE_ID &&
+		    pdev->device != QCN9224_DEVICE_ID)
 			return NULL;
 
 		bus_priv = cnss_bus_dev_to_bus_priv(dev);

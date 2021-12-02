@@ -390,6 +390,28 @@ int cnss_send_buffer_to_afcmem(struct device *dev, char *afcdb, uint32_t len,
 }
 static inline int cnss_reset_afcmem(struct device *dev, uint8_t slotid)
 {
+}
+static inline int cnss_get_mlo_chip_id(struct device *dev)
+{
+	return -EINVAL;
+}
+static inline bool cnss_get_mlo_capable(struct device *dev)
+{
+	return false;
+}
+static inline int cnss_get_mlo_global_config_region_info(struct device *dev,
+							 void **bar,
+							 int *num_bytes)
+{
+	return 0;
+}
+static inline int cnss_get_num_mlo_links(struct device *dev)
+{
+	return -EINVAL;
+}
+static inline int cnss_get_num_mlo_capable_devices(unsigned int *device_id,
+						   int num_elements)
+{
 	return -EINVAL;
 }
 static inline int cnss_reg_read(struct device *dev, u32 addr, u32 *val)
@@ -489,6 +511,13 @@ int cnss_set_driver_mode(unsigned int mode);
 int cnss_send_buffer_to_afcmem(struct device *dev, char *afcdb, uint32_t len,
 			    uint8_t slotid);
 int cnss_reset_afcmem(struct device *dev, uint8_t slotid);
+int cnss_get_mlo_chip_id(struct device *dev);
+bool cnss_get_mlo_capable(struct device *dev);
+int cnss_get_mlo_global_config_region_info(struct device *dev, void **bar,
+					   int *num_bytes);
+int cnss_get_num_mlo_links(struct device *dev);
+int cnss_get_num_mlo_capable_devices(unsigned int *device_id,
+				     int num_elements);
 int cnss_reg_read(struct device *dev, u32 addr, u32 *val);
 int cnss_reg_write(struct device *dev, u32 addr, u32 val);
 #endif

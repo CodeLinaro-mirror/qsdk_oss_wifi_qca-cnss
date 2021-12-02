@@ -15,6 +15,7 @@
 #include <linux/ktime.h>
 #include <linux/mutex.h>
 #include <linux/soc/qcom/qmi.h>
+#include <linux/of.h>
 
 #include "bus.h"
 #include "debug.h"
@@ -40,6 +41,7 @@
 #define CAL_FILE_NAME_PREFIX		"caldata.b"
 #define DEFAULT_CAL_FILE_PREFIX         "caldata_"
 #define DEFAULT_CAL_FILE_SUFFIX         ".bin"
+#define MAX_HW_LINKS                    2
 
 #define QMI_WLFW_TIMEOUT_MS		(plat_priv->ctrl_params.qmi_timeout)
 
@@ -59,6 +61,10 @@ MODULE_PARM_DESC(num_wlan_clients, "num_wlan_clients");
 unsigned int num_wlan_vaps;
 module_param(num_wlan_vaps, uint, 0600);
 MODULE_PARM_DESC(num_wlan_vaps, "num_wlan_vaps");
+
+unsigned int enable_mlo_support;
+module_param(enable_mlo_support, uint, 0600);
+MODULE_PARM_DESC(enable_mlo_support, "enable_mlo_support");
 
 struct qmi_history qmi_log[QMI_HISTORY_SIZE];
 int qmi_history_index;
@@ -235,12 +241,16 @@ static int cnss_wlfw_host_cap_send_sync(struct cnss_plat_data *plat_priv)
 {
 	struct wlfw_host_cap_req_msg_v01 *req;
 	struct wlfw_host_cap_resp_msg_v01 *resp;
+	struct wlfw_host_mlo_chip_info_s_v01 *info;
 	struct qmi_txn txn;
-	int ret = 0;
+	int ret = 0, i;
 	int resp_error_msg = 0;
 	const char *model = NULL;
-	struct device_node *root;
+	struct device_node *root, *mlo_config = NULL, *chipnp;
 	struct device *dev = &plat_priv->plat_dev->dev;
+	struct device *bus_dev;
+	struct pci_dev *pcidev;
+	int chip_id;
 
 	cnss_pr_dbg("Sending host capability message, state: 0x%lx\n",
 		    plat_priv->driver_state);
@@ -302,19 +312,104 @@ static int cnss_wlfw_host_cap_send_sync(struct cnss_plat_data *plat_priv)
 			cnss_pr_err("Invalid GPIOs array length %d\n",
 				    req->gpios_len);
 			ret = -EINVAL;
-			goto out;
+			goto err;
 		}
 
 		if (of_property_read_u32_array(dev->of_node, "gpios",
 					       req->gpios, req->gpios_len)) {
 			cnss_pr_err("Failed to get gpios from device tree\n");
 			ret = -EINVAL;
-			goto out;
+			goto err;
 		}
 
 		req->gpios_valid = 1;
 		cnss_pr_info("Sending %d GPIO entries in Host Capabilities\n",
 			     req->gpios_len);
+	}
+
+	/* update MLO configuration */
+	if (plat_priv->device_id == QCN9224_DEVICE_ID)
+		mlo_config = of_find_node_by_name(NULL, "mlo_group0");
+
+	if (enable_mlo_support && mlo_config) {
+		pcidev = (struct pci_dev *)plat_priv->pci_dev;
+		bus_dev = &pcidev->dev;
+
+		req->mlo_capable_valid = 1;
+		req->mlo_capable = 1;
+
+		chip_id = cnss_get_mlo_chip_id(bus_dev);
+		if (ret < 0) {
+			cnss_pr_err("Unable to get chip id\n");
+			ret = -EINVAL;
+			goto err;
+		}
+		req->mlo_chip_id = (u16)chip_id;
+		req->mlo_chip_id_valid = 1;
+
+		req->mlo_group_id = 0;
+		req->mlo_group_id_valid = 1;
+
+		if (of_property_read_u16(mlo_config,
+					 "mlo_max_num_peer",
+					 &req->max_mlo_peer)) {
+			cnss_pr_err("mlo_max_num_peer is not configured\n");
+			ret = -EINVAL;
+			goto err;
+		}
+		req->max_mlo_peer_valid = 1;
+
+		if (of_property_read_u8(mlo_config,
+					"mlo_num_chips",
+					&req->mlo_num_chips)) {
+			cnss_pr_err("mlo_num_chips is not configured\n");
+			ret = -EINVAL;
+			goto err;
+		}
+		req->mlo_num_chips_valid = 1;
+
+		req->mlo_chip_info_valid = 1;
+		for (i = 0; i < req->mlo_num_chips; i++) {
+			chipnp = of_parse_phandle(mlo_config, "chips", i);
+			if (!chipnp) {
+				cnss_pr_err("chip info is null. num chips %d\n",
+					    req->mlo_num_chips);
+				ret = -EINVAL;
+				goto err;
+			}
+			info = &req->mlo_chip_info[i];
+			if (of_property_read_u8(chipnp, "chip_id",
+						&info->chip_id)) {
+				cnss_pr_err("chip_id is not configured\n");
+				ret = -EINVAL;
+				goto err_chip_info;
+			}
+
+			if (of_property_read_u8(chipnp, "num_local_links",
+						&info->num_local_links)) {
+				cnss_pr_err("num_local_links is missing\n");
+				ret = -EINVAL;
+				goto err_chip_info;
+			}
+
+			if (of_property_read_u8_array(chipnp, "hw_link_ids",
+						      &info->hw_link_id[0],
+						      MAX_HW_LINKS)) {
+				cnss_pr_err("hw_link_ids is not configured\n");
+				ret = -EINVAL;
+				goto err_chip_info;
+			}
+
+			if (of_property_read_u8_array(chipnp,
+						      "valid_mlo_link_ids",
+						      &info->valid_mlo_link_id[0],
+						      MAX_HW_LINKS)) {
+				cnss_pr_err("valid_mlo_link_ids read error\n");
+				ret = -EINVAL;
+				goto err_chip_info;
+			}
+			of_node_put(chipnp);
+		}
 	}
 
 	if (num_wlan_clients) {
@@ -382,6 +477,12 @@ static int cnss_wlfw_host_cap_send_sync(struct cnss_plat_data *plat_priv)
 	kfree(req);
 	kfree(resp);
 	return 0;
+
+err_chip_info:
+	of_node_put(chipnp);
+err:
+	kfree(req);
+	kfree(resp);
 out:
 	qmi_record(plat_priv->wlfw_service_instance_id,
 		   QMI_WLFW_HOST_CAP_REQ_V01, ret, resp_error_msg);
@@ -788,7 +889,7 @@ int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv,
 	unsigned int remaining, id = 0;
 	struct wlfw_bdf_download_req_msg_v01 *req;
 	struct wlfw_bdf_download_resp_msg_v01 *resp;
-	int ret = 0;
+	int ret = 0, node_id_base;
 	int resp_error_msg = 0;
 	u8 fw_bdf_type = BDF_TYPE_GOLDEN;
 
@@ -805,7 +906,8 @@ int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv,
 		return -ENOMEM;
 	}
 
-	folder = (plat_priv->device_id == QCN9000_DEVICE_ID) ? "qcn9000/" : "";
+	folder = (plat_priv->device_id == QCN9000_DEVICE_ID) ? "qcn9000/" :
+		 (plat_priv->device_id == QCN9224_DEVICE_ID) ? "qcn9224/" : "";
 	switch (bdf_type) {
 	case CNSS_BDF_ELF:
 		if (plat_priv->board_info.board_id == 0xFF)
@@ -840,7 +942,8 @@ int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv,
 		remaining = MAX_BDF_FILE_NAME;
 		goto bypass_bdf;
 	case CNSS_BDF_WIN:
-		if (plat_priv->device_id == QCN9000_DEVICE_ID &&
+		if ((plat_priv->device_id == QCN9000_DEVICE_ID ||
+		     plat_priv->device_id == QCN9224_DEVICE_ID) &&
 		    !plat_priv->board_info.board_id_override) {
 			dev = &plat_priv->plat_dev->dev;
 			if (!of_property_read_u32(dev->of_node, "board_id",
@@ -849,7 +952,8 @@ int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv,
 			}
 		}
 
-		if (plat_priv->device_id == QCN9000_DEVICE_ID &&
+		if ((plat_priv->device_id == QCN9000_DEVICE_ID ||
+		     plat_priv->device_id == QCN9224_DEVICE_ID) &&
 		    plat_priv->board_info.board_id_override)
 			snprintf(filename, sizeof(filename),
 				 "%s" BDF_WIN_FILE_NAME_PREFIX "%02x", folder,
@@ -875,13 +979,19 @@ int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv,
 		break;
 	case CNSS_CALDATA_WIN:
 		fw_bdf_type = BDF_TYPE_CALDATA;
-		if (plat_priv->device_id == QCN9000_DEVICE_ID) {
+		if (plat_priv->device_id == QCN9000_DEVICE_ID ||
+		    plat_priv->device_id == QCN9224_DEVICE_ID) {
+			if (plat_priv->device_id == QCN9224_DEVICE_ID)
+				node_id_base = QCN9224_NODE_ID_BASE;
+			else
+				node_id_base = QCN9000_NODE_ID_BASE;
+
 			snprintf(filename, sizeof(filename),
 				 "%s" DEFAULT_CAL_FILE_PREFIX
 				 "%d" DEFAULT_CAL_FILE_SUFFIX,
 				 folder,
 				 (plat_priv->wlfw_service_instance_id -
-				  (NODE_ID_BASE - 1)));
+				  (node_id_base - 1)));
 		} else {
 			snprintf(filename, sizeof(filename),
 				 "%s" DEFAULT_CAL_FILE_NAME, folder);
@@ -899,7 +1009,8 @@ int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv,
 		}
 
 		if (plat_priv->eeprom_caldata_read_timeout &&
-		    plat_priv->device_id == QCN9000_DEVICE_ID) {
+		    (plat_priv->device_id == QCN9000_DEVICE_ID ||
+		     plat_priv->device_id == QCN9224_DEVICE_ID)) {
 			fw_bdf_type = BDF_TYPE_EEPROM;
 			temp = filename;
 			remaining = MAX_BDF_FILE_NAME;
@@ -946,8 +1057,17 @@ int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv,
 			ret = 0;
 			goto out;
 		} else if (bdf_type == CNSS_BDF_REGDB) {
-			ret = 0;
-			goto out;
+			if (plat_priv->device_id == QCN9224_DEVICE_ID) {
+				/* Reg DB bin download is mandatory for QCN9224,
+				 * hence if the file is not found, we assert.
+				 */
+				cnss_pr_info("Failed to load RegDB %s\n",
+					     filename);
+				goto out;
+			} else {
+				ret = 0;
+				goto out;
+			}
 		} else {
 			/* BDF download is mandatory for all targets */
 			cnss_pr_err("Failed to load BDF: %s\n", filename);
@@ -985,8 +1105,8 @@ bypass_bdf:
 		    plat_priv->device_id == QCA8074V2_DEVICE_ID ||
 		    plat_priv->device_id == QCA5018_DEVICE_ID ||
 		    plat_priv->device_id == QCN6122_DEVICE_ID ||
-		    plat_priv->device_id == QCA9574_DEVICE_ID ||
-		    plat_priv->device_id == QCA6018_DEVICE_ID) {
+		    plat_priv->device_id == QCA6018_DEVICE_ID ||
+		    plat_priv->device_id == QCA9574_DEVICE_ID) {
 			ret = cnss_wlfw_load_bdf(req, plat_priv,
 						 MAX_BDF_FILE_NAME,
 						 fw_bdf_type);
@@ -999,6 +1119,9 @@ bypass_bdf:
 					goto err_req_fw;
 				} else if (bdf_type == CNSS_BDF_HDS ||
 					   bdf_type == CNSS_BDF_REGDB) {
+					/* HDS is not mandatory and REGDB is
+					 * mandatory only for QCN9224
+					 */
 					ret = 0;
 					goto err_req_fw;
 				} else {
@@ -1110,7 +1233,8 @@ int cnss_wlfw_m3_dnld_send_sync(struct cnss_plat_data *plat_priv)
 		kfree(req);
 		return -ENOMEM;
 	}
-	if ((plat_priv->device_id == QCN9000_DEVICE_ID) &&
+	if ((plat_priv->device_id == QCN9000_DEVICE_ID ||
+	     plat_priv->device_id == QCN9224_DEVICE_ID) &&
 	    (!m3_mem->pa || !m3_mem->size)) {
 		cnss_pr_err("Memory for M3 is not available\n");
 		ret = -ENOMEM;
@@ -2726,7 +2850,8 @@ int cnss_qmi_init(struct cnss_plat_data *plat_priv)
 			pr_info("No qca8074_tgt_mem_mode entry in dev-tree.\n");
 			plat_priv->tgt_mem_cfg_mode = 0;
 		}
-	} else if (plat_priv->device_id == QCN9000_DEVICE_ID) {
+	} else if (plat_priv->device_id == QCN9000_DEVICE_ID ||
+		   plat_priv->device_id == QCN9224_DEVICE_ID) {
 		if (of_property_read_u32(dev->of_node,
 					 "tgt-mem-mode",
 					 &plat_priv->tgt_mem_cfg_mode)) {
