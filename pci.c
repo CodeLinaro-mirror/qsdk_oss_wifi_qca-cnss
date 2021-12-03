@@ -101,9 +101,7 @@ static void *mlo_global_mem;
 #define MHI_MSI_NAME			"MHI"
 
 #define MAX_M3_FILE_NAME_LENGTH		15
-#define QCN9000_DEFAULT_M3_FILE_NAME	"qcn9000/m3.bin"
-#define QCN9224_DEFAULT_M3_FILE_NAME	"qcn9224/m3.bin"
-#define DEFAULT_FW_FILE_NAME            "qcn9000/amss.bin"
+#define DEFAULT_M3_FILE_NAME		"m3.bin"
 #define FW_V2_FILE_NAME			"amss20.bin"
 #define FW_V2_NUMBER			2
 #define AFC_SLOT_SIZE			0x1000
@@ -3545,12 +3543,9 @@ int cnss_pci_load_m3(struct cnss_pci_data *pci_priv)
 	}
 	CNSS_ASSERT(m3_mem->va);
 
-	if (plat_priv->device_id == QCN9000_DEVICE_ID)
-		snprintf(filename, sizeof(filename),
-			 QCN9000_DEFAULT_M3_FILE_NAME);
-	else
-		snprintf(filename, sizeof(filename),
-			 QCN9224_DEFAULT_M3_FILE_NAME);
+	snprintf(filename, sizeof(filename),
+		 "%s%s", cnss_get_fw_path(plat_priv),
+		 DEFAULT_M3_FILE_NAME);
 
 	ret = request_firmware(&fw_entry, filename,
 			       &pci_priv->pci_dev->dev);
@@ -5323,8 +5318,6 @@ int cnss_pci_probe(struct pci_dev *pci_dev,
 	cnss_set_pci_priv(pci_dev, pci_priv);
 	plat_priv->device_id = pci_dev->device;
 	plat_priv->bus_priv = pci_priv;
-	snprintf(plat_priv->firmware_name, sizeof(plat_priv->firmware_name),
-		 DEFAULT_FW_FILE_NAME);
 
 	ret = cnss_register_ramdump(plat_priv);
 	if (ret)
