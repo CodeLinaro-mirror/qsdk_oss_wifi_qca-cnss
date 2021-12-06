@@ -4915,6 +4915,7 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 	struct pci_dev *pci_dev = pci_priv->pci_dev;
 	struct mhi_controller *mhi_ctrl;
+	char cnss_mhi_log_buf_name[20];
 #ifndef CONFIG_CNSS2_SMMU
 	struct device_node *dev_node;
 	struct resource memory;
@@ -4995,8 +4996,11 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 	mhi_ctrl->rddm_supported = true;
 #endif
 
+	snprintf(cnss_mhi_log_buf_name, sizeof(cnss_mhi_log_buf_name),
+			"cnss-mhi_%x", plat_priv->wlfw_service_instance_id);
+
 	mhi_ctrl->log_buf = ipc_log_context_create(CNSS_IPC_LOG_PAGES,
-						   "cnss-mhi", 0);
+					(const char *)cnss_mhi_log_buf_name, 0);
 	if (!mhi_ctrl->log_buf)
 		cnss_pr_info("MHI IPC Logging is disabled!\n");
 
