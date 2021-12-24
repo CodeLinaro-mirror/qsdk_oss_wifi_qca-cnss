@@ -101,7 +101,7 @@ static int disable_caldata_bmap;
 module_param(disable_caldata_bmap, int, 0644);
 MODULE_PARM_DESC(disable_caldata_bmap, "Bitmap to Disable Caldata download");
 
-static int disable_regdb_bmap = 0xF;
+static int disable_regdb_bmap;
 module_param(disable_regdb_bmap, int, 0644);
 MODULE_PARM_DESC(disable_regdb_bmap, "Bitmap to Disable RegDB download");
 
@@ -4088,6 +4088,7 @@ static int cnss_probe(struct platform_device *plat_dev)
 	case QCN9000_DEVICE_ID:
 	case QCN9224_DEVICE_ID:
 		plat_priv->bus_type = CNSS_BUS_PCI;
+		plat_priv->bdf_dnld_method = WLFW_SEND_BDF_OVER_QMI_V01;
 		plat_priv->qrtr_node_id = node_id;
 		plat_priv->wlfw_service_instance_id = node_id + FW_ID_BASE;
 
@@ -4117,12 +4118,14 @@ static int cnss_probe(struct platform_device *plat_dev)
 	case QCA6018_DEVICE_ID:
 	case QCA9574_DEVICE_ID:
 		plat_priv->bus_type = CNSS_BUS_AHB;
+		plat_priv->bdf_dnld_method = WLFW_DIRECT_BDF_COPY_V01;
 		plat_priv->wlfw_service_instance_id =
 			WLFW_SERVICE_INS_ID_V01_QCA8074;
 		plat_priv->board_info.board_id_override = bdf_integrated;
 		break;
 	case QCN6122_DEVICE_ID:
 		plat_priv->bus_type = CNSS_BUS_AHB;
+		plat_priv->bdf_dnld_method = WLFW_DIRECT_BDF_COPY_V01;
 		plat_priv->userpd_id = userpd_id;
 		plat_priv->wlfw_service_instance_id =
 			WLFW_SERVICE_INS_ID_V01_QCN6122 + userpd_id;
@@ -4159,6 +4162,7 @@ static int cnss_probe(struct platform_device *plat_dev)
 		cnss_pr_err("No such device id %p\n", device_id);
 		return -ENODEV;
 	}
+
 	ret = cnss_set_device_name(plat_priv);
 	if (ret)
 		return -ENODEV;
