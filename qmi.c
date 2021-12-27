@@ -707,14 +707,18 @@ int cnss_wlfw_tgt_cap_send_sync(struct cnss_plat_data *plat_priv)
 		}
 	}
 
-	cnss_pr_info("Target capability: chip_id: 0x%x, chip_family: 0x%x, board_id: 0x%x, soc_id: 0x%x, fw_version: 0x%x, fw_build_timestamp: %s, otp_version: 0x%x eeprom_caldata_read_timeout %ds\n",
+	if (resp->bdf_dnld_method_valid)
+		plat_priv->bdf_dnld_method = resp->bdf_dnld_method;
+
+	cnss_pr_info("Target capability: chip_id: 0x%x, chip_family: 0x%x, board_id: 0x%x, soc_id: 0x%x, fw_version: 0x%x, fw_build_timestamp: %s, otp_version: 0x%x eeprom_caldata_read_timeout %ds bdf_dnld_method %d\n",
 		     plat_priv->chip_info.chip_id,
 		     plat_priv->chip_info.chip_family,
 		     plat_priv->board_info.board_id, plat_priv->soc_info.soc_id,
 		     plat_priv->fw_version_info.fw_version,
 		     plat_priv->fw_version_info.fw_build_timestamp,
 		     plat_priv->otp_version,
-		     plat_priv->eeprom_caldata_read_timeout);
+		     plat_priv->eeprom_caldata_read_timeout,
+		     plat_priv->bdf_dnld_method);
 
 	kfree(req);
 	kfree(resp);
@@ -879,6 +883,7 @@ int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv,
 	char filename[MAX_BDF_FILE_NAME];
 	const struct firmware *fw_entry = NULL;
 	const u8 *temp;
+	const char *board_id_str;
 	struct device *dev;
 	unsigned int remaining, id = 0;
 	struct wlfw_bdf_download_req_msg_v01 *req;
@@ -938,19 +943,22 @@ int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv,
 		remaining = MAX_BDF_FILE_NAME;
 		goto bypass_bdf;
 	case CNSS_BDF_WIN:
-		if ((plat_priv->device_id == QCN9000_DEVICE_ID ||
-		     plat_priv->device_id == QCN9224_DEVICE_ID) &&
-		    !plat_priv->board_info.board_id_override) {
+		if (plat_priv->bus_type == CNSS_BUS_AHB)
+			board_id_str = "qcom,board_id";
+		else
+			board_id_str = "board_id";
+
+		if (!plat_priv->board_info.board_id_override) {
 			dev = &plat_priv->plat_dev->dev;
-			if (!of_property_read_u32(dev->of_node, "board_id",
+			if (!of_property_read_u32(dev->of_node, board_id_str,
 						  &id)) {
 				plat_priv->board_info.board_id_override = id;
+			} else {
+				cnss_pr_info("No board_id entry in device tree\n");
 			}
 		}
 
-		if ((plat_priv->device_id == QCN9000_DEVICE_ID ||
-		     plat_priv->device_id == QCN9224_DEVICE_ID) &&
-		    plat_priv->board_info.board_id_override)
+		if (plat_priv->board_info.board_id_override)
 			snprintf(filename, sizeof(filename),
 				 "%s" BDF_WIN_FILE_NAME_PREFIX "%02x",
 				 cnss_get_fw_path(plat_priv),
@@ -965,12 +973,8 @@ int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv,
 				 cnss_get_fw_path(plat_priv),
 				 plat_priv->board_info.board_id);
 
-		if (plat_priv->device_id == QCA8074_DEVICE_ID ||
-		    plat_priv->device_id == QCA8074V2_DEVICE_ID ||
-		    plat_priv->device_id == QCA5018_DEVICE_ID ||
-		    plat_priv->device_id == QCN6122_DEVICE_ID ||
-		    plat_priv->device_id == QCA6018_DEVICE_ID ||
-		    plat_priv->device_id == QCA9574_DEVICE_ID) {
+		if (plat_priv->bdf_dnld_method == WLFW_DIRECT_BDF_COPY_V01) {
+			cnss_pr_dbg("BDF download through direct copy\n");
 			temp = filename;
 			remaining = MAX_BDF_FILE_NAME;
 			goto bypass_bdf;
@@ -991,18 +995,20 @@ int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv,
 				 cnss_get_fw_path(plat_priv),
 				 (plat_priv->wlfw_service_instance_id -
 				  (node_id_base - 1)));
+		} else if (plat_priv->device_id == QCN6122_DEVICE_ID) {
+			snprintf(filename, sizeof(filename),
+				 "%s" DEFAULT_CAL_FILE_PREFIX
+				 "%d" DEFAULT_CAL_FILE_SUFFIX,
+				 cnss_get_fw_path(plat_priv),
+				 plat_priv->userpd_id);
 		} else {
 			snprintf(filename, sizeof(filename),
 				 "%s" DEFAULT_CAL_FILE_NAME,
 				 cnss_get_fw_path(plat_priv));
 		}
 
-		if (plat_priv->device_id == QCA8074_DEVICE_ID ||
-		    plat_priv->device_id == QCA8074V2_DEVICE_ID ||
-		    plat_priv->device_id == QCA5018_DEVICE_ID ||
-		    plat_priv->device_id == QCN6122_DEVICE_ID ||
-		    plat_priv->device_id == QCA6018_DEVICE_ID ||
-		    plat_priv->device_id == QCA9574_DEVICE_ID) {
+		if (plat_priv->bdf_dnld_method == WLFW_DIRECT_BDF_COPY_V01) {
+			cnss_pr_dbg("Caldata download through direct copy\n");
 			temp = filename;
 			remaining = MAX_BDF_FILE_NAME;
 			goto bypass_bdf;
@@ -1021,21 +1027,11 @@ int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv,
 		fw_bdf_type = BDF_TYPE_REGDB;
 		snprintf(filename, sizeof(filename),
 			 "%s" REGDB_FILE_NAME, cnss_get_fw_path(plat_priv));
-		if (plat_priv->bus_type == CNSS_BUS_AHB) {
-			temp = filename;
-			remaining = MAX_BDF_FILE_NAME;
-			goto bypass_bdf;
-		}
 		break;
 	case CNSS_BDF_HDS:
 		fw_bdf_type = BDF_TYPE_HDS;
 		snprintf(filename, sizeof(filename),
 			 "%s" HDS_FILE_NAME, cnss_get_fw_path(plat_priv));
-		if (plat_priv->bus_type == CNSS_BUS_AHB) {
-			temp = filename;
-			remaining = MAX_BDF_FILE_NAME;
-			goto bypass_bdf;
-		}
 		break;
 	default:
 		cnss_pr_err("Invalid BDF type: %d\n",
@@ -1057,17 +1053,12 @@ int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv,
 			ret = 0;
 			goto out;
 		} else if (bdf_type == CNSS_BDF_REGDB) {
-			if (plat_priv->device_id == QCN9224_DEVICE_ID) {
-				/* Reg DB bin download is mandatory for QCN9224,
-				 * hence if the file is not found, we assert.
-				 */
-				cnss_pr_info("Failed to load RegDB %s\n",
-					     filename);
-				goto out;
-			} else {
-				ret = 0;
-				goto out;
-			}
+			/* If REGDB bin file is not present,
+			 * just print the message and skip it.
+			 */
+			cnss_pr_info("Failed to load RegDB %s\n", filename);
+			ret = 0;
+			goto out;
 		} else {
 			/* BDF download is mandatory for all targets */
 			cnss_pr_err("Failed to load BDF: %s\n", filename);
@@ -1101,12 +1092,11 @@ bypass_bdf:
 			req->data_len = remaining;
 			req->end = 1;
 		}
-		if (plat_priv->device_id == QCA8074_DEVICE_ID ||
-		    plat_priv->device_id == QCA8074V2_DEVICE_ID ||
-		    plat_priv->device_id == QCA5018_DEVICE_ID ||
-		    plat_priv->device_id == QCN6122_DEVICE_ID ||
-		    plat_priv->device_id == QCA6018_DEVICE_ID ||
-		    plat_priv->device_id == QCA9574_DEVICE_ID) {
+
+		if (plat_priv->bdf_dnld_method == WLFW_DIRECT_BDF_COPY_V01) {
+			cnss_pr_dbg("%s: Bus type %d BDF download method %d\n",
+				    __func__, plat_priv->bus_type,
+				    plat_priv->bdf_dnld_method);
 			ret = cnss_wlfw_load_bdf(req, plat_priv,
 						 MAX_BDF_FILE_NAME,
 						 fw_bdf_type);
@@ -1119,8 +1109,9 @@ bypass_bdf:
 					goto err_req_fw;
 				} else if (bdf_type == CNSS_BDF_HDS ||
 					   bdf_type == CNSS_BDF_REGDB) {
-					/* HDS is not mandatory and REGDB is
-					 * mandatory only for QCN9224
+					/* HDS is not mandatory and
+					 * REGDB is mandatory only for
+					 * QCN9224
 					 */
 					ret = 0;
 					goto err_req_fw;
