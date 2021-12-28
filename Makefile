@@ -11,6 +11,7 @@ ipq_cnss2-objs += qmi.o
 ipq_cnss2-objs += wlan_firmware_service_v01.o
 ipq_cnss2-objs += bus.o
 ipq_cnss2-objs += genl.o
+ipq_cnss2-objs += cnss_plat_ipc_service_v01.o
 
 CNSS2_INCLUDE = -I$(obj)
 CNSS2_INCLUDE += -I$(obj)/include
