@@ -58,6 +58,10 @@
 #define QCN9224_MLO_MIN_LINKS 2
 
 #define MAX_NUMBER_OF_SOCS 4
+#define CNSS_PROBE_ORDER_MASK 0xF
+#define CNSS_PROBE_ORDER_DEFAULT 0xFF
+#define CNSS_PROBE_ORDER_SHIFT 4
+
 struct cnss_plat_data *plat_env[MAX_NUMBER_OF_SOCS];
 int plat_env_index;
 
@@ -104,6 +108,16 @@ MODULE_PARM_DESC(disable_caldata_bmap, "Bitmap to Disable Caldata download");
 static int disable_regdb_bmap;
 module_param(disable_regdb_bmap, int, 0644);
 MODULE_PARM_DESC(disable_regdb_bmap, "Bitmap to Disable RegDB download");
+
+/* probe_order needs to be defined in the format of hex.
+ * The order of socX can be rearranged based on the given value.
+ * For example, if default order is Soc0->Soc1->Soc2, then 0x213 will make
+ * the order as Soc1->Soc0->Soc2.
+ * If probe_order is 0 or not specified, then default order will be takes place.
+ */
+static unsigned int probe_order;
+module_param(probe_order, uint, 0644);
+MODULE_PARM_DESC(probe_order, "Probe order");
 
 #define FW_READY_DELAY	100  /* in msecs */
 #ifdef CONFIG_KASAN
@@ -1652,6 +1666,96 @@ void *cnss_register_qca8074_cb(struct cnss_plat_data *plat_priv)
 
 	return ss_handle;
 }
+
+static void cnss_sort_probe_order(void)
+{
+	int i = 0;
+	int j = 0;
+
+	for (i = 0; i < plat_env_index; i++)
+		for (j = i + 1; j < plat_env_index; j++)
+			if (plat_env[i]->probe_order > plat_env[j]->probe_order)
+				swap(plat_env[i], plat_env[j]);
+}
+
+int cnss_wlan_probe_driver(void)
+{
+	int ret;
+	int i;
+	struct cnss_plat_data *plat_priv;
+
+	cnss_sort_probe_order();
+	for (i = 0; i < plat_env_index; i++) {
+		plat_priv = plat_env[i];
+
+		if (!plat_priv)
+			continue;
+
+		if (!plat_priv->cold_boot_support &&
+		    (driver_mode == CNSS_CALIBRATION ||
+		     driver_mode == CNSS_FTM_CALIBRATION)) {
+			cnss_pr_info("Skipping driver register for device 0x%lx for mode %d\n",
+				     plat_priv->device_id, driver_mode);
+			continue;
+		}
+
+		plat_priv->target_asserted = 0;
+		plat_priv->target_assert_timestamp = 0;
+		plat_priv->driver_status = CNSS_LOAD_UNLOAD;
+
+		if (plat_priv->bus_type == CNSS_BUS_PCI) {
+			cnss_pci_init(plat_priv);
+			set_bit(CNSS_DRIVER_LOADING, &plat_priv->driver_state);
+		}
+		ret = cnss_register_subsys(plat_priv);
+		if (ret)
+			goto reset_ctx;
+
+		plat_priv->driver_status = CNSS_INITIALIZED;
+	}
+
+	return 0;
+
+reset_ctx:
+	cnss_pr_err("Failed to get subsystem, err = %d\n", ret);
+	plat_priv->driver_status = CNSS_UNINITIALIZED;
+	plat_priv->driver_ops = NULL;
+	return ret;
+}
+EXPORT_SYMBOL(cnss_wlan_probe_driver);
+
+int cnss_wlan_register_driver_ops(struct cnss_wlan_driver *driver_ops)
+{
+	int i;
+	struct cnss_plat_data *plat_priv;
+
+	for (i = 0; i < plat_env_index; i++) {
+		plat_priv = plat_env[i];
+
+		if (!plat_priv)
+			continue;
+
+		switch (plat_priv->bus_type) {
+		case CNSS_BUS_AHB:
+			if (strcmp(driver_ops->name, "pld_ahb") == 0)
+				plat_priv->driver_ops = driver_ops;
+
+			break;
+		case CNSS_BUS_PCI:
+			if (strcmp(driver_ops->name, "pld_pcie") == 0)
+				plat_priv->driver_ops = driver_ops;
+
+			break;
+		default:
+			cnss_pr_err("%s: Invalid bus type for device 0x%lx\n",
+				    __func__, plat_priv->device_id);
+			break;
+		}
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL(cnss_wlan_register_driver_ops);
 
 int cnss_wlan_register_driver(struct cnss_wlan_driver *driver_ops)
 {
@@ -3972,6 +4076,21 @@ cnss_check_skip_target_probe(const struct platform_device_id *device_id,
 	return false;
 }
 
+static void cnss_fill_probe_order(struct cnss_plat_data *plat_priv)
+{
+	u32 prb_order = 0;
+
+	if (probe_order) {
+		plat_priv->probe_order = (probe_order & CNSS_PROBE_ORDER_MASK);
+		probe_order >>= CNSS_PROBE_ORDER_SHIFT;
+	} else if (!of_property_read_u32(plat_priv->plat_dev->dev.of_node,
+					 "probe-order", &prb_order)) {
+		plat_priv->probe_order = prb_order;
+	} else {
+		plat_priv->probe_order = CNSS_PROBE_ORDER_DEFAULT;
+	}
+}
+
 static int cnss_probe(struct platform_device *plat_dev)
 {
 	int ret = 0;
@@ -4167,6 +4286,7 @@ static int cnss_probe(struct platform_device *plat_dev)
 	if (ret)
 		return -ENODEV;
 
+	cnss_fill_probe_order(plat_priv);
 	cnss_set_mod_param_feature_support(plat_priv, CALDATA);
 	cnss_set_mod_param_feature_support(plat_priv, REGDB);
 	cnss_set_plat_priv(plat_dev, plat_priv);

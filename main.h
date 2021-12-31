@@ -548,6 +548,7 @@ struct cnss_plat_data {
 	bool regdb_support;
 	bool qdss_support;
 	enum wlfw_bdf_dnld_method_v01 bdf_dnld_method;
+	u32 probe_order;
 };
 
 #ifdef CONFIG_ARCH_QCOM
