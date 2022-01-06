@@ -1,4 +1,5 @@
 /* Copyright (c) 2016-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -39,6 +40,8 @@
 #define CNSS_DUMP_MAGIC_VER_V2		0x42445953
 #define CNSS_DUMP_NAME			"CNSS_WLAN"
 #define CNSS_DUMP_DESC_SIZE		0x1000
+#define CNSS_MHI_SEG_LEN		SZ_512K
+#define CNSS_DUMP_DESC_TOLERANCE	64
 #define CNSS_DUMP_SEG_VER		0x1
 #define WLAN_RECOVERY_DELAY		1000
 #define FILE_SYSTEM_READY		1
@@ -3461,6 +3464,23 @@ static void cnss_unregister_ramdump_v1(struct cnss_plat_data *plat_priv)
 				  ramdump_info->ramdump_pa);
 }
 
+static u32 cnss_get_dump_desc_size(struct cnss_plat_data *plat_priv)
+{
+	u32 descriptor_size = 0;
+	u32 segment_len = CNSS_MHI_SEG_LEN;
+	u32 wlan_sram_size = plat_priv->ramdump_info_v2.ramdump_size;
+	struct pci_dev *pci_dev = plat_priv->pci_dev;
+
+	of_property_read_u32(pci_dev->dev.of_node, "qti,rddm-seg-len",
+			     &segment_len);
+
+	descriptor_size = (((wlan_sram_size / segment_len) +
+			    CNSS_DUMP_DESC_TOLERANCE) *
+			    sizeof(struct cnss_dump_seg));
+
+	return descriptor_size;
+}
+
 static int cnss_register_ramdump_v2(struct cnss_plat_data *plat_priv)
 {
 	int ret = 0;
@@ -3488,7 +3508,8 @@ static int cnss_register_ramdump_v2(struct cnss_plat_data *plat_priv)
 	info_v2->dump_data_vaddr = NULL;
 	info_v2->dump_data_valid = false;
 
-	info_v2->dump_data_vaddr = kzalloc(CNSS_DUMP_DESC_SIZE, GFP_KERNEL);
+	info_v2->dump_data_vaddr = kzalloc(cnss_get_dump_desc_size(plat_priv),
+					   GFP_KERNEL);
 	if (!info_v2->dump_data_vaddr)
 		return -ENOMEM;
 
