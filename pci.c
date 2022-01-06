@@ -62,8 +62,6 @@ MODULE_PARM_DESC(pci3_num_msi_bmap,
 
 #define PCI_BAR_WINDOW0_BASE	0x1E00000
 #define PCI_BAR_WINDOW0_END	0x1E7FFFC
-#define PCI_MHIREGLEN_REG	0x1E0E100
-#define PCI_MHI_REGION_END	0x1E0EFFC
 
 #define MSI_MHI_VECTOR_MASK 0xFF
 #define MSI_MHI_VECTOR_SHIFT 0
@@ -198,6 +196,9 @@ static DEFINE_SPINLOCK(pci_reg_window_lock);
 #define QCN9000_WLAON_GLOBAL_COUNTER_CTRL4	0x1F8011C
 #define QCN9000_WLAON_GLOBAL_COUNTER_CTRL5	0x1F80120
 
+#define QCN9224_PCI_MHIREGLEN_REG		0x1E0E100
+#define QCN9224_PCI_MHI_REGION_END		0x1E0EFFC
+
 #define SHADOW_REG_INTER_COUNT			43
 #define QCA6390_PCIE_SHADOW_REG_INTER_0		0x1E05000
 #define QCA6390_PCIE_SHADOW_REG_HUNG		0x1E050A8
@@ -239,6 +240,8 @@ static DEFINE_SPINLOCK(pci_reg_window_lock);
 #define QCN9000_SBL_DATA_END \
 			(QCN9000_SBL_DATA_START + QCN9000_SBL_DATA_SIZE - 1)
 #define QCN9000_PCIE_BHI_ERRDBG3_REG		0x1E0B23C
+#define QCN9000_PCI_MHIREGLEN_REG		0x1E0B100
+#define QCN9000_PCI_MHI_REGION_END		0x1E0BFFC
 
 #define QCN9000_SBL_LOG_SIZE			44
 #define MHI_RAMDUMP_DUMP_COMPLETE		0x5000
@@ -355,10 +358,32 @@ static void cnss_pci_select_window(struct cnss_pci_data *pci_priv, u32 addr)
 		       pci_priv->bar);
 }
 
+static int cnss_get_mhi_region_len(struct cnss_plat_data *plat_priv,
+				   u32 *reg_start, u32 *reg_end)
+{
+	switch (plat_priv->device_id) {
+	case QCN9000_DEVICE_ID:
+		*reg_start = QCN9000_PCI_MHIREGLEN_REG;
+		*reg_end = QCN9000_PCI_MHI_REGION_END;
+		break;
+	case QCN9224_DEVICE_ID:
+		*reg_start = QCN9224_PCI_MHIREGLEN_REG;
+		*reg_end = QCN9224_PCI_MHI_REGION_END;
+		break;
+	default:
+		cnss_pr_err("Unknown device type 0x%lx\n",
+			    plat_priv->device_id);
+		return -ENODEV;
+	}
+	return 0;
+}
+
 static int cnss_pci_reg_read(struct cnss_pci_data *pci_priv,
 			     u32 addr, u32 *val)
 {
 	int ret;
+	u32 mhi_region_start_reg = 0;
+	u32 mhi_region_end_reg = 0;
 	unsigned long flags;
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 
@@ -376,13 +401,20 @@ static int cnss_pci_reg_read(struct cnss_pci_data *pci_priv,
 		*val = readl_relaxed(pci_priv->bar + addr);
 		return 0;
 	}
+	ret = cnss_get_mhi_region_len(plat_priv, &mhi_region_start_reg,
+				      &mhi_region_end_reg);
+	if (ret) {
+		cnss_pr_err("MHI start and end region not assigned.\n");
+		return ret;
+	}
 
 	spin_lock_irqsave(&pci_reg_window_lock, flags);
 	cnss_pci_select_window(pci_priv, addr);
 
 	if (addr >= PCI_BAR_WINDOW0_BASE && addr <= PCI_BAR_WINDOW0_END) {
-		if (addr >= PCI_MHIREGLEN_REG && addr <= PCI_MHI_REGION_END)
-			addr = addr - PCI_MHIREGLEN_REG;
+		if (addr >= mhi_region_start_reg && addr <= mhi_region_end_reg)
+			addr = addr - mhi_region_start_reg;
+
 		*val = readl_relaxed(pci_priv->bar +
 				     (addr & WINDOW_RANGE_MASK));
 	} else {
@@ -398,6 +430,8 @@ static int cnss_pci_reg_write(struct cnss_pci_data *pci_priv, u32 addr,
 			      u32 val)
 {
 	int ret;
+	u32 mhi_region_start_reg = 0;
+	u32 mhi_region_end_reg = 0;
 	unsigned long flags;
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 
@@ -416,12 +450,20 @@ static int cnss_pci_reg_write(struct cnss_pci_data *pci_priv, u32 addr,
 		return 0;
 	}
 
+	ret = cnss_get_mhi_region_len(plat_priv, &mhi_region_start_reg,
+				      &mhi_region_end_reg);
+	if (ret) {
+		cnss_pr_err("MHI start and end region not assigned.\n");
+		return ret;
+	}
+
 	spin_lock_irqsave(&pci_reg_window_lock, flags);
 	cnss_pci_select_window(pci_priv, addr);
 
 	if (addr >= PCI_BAR_WINDOW0_BASE && addr <= PCI_BAR_WINDOW0_END) {
-		if (addr >= PCI_MHIREGLEN_REG && addr <= PCI_MHI_REGION_END)
-			addr = addr - PCI_MHIREGLEN_REG;
+		if (addr >= mhi_region_start_reg && addr <= mhi_region_end_reg)
+			addr = addr - mhi_region_start_reg;
+
 		writel_relaxed(val, pci_priv->bar +
 			       (addr & WINDOW_RANGE_MASK));
 	} else {
