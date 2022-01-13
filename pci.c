@@ -3276,6 +3276,7 @@ int cnss_pci_alloc_qdss_mem(struct cnss_pci_data *pci_priv)
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 	struct cnss_fw_mem *qdss_mem = plat_priv->qdss_mem;
 	struct device *dev = &plat_priv->plat_dev->dev;
+	struct pci_dev *pci_dev = (struct pci_dev *)plat_priv->pci_dev;
 	u32 i, addr = 0;
 
 	if (plat_priv->device_id != QCN9000_DEVICE_ID) {
@@ -3288,6 +3289,28 @@ int cnss_pci_alloc_qdss_mem(struct cnss_pci_data *pci_priv)
 		cnss_pr_err("%s: FW requests %d segments, max allowed is 1",
 			    __func__, plat_priv->qdss_mem_seg_len);
 		return -EINVAL;
+	}
+
+	if (plat_priv->dma_alloc_supported) {
+		for (i = 0; i < plat_priv->qdss_mem_seg_len; i++) {
+			if (!qdss_mem[i].va && qdss_mem[i].size) {
+				qdss_mem[i].va =
+					dma_alloc_attrs(&pci_dev->dev,
+						qdss_mem[i].size,
+						&qdss_mem[i].pa,
+						GFP_KERNEL,
+						DMA_ATTR_FORCE_CONTIGUOUS);
+
+				if (!qdss_mem[i].va) {
+					cnss_pr_err("Failed to allocate memory for QDSS, size: 0x%zx, type: %u\n",
+						    qdss_mem[i].size,
+						    qdss_mem[i].type);
+					return -ENOMEM;
+				}
+			}
+		}
+
+		return 0;
 	}
 
 	/* Currently we support qdss_mem_seg_len = 1 only, however, if required
@@ -3333,7 +3356,26 @@ int cnss_pci_alloc_qdss_mem(struct cnss_pci_data *pci_priv)
 void cnss_pci_free_qdss_mem(struct cnss_plat_data *plat_priv)
 {
 	struct cnss_fw_mem *qdss_mem = plat_priv->qdss_mem;
+	struct cnss_pci_data *pci_priv = plat_priv->bus_priv;
+	struct device *dev = &pci_priv->pci_dev->dev;
 	int i;
+
+	if (plat_priv->dma_alloc_supported) {
+		for (i = 0; i < plat_priv->qdss_mem_seg_len; i++) {
+			if (qdss_mem[i].va && qdss_mem[i].size) {
+				cnss_pr_dbg("Freeing memory for QDSS, va: 0x%pK, pa: 0x%x, size: 0x%zx, type: %u\n",
+					    qdss_mem[i].va, qdss_mem[i].pa,
+					    qdss_mem[i].size, qdss_mem[i].type);
+				dma_free_attrs(dev, qdss_mem[i].size,
+					       qdss_mem[i].va, qdss_mem[i].pa,
+					       DMA_ATTR_FORCE_CONTIGUOUS);
+				qdss_mem[i].va = NULL;
+				qdss_mem[i].pa = 0;
+				qdss_mem[i].size = 0;
+				qdss_mem[i].type = 0;
+			}
+		}
+	}
 
 	for (i = 0; i < plat_priv->qdss_mem_seg_len; i++) {
 		if (qdss_mem[i].va) {
