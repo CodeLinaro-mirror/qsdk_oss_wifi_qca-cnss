@@ -58,6 +58,12 @@ static int pci3_num_msi_bmap;
 module_param(pci3_num_msi_bmap, int, 0644);
 MODULE_PARM_DESC(pci3_num_msi_bmap,
 		 "Bitmap to indicate number of available MSIs for PCI 3");
+
+#define PCI_BAR_WINDOW0_BASE	0x1E00000
+#define PCI_BAR_WINDOW0_END	0x1E7FFFC
+#define PCI_MHIREGLEN_REG	0x1E0E100
+#define PCI_MHI_REGION_END	0x1E0EFFC
+
 #define MSI_MHI_VECTOR_MASK 0xFF
 #define MSI_MHI_VECTOR_SHIFT 0
 
@@ -101,9 +107,7 @@ static void *mlo_global_mem;
 #define MHI_MSI_NAME			"MHI"
 
 #define MAX_M3_FILE_NAME_LENGTH		15
-#define QCN9000_DEFAULT_M3_FILE_NAME	"qcn9000/m3.bin"
-#define QCN9224_DEFAULT_M3_FILE_NAME	"qcn9224/m3.bin"
-#define DEFAULT_FW_FILE_NAME            "qcn9000/amss.bin"
+#define DEFAULT_M3_FILE_NAME		"m3.bin"
 #define FW_V2_FILE_NAME			"amss20.bin"
 #define FW_V2_NUMBER			2
 #define AFC_SLOT_SIZE			0x1000
@@ -375,8 +379,15 @@ static int cnss_pci_reg_read(struct cnss_pci_data *pci_priv,
 	spin_lock_irqsave(&pci_reg_window_lock, flags);
 	cnss_pci_select_window(pci_priv, addr);
 
-	*val = readl_relaxed(pci_priv->bar + WINDOW_START +
-			     (addr & WINDOW_RANGE_MASK));
+	if (addr >= PCI_BAR_WINDOW0_BASE && addr <= PCI_BAR_WINDOW0_END) {
+		if (addr >= PCI_MHIREGLEN_REG && addr <= PCI_MHI_REGION_END)
+			addr = addr - PCI_MHIREGLEN_REG;
+		*val = readl_relaxed(pci_priv->bar +
+				     (addr & WINDOW_RANGE_MASK));
+	} else {
+		*val = readl_relaxed(pci_priv->bar + WINDOW_START +
+				     (addr & WINDOW_RANGE_MASK));
+	}
 	spin_unlock_irqrestore(&pci_reg_window_lock, flags);
 
 	return 0;
@@ -407,8 +418,15 @@ static int cnss_pci_reg_write(struct cnss_pci_data *pci_priv, u32 addr,
 	spin_lock_irqsave(&pci_reg_window_lock, flags);
 	cnss_pci_select_window(pci_priv, addr);
 
-	writel_relaxed(val, pci_priv->bar + WINDOW_START +
-		       (addr & WINDOW_RANGE_MASK));
+	if (addr >= PCI_BAR_WINDOW0_BASE && addr <= PCI_BAR_WINDOW0_END) {
+		if (addr >= PCI_MHIREGLEN_REG && addr <= PCI_MHI_REGION_END)
+			addr = addr - PCI_MHIREGLEN_REG;
+		writel_relaxed(val, pci_priv->bar +
+			       (addr & WINDOW_RANGE_MASK));
+	} else {
+		writel_relaxed(val, pci_priv->bar + WINDOW_START +
+			       (addr & WINDOW_RANGE_MASK));
+	}
 	spin_unlock_irqrestore(&pci_reg_window_lock, flags);
 
 	return 0;
@@ -3348,7 +3366,7 @@ int cnss_pci_alloc_fw_mem(struct cnss_plat_data *plat_priv)
 				    !test_bit(CNSS_DRIVER_RECOVERY,
 					      &plat_priv->driver_state)) {
 					memset_io(mlo_global_mem, 0,
-						  mlo_global_mem_size);
+						  fw_mem[i].size);
 				}
 			}
 			break;
@@ -3545,12 +3563,9 @@ int cnss_pci_load_m3(struct cnss_pci_data *pci_priv)
 	}
 	CNSS_ASSERT(m3_mem->va);
 
-	if (plat_priv->device_id == QCN9000_DEVICE_ID)
-		snprintf(filename, sizeof(filename),
-			 QCN9000_DEFAULT_M3_FILE_NAME);
-	else
-		snprintf(filename, sizeof(filename),
-			 QCN9224_DEFAULT_M3_FILE_NAME);
+	snprintf(filename, sizeof(filename),
+		 "%s%s", cnss_get_fw_path(plat_priv),
+		 DEFAULT_M3_FILE_NAME);
 
 	ret = request_firmware(&fw_entry, filename,
 			       &pci_priv->pci_dev->dev);
@@ -4709,7 +4724,7 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 	struct image_info *fw_image, *rddm_image;
 	struct cnss_fw_mem *fw_mem = plat_priv->fw_mem;
 	struct cnss_fw_mem *qdss_mem = plat_priv->qdss_mem;
-	int ret, i;
+	int ret, i, skip_count = 0;
 
 	if (test_bit(CNSS_MHI_RDDM_DONE, &pci_priv->mhi_state)) {
 		cnss_pr_dbg("RAM dump is already collected, skip\n");
@@ -4740,6 +4755,10 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 		    fw_image->entries);
 
 	for (i = 0; i < fw_image->entries; i++) {
+		if (!fw_image->mhi_buf[i].dma_addr) {
+			skip_count++;
+			continue;
+		}
 		dump_seg->address = fw_image->mhi_buf[i].dma_addr;
 		dump_seg->v_address = fw_image->mhi_buf[i].buf;
 		dump_seg->size = fw_image->mhi_buf[i].len;
@@ -4750,7 +4769,7 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 		dump_seg++;
 	}
 
-	dump_data->nentries += fw_image->entries;
+	dump_data->nentries += fw_image->entries - skip_count;
 
 	cnss_pr_dbg("Collect RDDM image dump segment, nentries %d\n",
 		    rddm_image->entries);
@@ -5117,6 +5136,7 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 	struct pci_dev *pci_dev = pci_priv->pci_dev;
 	struct mhi_controller *mhi_ctrl;
+	char cnss_mhi_log_buf_name[20];
 #ifndef CONFIG_CNSS2_SMMU
 	struct device_node *dev_node;
 	struct resource memory;
@@ -5197,8 +5217,11 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 	mhi_ctrl->rddm_supported = true;
 #endif
 
+	snprintf(cnss_mhi_log_buf_name, sizeof(cnss_mhi_log_buf_name),
+			"cnss-mhi_%x", plat_priv->wlfw_service_instance_id);
+
 	mhi_ctrl->log_buf = ipc_log_context_create(CNSS_IPC_LOG_PAGES,
-						   "cnss-mhi", 0);
+					(const char *)cnss_mhi_log_buf_name, 0);
 	if (!mhi_ctrl->log_buf)
 		cnss_pr_info("MHI IPC Logging is disabled!\n");
 
@@ -5323,8 +5346,6 @@ int cnss_pci_probe(struct pci_dev *pci_dev,
 	cnss_set_pci_priv(pci_dev, pci_priv);
 	plat_priv->device_id = pci_dev->device;
 	plat_priv->bus_priv = pci_priv;
-	snprintf(plat_priv->firmware_name, sizeof(plat_priv->firmware_name),
-		 DEFAULT_FW_FILE_NAME);
 
 	ret = cnss_register_ramdump(plat_priv);
 	if (ret)
