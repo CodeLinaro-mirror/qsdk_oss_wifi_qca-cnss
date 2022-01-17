@@ -1,4 +1,5 @@
 /* Copyright (c) 2016-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -143,6 +144,22 @@ struct cnss_pci_data {
 struct paging_header {
 	u64 version;   /* dump version */
 	u64 seg_num;   /* paging seg num */
+};
+
+struct pbl_reg_addr {
+	u32 pbl_log_sram_start;
+	u32 pbl_log_sram_max_size;
+	u32 tcsr_pbl_logging_reg;
+	u32 pbl_wlan_boot_cfg;
+	u32 pbl_bootstrap_status;
+};
+
+struct sbl_reg_addr {
+	u32 sbl_sram_start;
+	u32 sbl_sram_end;
+	u32 sbl_log_start_reg;
+	u32 sbl_log_size_reg;
+	u32 sbl_log_size_shift;
 };
 
 static inline void cnss_set_pci_priv(struct pci_dev *pci_dev, void *data)
