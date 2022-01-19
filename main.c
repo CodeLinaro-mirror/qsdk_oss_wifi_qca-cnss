@@ -144,6 +144,12 @@ static int enable_qcn9224_support;
 module_param(enable_qcn9224_support, int, 0444);
 MODULE_PARM_DESC(enable_qcn9224_support, "Enable QCN9224 support");
 
+unsigned int enable_mlo_support;
+module_param(enable_mlo_support, uint, 0600);
+MODULE_PARM_DESC(enable_mlo_support, "enable_mlo_support");
+
+extern unsigned int mlo_num_chips;
+
 enum skip_cnss_options {
 	CNSS_SKIP_NONE,
 	CNSS_SKIP_ALL,
@@ -841,7 +847,7 @@ int cnss_get_mlo_chip_id(struct device *dev)
 	if (of_property_read_u32(bus_dev->of_node, "mlo_chip_info",
 				 &mlo_chip_phandle)) {
 		cnss_pr_err("could not get mlo_chip_phandle\n");
-		return -EINVAL;
+		return -ENOENT;
 	}
 
 	mlo_chip_node = of_find_node_by_phandle(mlo_chip_phandle);
@@ -872,6 +878,9 @@ bool cnss_get_mlo_capable(struct device *dev)
 		return false;
 
 	if (plat_priv->device_id != QCN9224_DEVICE_ID)
+		return false;
+
+	if (!plat_priv->mlo_support)
 		return false;
 
 	bus_dev = &plat_priv->plat_dev->dev;
@@ -953,7 +962,7 @@ int cnss_get_num_mlo_links(struct device *dev)
 	if (of_property_read_u32(bus_dev->of_node, "mlo_chip_info",
 				 &mlo_chip_phandle)) {
 		cnss_pr_err("could not get mlo_chip_phandle\n");
-		return -EINVAL;
+		return -ENOENT;
 	}
 
 	mlo_chip_node = of_find_node_by_phandle(mlo_chip_phandle);
@@ -1001,6 +1010,10 @@ int cnss_get_num_mlo_capable_devices(unsigned int *device_id, int num_elements)
 						plat_priv->device_id;
 		}
 	}
+
+	if (mlo_num_chips)
+		return mlo_num_chips;
+
 	return num_capable;
 }
 EXPORT_SYMBOL(cnss_get_num_mlo_capable_devices);
@@ -4274,8 +4287,11 @@ static int cnss_probe(struct platform_device *plat_dev)
 	plat_priv->service_id = WLFW_SERVICE_ID_V01;
 
 	switch (plat_priv->device_id) {
-	case QCN9000_DEVICE_ID:
 	case QCN9224_DEVICE_ID:
+		plat_priv->mlo_support = !!enable_mlo_support;
+		plat_priv->mlo_capable = 1;
+		/* Fall Through */
+	case QCN9000_DEVICE_ID:
 		plat_priv->bus_type = CNSS_BUS_PCI;
 		plat_priv->bdf_dnld_method = WLFW_SEND_BDF_OVER_QMI_V01;
 		plat_priv->qrtr_node_id = node_id;
