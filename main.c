@@ -92,6 +92,14 @@ static int bdf_pci1;
 module_param(bdf_pci1, int, 0644);
 MODULE_PARM_DESC(bdf_pci1, "bdf_pci1");
 
+static int bdf_pci2;
+module_param(bdf_pci2, int, 0644);
+MODULE_PARM_DESC(bdf_pci1, "bdf_pci2");
+
+static int bdf_pci3;
+module_param(bdf_pci3, int, 0644);
+MODULE_PARM_DESC(bdf_pci1, "bdf_pci3");
+
 static unsigned int driver_mode;
 module_param(driver_mode, uint, 0644);
 MODULE_PARM_DESC(driver_mode, "Global driver mode");
@@ -4302,11 +4310,22 @@ static int cnss_probe(struct platform_device *plat_dev)
 		else
 			node_id_base = QCN9000_NODE_ID_BASE;
 
-		if (plat_priv->wlfw_service_instance_id == node_id_base)
+		switch (plat_priv->wlfw_service_instance_id - node_id_base) {
+		case 0:
 			plat_priv->board_info.board_id_override = bdf_pci0;
-		else if (plat_priv->wlfw_service_instance_id ==
-			 node_id_base + 1)
+			break;
+		case 1:
 			plat_priv->board_info.board_id_override = bdf_pci1;
+			break;
+		case 2:
+			plat_priv->board_info.board_id_override = bdf_pci2;
+			break;
+		case 3:
+			plat_priv->board_info.board_id_override = bdf_pci3;
+			break;
+		default:
+			break;
+		}
 
 		snprintf(plat_priv->firmware_name,
 			 sizeof(plat_priv->firmware_name),
