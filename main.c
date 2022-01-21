@@ -151,10 +151,6 @@ static int soc_version_major;
 module_param(soc_version_major, int, 0444);
 MODULE_PARM_DESC(soc_version_major, "SOC Major Version");
 
-static int enable_qcn9224_support;
-module_param(enable_qcn9224_support, int, 0444);
-MODULE_PARM_DESC(enable_qcn9224_support, "Enable QCN9224 support");
-
 unsigned int enable_mlo_support;
 module_param(enable_mlo_support, uint, 0600);
 MODULE_PARM_DESC(enable_mlo_support, "enable_mlo_support");
@@ -4495,13 +4491,6 @@ static int cnss_probe(struct platform_device *plat_dev)
 	    (platform_get_qcn6122_userpd_id(plat_dev, &userpd_id))) {
 		pr_err("Error: No userpd_id in device_tree\n");
 		CNSS_ASSERT(0);
-		ret = -ENODEV;
-		goto out;
-	}
-
-	if (device_id->driver_data == QCN9224_DEVICE_ID &&
-	    !enable_qcn9224_support) {
-		pr_err("Skipping QCN9224 device support\n");
 		ret = -ENODEV;
 		goto out;
 	}
