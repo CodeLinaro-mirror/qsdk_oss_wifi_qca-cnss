@@ -199,6 +199,9 @@ static DEFINE_SPINLOCK(pci_reg_window_lock);
 #define QCN9224_PCI_MHIREGLEN_REG		0x1E0E100
 #define QCN9224_PCI_MHI_REGION_END		0x1E0EFFC
 
+#define QCN9224_PCIE_PCIE_MHI_TIME_LOW          0x1E0EB28
+#define QCN9224_PCIE_PCIE_MHI_TIME_HIGH         0x1E0EB2C
+
 #define SHADOW_REG_INTER_COUNT			43
 #define QCA6390_PCIE_SHADOW_REG_INTER_0		0x1E05000
 #define QCA6390_PCIE_SHADOW_REG_HUNG		0x1E050A8
@@ -1317,6 +1320,25 @@ static void cnss_pci_deinit_mhi(struct cnss_pci_data *pci_priv)
 	cnss_pci_set_mhi_state(pci_priv, CNSS_MHI_DEINIT);
 }
 
+static void cnss_pci_get_timestamp_qcn9000(struct cnss_pci_data *pci_priv,
+					   u32 *low, u32 *high)
+{
+	cnss_pci_reg_write(pci_priv, QCN9000_WLAON_GLOBAL_COUNTER_CTRL5,
+			   QCN9000_TIME_SYNC_CLEAR);
+	cnss_pci_reg_write(pci_priv, QCN9000_WLAON_GLOBAL_COUNTER_CTRL5,
+			   QCN9000_TIME_SYNC_ENABLE);
+
+	cnss_pci_reg_read(pci_priv, QCN9000_WLAON_GLOBAL_COUNTER_CTRL3, low);
+	cnss_pci_reg_read(pci_priv, QCN9000_WLAON_GLOBAL_COUNTER_CTRL4, high);
+}
+
+static void cnss_pci_get_timestamp_qcn9224(struct cnss_pci_data *pci_priv,
+					   u32 *low, u32 *high)
+{
+	cnss_pci_reg_read(pci_priv, QCN9224_PCIE_PCIE_MHI_TIME_LOW, low);
+	cnss_pci_reg_read(pci_priv, QCN9224_PCIE_PCIE_MHI_TIME_HIGH, high);
+}
+
 static int cnss_pci_get_device_timestamp(struct cnss_pci_data *pci_priv,
 					 u64 *time_us)
 {
@@ -1329,13 +1351,18 @@ static int cnss_pci_get_device_timestamp(struct cnss_pci_data *pci_priv,
 		return -EINVAL;
 	}
 
-	cnss_pci_reg_write(pci_priv, QCN9000_WLAON_GLOBAL_COUNTER_CTRL5,
-			   QCN9000_TIME_SYNC_CLEAR);
-	cnss_pci_reg_write(pci_priv, QCN9000_WLAON_GLOBAL_COUNTER_CTRL5,
-			   QCN9000_TIME_SYNC_ENABLE);
-
-	cnss_pci_reg_read(pci_priv, QCN9000_WLAON_GLOBAL_COUNTER_CTRL3, &low);
-	cnss_pci_reg_read(pci_priv, QCN9000_WLAON_GLOBAL_COUNTER_CTRL4, &high);
+	switch (pci_priv->device_id) {
+	case QCN9000_DEVICE_ID:
+		cnss_pci_get_timestamp_qcn9000(pci_priv, &low, &high);
+		break;
+	case QCN9224_DEVICE_ID:
+		cnss_pci_get_timestamp_qcn9224(pci_priv, &low, &high);
+		break;
+	default:
+		cnss_pr_err("Unknown device type %d\n",
+			    pci_priv->device_id);
+		return -EINVAL;
+	}
 
 	device_ticks = (u64)high << 32 | low;
 	do_div(device_ticks, plat_priv->device_freq_hz / 100000);
