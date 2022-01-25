@@ -478,6 +478,10 @@ static inline int cnss_set_mlo_config(struct cnss_mlo_group_info *group_info,
 static inline void cnss_print_mlo_config(void)
 {
 }
+static inline void cnss_set_led_gpio(int led_gpio, unsigned int value,
+				     unsigned int flags)
+{
+}
 #else
 extern int cnss_wlan_register_driver(struct cnss_wlan_driver *driver);
 extern int cnss_wlan_register_driver_ops(struct cnss_wlan_driver *driver);
@@ -582,5 +586,6 @@ int cnss_reg_write(struct device *dev, u32 addr, u32 val);
 int cnss_set_bar_addr(struct device *dev, void __iomem *mem);
 int cnss_set_mlo_config(struct cnss_mlo_group_info *group_info, int num_groups);
 void cnss_print_mlo_config(void);
+void cnss_set_led_gpio(int led_gpio, unsigned int value, unsigned int flags);
 #endif
 #endif /* _NET_CNSS2_H */

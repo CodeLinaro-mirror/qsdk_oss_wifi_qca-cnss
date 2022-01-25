@@ -15,6 +15,8 @@
 #include <linux/jiffies.h>
 #include <linux/module.h>
 #include <linux/of.h>
+#include <linux/gpio/consumer.h>
+#include <linux/of_gpio.h>
 #include <linux/of_device.h>
 #include <linux/pm_wakeup.h>
 #include <linux/rwsem.h>
@@ -721,6 +723,24 @@ int cnss_wlan_disable(struct device *dev, enum cnss_driver_mode mode)
 	return cnss_wlfw_wlan_mode_send_sync(plat_priv, CNSS_OFF);
 }
 EXPORT_SYMBOL(cnss_wlan_disable);
+
+void cnss_set_led_gpio(int led_gpio, unsigned int value, unsigned int flags)
+{
+	struct gpio_desc *led_gpio_desc;
+
+	led_gpio_desc = gpio_to_desc(led_gpio);
+
+	/* IPQ9574 has active-low GPIO for WiFi LED.
+	   Hence check and set the active-low status
+	   appropriately from the GPIO flags.
+	 */
+	if ((flags & OF_GPIO_ACTIVE_LOW) &&
+	    !gpiod_is_active_low(led_gpio_desc)) {
+		gpiod_toggle_active_low(led_gpio_desc);
+	}
+	gpiod_set_value_cansleep(led_gpio_desc, value);
+}
+EXPORT_SYMBOL(cnss_set_led_gpio);
 
 int cnss_athdiag_read(struct device *dev, u32 offset, u32 mem_type,
 		      u32 data_len, u8 *output)
