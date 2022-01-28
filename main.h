@@ -1,4 +1,5 @@
 /* Copyright (c) 2016-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -113,6 +114,37 @@
  * |   3  |  65MB  |    55MB   | 0x3700000 | 0x3800000 | 0x3900000 |   24MB   |
  * +------+--------+-----------+-----------+-----------+-----------+----------+
  * |   4  |  33MB  |    23MB   | 0x1700000 | 0x1800000 | 0x1900000 |   24MB   |
+ * +======+========+===========+===========+===========+===========+==========+
+ *
+ *				IPQ9574
+ *
+ * Start Address for all Modes: 0x4AB00000
+ * All offsets mentioned below are with reference to the above start address
+ *
+ * +======+========+=========+===========+===========+===========+
+ * | MODE | Memory | BDF Off | Caldb Off | QDSS Off  |M3 Dump Off|
+ * |      |        |  256KB  |    5MB    |    1MB    |    1MB    |
+ * +======+========+=========+===========+===========+===========+
+ * |   0  |  50MB  | 0xC00000| 0x2D00000 | 0x2C00000 | 0x2B00000 |
+ * +------+--------+---------+-----------+-----------+-----------+
+ * |   1  |  36MB  | 0xC00000| 0x1F00000 | 0x1E00000 | 0x1D00000 |
+ * +======+========+=========+===========+===========+===========+
+ *
+
+ *				QCN9224
+ *
+ * Start Address varies for each RDP, please refer RDP specific DTS file.
+ * All offsets mentioned below are with reference to the start address from DTS
+ * HREMOTE Offset is always same as Start Offset
+ *
+ * MLO uses 16MB and comes at the end of all QCN9224 memory and MHI mem nodes
+ * RDDM size of QCN9224 is 6M and part of MHI regions.
+ *
+ * +======+========+===========+===========+===========+===========+==========+
+ * | MODE | Memory |  HREMOTE  |M3 Dump Off| QDSS Off  | Caldb Off | MHI DMA  |
+ * |      |        |    SIZE   |    1MB    |    1MB    |    8MB    | RESERVED |
+ * +======+========+===========+===========+===========+===========+==========+
+ * |   0  |  46MB  |    36MB   | 0x2400000 | 0x2500000 | 0x2600000 |   26MB   |
  * +======+========+===========+===========+===========+===========+==========+
  */
 #define MAX_TGT_MEM_MODES		5
@@ -421,6 +453,10 @@ enum cnss_ce_index {
 	CNSS_CE_09,
 	CNSS_CE_10,
 	CNSS_CE_11,
+	CNSS_CE_12,
+	CNSS_CE_13,
+	CNSS_CE_14,
+	CNSS_CE_15,
 	CNSS_CE_COMMON,
 };
 
@@ -549,6 +585,10 @@ struct cnss_plat_data {
 	bool qdss_support;
 	enum wlfw_bdf_dnld_method_v01 bdf_dnld_method;
 	u32 probe_order;
+	bool mlo_support;
+	bool mlo_capable;
+	/* This bar variable will be valid only for AHB devices. */
+	void __iomem *bar;
 };
 
 #ifdef CONFIG_ARCH_QCOM
