@@ -607,6 +607,8 @@ struct cnss_plat_data {
 	bool mlo_capable;
 	/* This bar variable will be valid only for AHB devices. */
 	void __iomem *bar;
+	struct cnss_mlo_group_info *mlo_group_info;
+	struct cnss_mlo_chip_info *mlo_chip_info;
 };
 
 #ifdef CONFIG_ARCH_QCOM

@@ -26,6 +26,10 @@
  */
 #define CNSS_API_WITH_DEV
 
+#define CNSS_MAX_LINKS_PER_CHIP		2
+#define CNSS_MAX_MLO_CHIPS		3
+#define CNSS_MAX_MLO_GROUPS		1
+
 enum cnss_bus_width_type {
 	CNSS_BUS_WIDTH_NONE,
 	CNSS_BUS_WIDTH_IDLE,
@@ -187,6 +191,22 @@ enum cnss_recovery_reason {
 	CNSS_REASON_LINK_DOWN,
 	CNSS_REASON_RDDM,
 	CNSS_REASON_TIMEOUT,
+};
+
+struct cnss_mlo_chip_info {
+	u8 group_id;
+	u8 soc_id;
+	u8 chip_id;
+	u8 num_local_links;
+	u8 hw_link_ids[CNSS_MAX_LINKS_PER_CHIP];
+	u8 valid_link_ids[CNSS_MAX_LINKS_PER_CHIP];
+};
+
+struct cnss_mlo_group_info {
+	u8 group_id;
+	u8 num_chips;
+	u16 max_num_peers;
+	struct cnss_mlo_chip_info chip_info[CNSS_MAX_MLO_CHIPS];
 };
 
 struct cnss_plat_data;
@@ -450,6 +470,14 @@ static inline int cnss_set_bar_addr(struct device *dev, void __iomem *mem)
 {
 	return -EINVAL;
 }
+static inline int cnss_set_mlo_config(struct cnss_mlo_group_info *group_info,
+				      int num_groups)
+{
+	return 0;
+}
+static inline void cnss_print_mlo_config(void)
+{
+}
 #else
 extern int cnss_wlan_register_driver(struct cnss_wlan_driver *driver);
 extern int cnss_wlan_register_driver_ops(struct cnss_wlan_driver *driver);
@@ -552,5 +580,7 @@ int cnss_get_num_mlo_capable_devices(unsigned int *device_id,
 int cnss_reg_read(struct device *dev, u32 addr, u32 *val);
 int cnss_reg_write(struct device *dev, u32 addr, u32 val);
 int cnss_set_bar_addr(struct device *dev, void __iomem *mem);
+int cnss_set_mlo_config(struct cnss_mlo_group_info *group_info, int num_groups);
+void cnss_print_mlo_config(void);
 #endif
 #endif /* _NET_CNSS2_H */

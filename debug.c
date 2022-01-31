@@ -929,6 +929,25 @@ static const struct file_operations cnss_qmi_record_debug_fops = {
 	.llseek		= seq_lseek,
 };
 
+static int cnss_mlo_config_debug_show(struct seq_file *s, void *data)
+{
+	cnss_print_mlo_config();
+	return 0;
+}
+
+static int cnss_mlo_config_debug_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, cnss_mlo_config_debug_show, inode->i_private);
+}
+
+static const struct file_operations cnss_mlo_config_debug_fops = {
+	.read		= seq_read,
+	.release	= single_release,
+	.open		= cnss_mlo_config_debug_open,
+	.owner		= THIS_MODULE,
+	.llseek		= seq_lseek,
+};
+
 static int cnss_create_debug_only_node(struct cnss_plat_data *plat_priv)
 {
 	struct dentry *root_dentry = plat_priv->root_dentry;
@@ -969,6 +988,8 @@ int cnss_debugfs_create(struct cnss_plat_data *plat_priv)
 		/* Create qmi_record under /sys/kernel/debug/cnss2/ */
 		debugfs_create_file("qmi_record", 0600, cnss_root_dentry, NULL,
 				    &cnss_qmi_record_debug_fops);
+		debugfs_create_file("mlo_config", 0600, cnss_root_dentry, NULL,
+				    &cnss_mlo_config_debug_fops);
 	}
 
 	root_dentry = debugfs_create_dir((char *)&plat_priv->device_name,

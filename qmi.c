@@ -69,10 +69,6 @@ unsigned int num_wlan_vaps;
 module_param(num_wlan_vaps, uint, 0600);
 MODULE_PARM_DESC(num_wlan_vaps, "num_wlan_vaps");
 
-unsigned int mlo_num_chips;
-module_param(mlo_num_chips, uint, 0600);
-MODULE_PARM_DESC(mlo_num_chips, "mlo_num_chips");
-
 struct qmi_history qmi_log[QMI_HISTORY_SIZE];
 int qmi_history_index;
 DEFINE_SPINLOCK(qmi_log_spinlock);
@@ -251,14 +247,13 @@ static int cnss_wlfw_host_cap_send_sync(struct cnss_plat_data *plat_priv)
 	struct wlfw_host_cap_req_msg_v01 *req;
 	struct wlfw_host_cap_resp_msg_v01 *resp;
 	struct wlfw_host_mlo_chip_info_s_v01 *info;
+	struct cnss_mlo_chip_info *mlo_chip_info;
 	struct qmi_txn txn;
-	int ret = 0, i;
+	int ret = 0, i, j;
 	int resp_error_msg = 0;
 	const char *model = NULL;
-	struct device_node *root, *mlo_config = NULL, *chipnp;
+	struct device_node *root;
 	struct device *dev = &plat_priv->plat_dev->dev;
-	struct pci_dev *pcidev;
-	int chip_id;
 
 	cnss_pr_dbg("Sending host capability message, state: 0x%lx\n",
 		    plat_priv->driver_state);
@@ -339,89 +334,38 @@ static int cnss_wlfw_host_cap_send_sync(struct cnss_plat_data *plat_priv)
 	}
 
 	/* update MLO configuration */
-	if (plat_priv->device_id == QCN9224_DEVICE_ID) {
-		pcidev = (struct pci_dev *)plat_priv->pci_dev;
 
-		mlo_config = of_find_node_by_name(NULL, "mlo_group0");
-
-		chip_id = cnss_get_mlo_chip_id(&pcidev->dev);
-		if (chip_id == -ENOENT)
-			cnss_pr_info("MLO not enabled for %s",
-				     plat_priv->device_name);
-	}
-
-	if (plat_priv->mlo_support && mlo_config && chip_id >= 0) {
+	if (plat_priv->mlo_support && plat_priv->mlo_capable) {
 		req->mlo_capable_valid = 1;
 		req->mlo_capable = 1;
 
-		req->mlo_chip_id = (u16)chip_id;
+		req->mlo_chip_id = plat_priv->mlo_chip_info->chip_id;
 		req->mlo_chip_id_valid = 1;
 
-		req->mlo_group_id = 0;
+		req->mlo_group_id = plat_priv->mlo_group_info->group_id;
 		req->mlo_group_id_valid = 1;
 
-		if (of_property_read_u16(mlo_config,
-					 "mlo_max_num_peer",
-					 &req->max_mlo_peer)) {
-			cnss_pr_err("mlo_max_num_peer is not configured\n");
-			ret = -EINVAL;
-			goto err;
-		}
 		req->max_mlo_peer_valid = 1;
-
-		if (of_property_read_u8(mlo_config,
-					"mlo_num_chips",
-					&req->mlo_num_chips)) {
-			cnss_pr_err("mlo_num_chips is not configured\n");
-			ret = -EINVAL;
-			goto err;
-		}
-		if (mlo_num_chips)
-			req->mlo_num_chips = mlo_num_chips;
+		req->max_mlo_peer = plat_priv->mlo_group_info->max_num_peers;
 
 		req->mlo_num_chips_valid = 1;
+		req->mlo_num_chips = plat_priv->mlo_group_info->num_chips;
 
 		req->mlo_chip_info_valid = 1;
 		for (i = 0; i < req->mlo_num_chips; i++) {
-			chipnp = of_parse_phandle(mlo_config, "chips", i);
-			if (!chipnp) {
-				cnss_pr_err("chip info is null. num chips %d\n",
-					    req->mlo_num_chips);
-				ret = -EINVAL;
-				goto err;
-			}
 			info = &req->mlo_chip_info[i];
-			if (of_property_read_u8(chipnp, "chip_id",
-						&info->chip_id)) {
-				cnss_pr_err("chip_id is not configured\n");
-				ret = -EINVAL;
-				goto err_chip_info;
-			}
+			mlo_chip_info =
+				&plat_priv->mlo_group_info->chip_info[i];
 
-			if (of_property_read_u8(chipnp, "num_local_links",
-						&info->num_local_links)) {
-				cnss_pr_err("num_local_links is missing\n");
-				ret = -EINVAL;
-				goto err_chip_info;
-			}
+			info->chip_id = mlo_chip_info->chip_id;
+			info->num_local_links = mlo_chip_info->num_local_links;
 
-			if (of_property_read_u8_array(chipnp, "hw_link_ids",
-						      &info->hw_link_id[0],
-						      MAX_HW_LINKS)) {
-				cnss_pr_err("hw_link_ids is not configured\n");
-				ret = -EINVAL;
-				goto err_chip_info;
+			for (j = 0; j < CNSS_MAX_LINKS_PER_CHIP; j++) {
+				info->hw_link_id[j] =
+					mlo_chip_info->hw_link_ids[j];
+				info->valid_mlo_link_id[j] =
+					mlo_chip_info->valid_link_ids[j];
 			}
-
-			if (of_property_read_u8_array(chipnp,
-						      "valid_mlo_link_ids",
-						      &info->valid_mlo_link_id[0],
-						      MAX_HW_LINKS)) {
-				cnss_pr_err("valid_mlo_link_ids read error\n");
-				ret = -EINVAL;
-				goto err_chip_info;
-			}
-			of_node_put(chipnp);
 		}
 	}
 
@@ -491,8 +435,6 @@ static int cnss_wlfw_host_cap_send_sync(struct cnss_plat_data *plat_priv)
 	kfree(resp);
 	return 0;
 
-err_chip_info:
-	of_node_put(chipnp);
 err:
 	kfree(req);
 	kfree(resp);

@@ -59,7 +59,6 @@
 #define CNSS_BDF_TYPE_DEFAULT		CNSS_BDF_ELF
 #define CNSS_TIME_SYNC_PERIOD_DEFAULT	900000
 #define DEFAULT_FW_FILE_NAME		"amss.bin"
-#define QCN9224_MLO_MIN_LINKS 2
 
 #define MAX_NUMBER_OF_SOCS 4
 #define CNSS_PROBE_ORDER_MASK 0xF
@@ -68,6 +67,7 @@
 
 struct cnss_plat_data *plat_env[MAX_NUMBER_OF_SOCS];
 int plat_env_index;
+struct cnss_mlo_group_info g_mlo_group_info[CNSS_MAX_MLO_GROUPS];
 
 #ifdef CONFIG_CNSS2_PM
 static DECLARE_RWSEM(cnss_pm_sem);
@@ -157,7 +157,10 @@ unsigned int enable_mlo_support;
 module_param(enable_mlo_support, uint, 0600);
 MODULE_PARM_DESC(enable_mlo_support, "enable_mlo_support");
 
-extern unsigned int mlo_num_chips;
+/* Temporary bootarg till drive ini changes are ready */
+static unsigned int mlo_chip_bitmask = 0x7;
+module_param(mlo_chip_bitmask, uint, 0600);
+MODULE_PARM_DESC(mlo_chip_bitmask, "mlo_chip_bitmask");
 
 enum skip_cnss_options {
 	CNSS_SKIP_NONE,
@@ -311,6 +314,26 @@ struct cnss_plat_data *cnss_get_plat_priv(struct platform_device
 			return plat_env[i];
 	}
 	return NULL;
+}
+
+static void cnss_sort_probe_order(void)
+{
+	int i = 0;
+	int j = 0;
+
+	for (i = 0; i < plat_env_index; i++)
+		for (j = i + 1; j < plat_env_index; j++)
+			if (plat_env[i]->probe_order > plat_env[j]->probe_order)
+				swap(plat_env[i], plat_env[j]);
+}
+
+struct cnss_plat_data *cnss_get_plat_priv_by_soc_id(int soc_id)
+{
+	if (soc_id >= MAX_NUMBER_OF_SOCS || soc_id >= plat_env_index)
+		return NULL;
+
+	cnss_sort_probe_order();
+	return plat_env[soc_id];
 }
 
 int cnss_get_plat_env_index_from_plat_priv(struct cnss_plat_data *plat_priv)
@@ -941,72 +964,138 @@ void cnss_get_ramdump_device_name(struct device *dev,
 }
 EXPORT_SYMBOL(cnss_get_ramdump_device_name);
 
+int cnss_set_mlo_config(struct cnss_mlo_group_info *in_group_info,
+			int num_groups)
+{
+	struct cnss_mlo_group_info *mlo_group_info;
+	struct cnss_mlo_group_info *group_info;
+	struct cnss_mlo_chip_info *chip_info;
+	struct cnss_plat_data *plat_priv = NULL;
+	int i, j, k;
+
+	if (!enable_mlo_support) {
+		cnss_pr_info("%s: MLO is disabled\n", __func__);
+		return 0;
+	}
+
+	if (num_groups > CNSS_MAX_MLO_GROUPS) {
+		cnss_pr_err("%s: num_groups %d greater than max %d",
+			    __func__, num_groups, CNSS_MAX_MLO_GROUPS);
+		return -EINVAL;
+	}
+
+	for (i = 0; i < num_groups; i++) {
+		mlo_group_info = &g_mlo_group_info[i];
+		group_info = &in_group_info[i];
+
+		if (group_info->num_chips > CNSS_MAX_MLO_CHIPS) {
+			cnss_pr_err("%s: num_chips %d greater than max %d",
+				    __func__, group_info->num_chips,
+				    CNSS_MAX_MLO_CHIPS);
+			return -EINVAL;
+		}
+
+		memset(mlo_group_info, 0, sizeof(struct cnss_mlo_group_info));
+		mlo_group_info->group_id = group_info->group_id;
+		mlo_group_info->max_num_peers = group_info->max_num_peers;
+		mlo_group_info->num_chips = group_info->num_chips;
+
+		for (j = 0; j < group_info->num_chips; j++) {
+			chip_info = &mlo_group_info->chip_info[j];
+
+			chip_info->group_id =
+				 group_info->chip_info[j].group_id;
+			chip_info->soc_id =
+				group_info->chip_info[j].soc_id;
+			chip_info->chip_id =
+				group_info->chip_info[j].chip_id;
+			chip_info->num_local_links =
+				group_info->chip_info[j].num_local_links;
+
+			for (k = 0; k < CNSS_MAX_LINKS_PER_CHIP; k++) {
+				chip_info->hw_link_ids[k] =
+				    group_info->chip_info[j].hw_link_ids[k];
+				chip_info->valid_link_ids[k] =
+				    group_info->chip_info[j].valid_link_ids[k];
+			}
+
+			plat_priv =
+				cnss_get_plat_priv_by_soc_id(chip_info->soc_id);
+			if (!plat_priv || !plat_priv->mlo_support)
+				continue;
+
+			plat_priv->mlo_group_info = mlo_group_info;
+			plat_priv->mlo_chip_info = chip_info;
+			plat_priv->mlo_capable = 1;
+
+			cnss_pr_info("%s: MLO Config updated for %s",
+				     __func__, plat_priv->device_name);
+		}
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL(cnss_set_mlo_config);
+
+void cnss_print_mlo_config(void)
+{
+	struct cnss_mlo_group_info *mlo_group_info;
+	struct cnss_mlo_chip_info *chip_info;
+
+	int i, j, k;
+
+	pr_err("\n****** CNSS MLO CONFIG ******\n");
+	for (i = 0; i < CNSS_MAX_MLO_GROUPS; i++) {
+		mlo_group_info = &g_mlo_group_info[i];
+
+		pr_err("\ngroup_id: %u\nmax_num_peers: %u\nnum_chips: %u\n",
+		       mlo_group_info->group_id,
+		       mlo_group_info->max_num_peers,
+		       mlo_group_info->num_chips);
+
+		for (j = 0; j < mlo_group_info->num_chips; j++) {
+			chip_info = &mlo_group_info->chip_info[j];
+
+			pr_err("\nchip_id: %u\n\t\tgroup_id: %u\n\t\tsoc_id: %u\n\t\tnum_local_links: %u\n",
+			       chip_info->group_id,
+			       chip_info->chip_id,
+			       chip_info->soc_id,
+			       chip_info->num_local_links);
+
+			for (k = 0; k < CNSS_MAX_LINKS_PER_CHIP; k++)
+				pr_err("\t\thw_link_ids[%d]: %u\n",
+				       k, chip_info->hw_link_ids[k]);
+
+			for (k = 0; k < CNSS_MAX_LINKS_PER_CHIP; k++)
+				pr_err("\t\tvalid_link_ids[%d]: %u\n",
+				       k, chip_info->valid_link_ids[k]);
+		}
+	}
+}
+EXPORT_SYMBOL(cnss_print_mlo_config);
+
 int cnss_get_mlo_chip_id(struct device *dev)
 {
 	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
-	u8 mlo_chip_id = 0;
-	struct device *bus_dev;
-	struct device_node *mlo_chip_node = NULL;
-	phandle mlo_chip_phandle;
 
-	if (!plat_priv)
+	if (!plat_priv || !plat_priv->mlo_support)
 		return -EINVAL;
 
-	if (plat_priv->device_id != QCN9224_DEVICE_ID)
+	if (!plat_priv->mlo_capable || !plat_priv->mlo_chip_info)
 		return -EINVAL;
 
-	bus_dev = &plat_priv->plat_dev->dev;
-
-	if (of_property_read_u32(bus_dev->of_node, "mlo_chip_info",
-				 &mlo_chip_phandle)) {
-		cnss_pr_err("could not get mlo_chip_phandle\n");
-		return -ENOENT;
-	}
-
-	mlo_chip_node = of_find_node_by_phandle(mlo_chip_phandle);
-	if (!mlo_chip_node) {
-		cnss_pr_err("could not get mlo_chip_node\n");
-		return -EINVAL;
-	}
-	if (of_property_read_u8(mlo_chip_node,
-				"chip_id",
-				&mlo_chip_id)) {
-		cnss_pr_err("Error: No MLO CHIP ID present\n");
-		of_node_put(mlo_chip_node);
-		return -EINVAL;
-	}
-	of_node_put(mlo_chip_node);
-	return (int)mlo_chip_id;
+	return plat_priv->mlo_chip_info->chip_id;
 }
 EXPORT_SYMBOL(cnss_get_mlo_chip_id);
 
 bool cnss_get_mlo_capable(struct device *dev)
 {
 	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
-	bool mlo_capable = false;
-	struct device *bus_dev;
-	phandle mlo_group_phandle = 0;
 
-	if (!plat_priv)
+	if (!plat_priv || !plat_priv->mlo_support)
 		return false;
 
-	if (plat_priv->device_id != QCN9224_DEVICE_ID)
-		return false;
-
-	if (!plat_priv->mlo_support)
-		return false;
-
-	bus_dev = &plat_priv->plat_dev->dev;
-
-	if (of_property_read_u32(bus_dev->of_node, "mlo_group_info",
-				 &mlo_group_phandle)) {
-		/* no entry found, disable mlo capability */
-		mlo_capable = false;
-	}
-	if (mlo_group_phandle)
-		mlo_capable = true;
-
-	return mlo_capable;
+	return plat_priv->mlo_capable;
 }
 EXPORT_SYMBOL(cnss_get_mlo_capable);
 
@@ -1015,43 +1104,28 @@ int cnss_get_mlo_global_config_region_info(struct device *dev,
 					   int *num_bytes)
 {
 	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
-	struct device_node *mlo_global_mem_node;
-	struct resource mlo_mem;
 	struct cnss_fw_mem *fw_mem;
 	int i;
 
-	if (!plat_priv)
+	if (!plat_priv || !plat_priv->mlo_support || !plat_priv->mlo_capable)
 		return -EINVAL;
-
-	if (plat_priv->device_id != QCN9224_DEVICE_ID)
-		return -EINVAL;
-
-	mlo_global_mem_node = of_find_node_by_name(NULL, "mlo_global_mem0");
-	if (!mlo_global_mem_node) {
-		cnss_pr_err("could not get mlo_global_mem_node\n");
-		return -EINVAL;
-	}
-
-	if (of_address_to_resource(mlo_global_mem_node, 0, &mlo_mem)) {
-		cnss_pr_err("%s: Unable to read mlo_mem", __func__);
-		of_node_put(mlo_global_mem_node);
-		return -EINVAL;
-	}
-	of_node_put(mlo_global_mem_node);
 
 	*bar = 0;
 	fw_mem = plat_priv->fw_mem;
 	for (i = 0; i < plat_priv->fw_mem_seg_len; i++) {
 		if (fw_mem[i].va) {
-			if (fw_mem[i].type == QMI_WLFW_MLO_GLOBAL_MEM_V01)
+			if (fw_mem[i].type == QMI_WLFW_MLO_GLOBAL_MEM_V01) {
 				*bar = plat_priv->fw_mem[i].va;
+				*num_bytes = plat_priv->fw_mem[i].size;
+			}
 		}
 	}
+
 	if (!*bar) {
 		cnss_pr_err("%s: no mlo mem found", __func__);
 		return -EINVAL;
 	}
-	*num_bytes = resource_size(&mlo_mem);
+
 	return 0;
 }
 EXPORT_SYMBOL(cnss_get_mlo_global_config_region_info);
@@ -1059,77 +1133,116 @@ EXPORT_SYMBOL(cnss_get_mlo_global_config_region_info);
 int cnss_get_num_mlo_links(struct device *dev)
 {
 	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
-	u8 num_local_links = 0;
-	struct device *bus_dev;
-	struct device_node *mlo_chip_node = NULL;
-	phandle mlo_chip_phandle;
 
-	if (!plat_priv)
+	if (!plat_priv || !plat_priv->mlo_support)
 		return -EINVAL;
 
-	if (plat_priv->device_id != QCN9224_DEVICE_ID)
+	if (!plat_priv->mlo_capable || !plat_priv->mlo_chip_info)
 		return -EINVAL;
 
-	bus_dev = &plat_priv->plat_dev->dev;
-
-	if (of_property_read_u32(bus_dev->of_node, "mlo_chip_info",
-				 &mlo_chip_phandle)) {
-		cnss_pr_err("could not get mlo_chip_phandle\n");
-		return -ENOENT;
-	}
-
-	mlo_chip_node = of_find_node_by_phandle(mlo_chip_phandle);
-	if (!mlo_chip_node) {
-		cnss_pr_err("could not get mlo_chip_node\n");
-		return -EINVAL;
-	}
-	if (of_property_read_u8(mlo_chip_node,
-				"num_local_links",
-				&num_local_links)) {
-		of_node_put(mlo_chip_node);
-		cnss_pr_err("Error: No num_local_links is present\n");
-		return -EINVAL;
-	}
-	of_node_put(mlo_chip_node);
-	return (int)num_local_links;
+	return plat_priv->mlo_chip_info->num_local_links;
 }
 EXPORT_SYMBOL(cnss_get_num_mlo_links);
 
 int cnss_get_num_mlo_capable_devices(unsigned int *device_id, int num_elements)
 {
 	struct cnss_plat_data *plat_priv = NULL;
-	struct device *dev;
 	int num_capable = 0;
 	int i;
 	int device_count = 0;
-	phandle mlo_group_phandle;
 
-	for (i = 0; i < MAX_NUMBER_OF_SOCS; i++) {
+	if (!enable_mlo_support)
+		return -EINVAL;
+
+	if (!device_id)
+		return -EINVAL;
+
+	for (i = 0; i < plat_env_index; i++) {
 		plat_priv = plat_env[i];
-		if (!plat_priv)
-			break;
 
-		dev = &plat_priv->plat_dev->dev;
-
-		mlo_group_phandle = 0;
-		if (of_property_read_u32(dev->of_node, "mlo_group_info",
-					 &mlo_group_phandle))
-			continue;
-
-		if (mlo_group_phandle) {
+		if (plat_priv && plat_priv->mlo_capable) {
 			num_capable++;
-			if (device_id && device_count < num_elements)
+			if (device_count < num_elements)
 				device_id[device_count++] =
-						plat_priv->device_id;
+					plat_priv->device_id;
 		}
 	}
-
-	if (mlo_num_chips)
-		return mlo_num_chips;
 
 	return num_capable;
 }
 EXPORT_SYMBOL(cnss_get_num_mlo_capable_devices);
+
+int cnss_get_dev_link_ids(struct device *dev, u8 *link_ids, int max_elements)
+{
+	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
+	int i;
+ 
+	if (!link_ids) {
+		cnss_pr_err("link_ids buffer is null\n");
+		return -ENOMEM;
+	}
+ 
+	if (max_elements < CNSS_MAX_LINKS_PER_CHIP) {
+		cnss_pr_err("link ids size is less %d\n", max_elements);
+		return -EINVAL;
+	}
+ 
+	if (!plat_priv || !plat_priv->mlo_support)
+		return -EINVAL;
+ 
+	if (!plat_priv->mlo_capable || !plat_priv->mlo_chip_info)
+		return -EINVAL;
+
+	memset(link_ids, 0, max_elements);
+
+	for (i = 0; i < max_elements; i++)
+		link_ids[i] = plat_priv->mlo_chip_info->hw_link_ids[i];
+
+	return i;
+}
+EXPORT_SYMBOL(cnss_get_dev_link_ids);
+ 
+/* Temporary API to set default MLO config, will be removed once driver starts
+ * setting MLO config via PLD.
+ */
+static void cnss_set_default_mlo_config(void)
+{
+	struct cnss_mlo_group_info mlo_group_info;
+	struct cnss_plat_data *plat_priv = NULL;
+	int num_chip = 0, i = 0, link_id = 0;
+
+	memset(&mlo_group_info, 0, sizeof(struct cnss_mlo_group_info));
+
+	mlo_group_info.group_id = 0;
+	mlo_group_info.max_num_peers = 256;
+
+	for (i = 0; i < MAX_NUMBER_OF_SOCS; i++) {
+		if (mlo_chip_bitmask & (1 << i)) {
+			/*Temporarily Hard coding group id as 0 */
+			mlo_group_info.chip_info[num_chip].group_id = 0;
+			mlo_group_info.chip_info[num_chip].soc_id = i;
+			mlo_group_info.chip_info[num_chip].chip_id = num_chip;
+			mlo_group_info.chip_info[num_chip].num_local_links = 1;
+			mlo_group_info.chip_info[num_chip].hw_link_ids[0] =
+								link_id++;
+			mlo_group_info.chip_info[num_chip].hw_link_ids[1] =
+								link_id++;
+			mlo_group_info.chip_info[num_chip].valid_link_ids[0] =
+								1;
+			mlo_group_info.chip_info[num_chip].valid_link_ids[1] =
+								1;
+			num_chip++;
+		}
+
+		if (num_chip == CNSS_MAX_MLO_CHIPS)
+			break;
+	}
+
+	mlo_group_info.num_chips = num_chip;
+
+	cnss_set_mlo_config(&mlo_group_info, 1);
+	cnss_pr_info("Default MLO configuration is set!");
+}
 
 void cnss_wait_for_fw_ready(struct device *dev)
 {
@@ -1843,17 +1956,6 @@ void *cnss_register_qca8074_cb(struct cnss_plat_data *plat_priv)
 #endif
 
 	return ss_handle;
-}
-
-static void cnss_sort_probe_order(void)
-{
-	int i = 0;
-	int j = 0;
-
-	for (i = 0; i < plat_env_index; i++)
-		for (j = i + 1; j < plat_env_index; j++)
-			if (plat_env[i]->probe_order > plat_env[j]->probe_order)
-				swap(plat_env[i], plat_env[j]);
 }
 
 int cnss_wlan_probe_driver(void)
@@ -4418,7 +4520,6 @@ static int cnss_probe(struct platform_device *plat_dev)
 	switch (plat_priv->device_id) {
 	case QCN9224_DEVICE_ID:
 		plat_priv->mlo_support = !!enable_mlo_support;
-		plat_priv->mlo_capable = 1;
 		/* Fall Through */
 	case QCN9000_DEVICE_ID:
 		plat_priv->bus_type = CNSS_BUS_PCI;
@@ -4658,6 +4759,9 @@ static int __init cnss_initialize(void)
 		cnss_debug_deinit();
 	cnss_bus_init_by_type(CNSS_BUS_PCI);
 	cnss_plat_ipc_qmi_svc_init();
+
+	if (enable_mlo_support)
+		cnss_set_default_mlo_config();
 
 	return ret;
 }
