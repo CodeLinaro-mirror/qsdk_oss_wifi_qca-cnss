@@ -155,10 +155,17 @@ unsigned int enable_mlo_support;
 module_param(enable_mlo_support, uint, 0600);
 MODULE_PARM_DESC(enable_mlo_support, "enable_mlo_support");
 
-/* Temporary bootarg till drive ini changes are ready */
+/* Temporary bootarg till driver ini changes are ready */
 static unsigned int mlo_chip_bitmask = 0x7;
 module_param(mlo_chip_bitmask, uint, 0600);
 MODULE_PARM_DESC(mlo_chip_bitmask, "mlo_chip_bitmask");
+
+/* Temporary bootarg till driver ini changes are ready
+ * If bit is 0, it is single-link MLO, if bit is 1, it is two-link MLO
+ */
+static unsigned int mlo_num_link_bitmask;
+module_param(mlo_num_link_bitmask, uint, 0600);
+MODULE_PARM_DESC(mlo_num_link_bitmask, "mlo_num_link_bitmask");
 
 enum skip_cnss_options {
 	CNSS_SKIP_NONE,
@@ -1238,7 +1245,17 @@ static void cnss_set_default_mlo_config(void)
 			mlo_group_info.chip_info[num_chip].group_id = 0;
 			mlo_group_info.chip_info[num_chip].soc_id = i;
 			mlo_group_info.chip_info[num_chip].chip_id = num_chip;
-			mlo_group_info.chip_info[num_chip].num_local_links = 1;
+
+			/* If mlo_num_link_bitmask is set, num_local_links
+			 * should be 2, else 1
+			 */
+			if (mlo_num_link_bitmask & ((1 << i)))
+				mlo_group_info.chip_info[num_chip].
+							num_local_links = 2;
+			else
+				mlo_group_info.chip_info[num_chip].
+							num_local_links = 1;
+
 			mlo_group_info.chip_info[num_chip].hw_link_ids[0] =
 								link_id++;
 			mlo_group_info.chip_info[num_chip].hw_link_ids[1] =
