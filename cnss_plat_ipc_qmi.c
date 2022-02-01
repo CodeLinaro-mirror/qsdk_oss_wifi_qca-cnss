@@ -444,6 +444,59 @@ file_error:
 }
 
 /**
+* cnss_plat_ipc_qmi_reg_client_req_handler() - Register QMI client
+* @handle: Pointer to QMI handle
+* @sq: QMI socket
+* @txn: QMI transaction pointer
+* @decoded_msg: Pointer to decoded QMI message
+*
+* Handles the userspace QMI client registration.
+*
+* Return: None
+*/
+
+static void
+cnss_plat_ipc_qmi_reg_client_req_handler(struct qmi_handle *handle,
+					 struct sockaddr_qrtr *sq,
+					 struct qmi_txn *txn,
+					 const void *decoded_msg)
+{
+	struct cnss_plat_ipc_qmi_reg_client_req_msg_v01 *req_msg;
+	struct cnss_plat_ipc_qmi_reg_client_resp_msg_v01 resp = {0};
+	struct cnss_plat_ipc_qmi_svc_ctx *svc = &plat_ipc_qmi_svc;
+	struct cnss_plat_data *plat_priv = NULL;
+	int ret = 0;
+
+	req_msg =
+		(struct cnss_plat_ipc_qmi_reg_client_req_msg_v01 *)decoded_msg;
+
+	if (req_msg->client_id_valid) {
+		if (req_msg->client_id <= CNSS_PLAT_IPC_MAX_CLIENTS &&
+		    !svc->client_connected) {
+			cnss_pr_info("%s: CNSS Daemon Connected. QMI Socket Node: %d Port: %d\n",
+				     __func__, sq->sq_node, sq->sq_port);
+			svc->client_sq = *sq;
+			svc->client_connected = true;
+			cnss_plat_ipc_qmi_update_clients();
+		} else {
+			cnss_pr_err("%s: QMI client already connected, connection status %u or Invalid client id %u\n",
+				    __func__, svc->client_connected,
+				    req_msg->client_id);
+			return;
+		}
+	}
+
+	ret = qmi_send_response
+	      (svc->svc_hdl, sq, txn,
+	       CNSS_PLAT_IPC_QMI_REG_CLIENT_RESP_V01,
+	       CNSS_PLAT_IPC_QMI_REG_CLIENT_RESP_MSG_V01_MAX_MSG_LEN,
+	       cnss_plat_ipc_qmi_reg_client_resp_msg_v01_ei, &resp);
+
+	if (ret < 0)
+		cnss_pr_err("QMI Response failed: %d\n", ret);
+}
+
+/**
  * cnss_plat_ipc_qmi_init_setup_req_handler() - Init_Setup QMI message handler
  * @handle: Pointer to QMI handle
  * @sq: QMI socket
@@ -466,17 +519,6 @@ cnss_plat_ipc_qmi_init_setup_req_handler(struct qmi_handle *handle,
 	struct cnss_plat_ipc_qmi_svc_ctx *svc = &plat_ipc_qmi_svc;
 	int ret = 0;
 	struct cnss_plat_data *plat_priv = NULL;
-
-	if (!svc->client_connected) {
-		cnss_pr_info("%s: CNSS Daemon Connected. QMI Socket Node: %d Port: %d\n",
-			__func__, sq->sq_node, sq->sq_port);
-		svc->client_sq = *sq;
-		svc->client_connected = true;
-		cnss_plat_ipc_qmi_update_clients();
-	} else {
-		cnss_pr_err("CNSS Daemon already connected. Invalid new client\n");
-		return;
-	}
 
 	req_msg =
 		(struct cnss_plat_ipc_qmi_init_setup_req_msg_v01 *)decoded_msg;
@@ -524,8 +566,8 @@ static void cnss_plat_ipc_qmi_disconnect_cb(struct qmi_handle *handle,
 
 	if (svc->client_connected && svc->client_sq.sq_node == node &&
 	    svc->client_sq.sq_port == port) {
-		cnss_pr_err("%s: CNSS Daemon disconnected. QMI Socket Node:%d Port:%d\n",
-		       __func__, node, port);
+		cnss_pr_info("%s: CNSS Daemon disconnected. QMI Socket Node:%d Port:%d\n",
+			     __func__, node, port);
 		svc->client_sq.sq_node = 0;
 		svc->client_sq.sq_port = 0;
 		svc->client_sq.sq_family = 0;
@@ -565,6 +607,14 @@ static struct qmi_ops cnss_plat_ipc_qmi_ops = {
 };
 
 static struct qmi_msg_handler cnss_plat_ipc_qmi_req_handlers[] = {
+	{
+		.type = QMI_REQUEST,
+		.msg_id = CNSS_PLAT_IPC_QMI_REG_CLIENT_REQ_V01,
+		.ei = cnss_plat_ipc_qmi_reg_client_req_msg_v01_ei,
+		.decoded_size =
+			sizeof(struct cnss_plat_ipc_qmi_reg_client_req_msg_v01),
+		.fn = cnss_plat_ipc_qmi_reg_client_req_handler,
+	},
 	{
 		.type = QMI_REQUEST,
 		.msg_id = CNSS_PLAT_IPC_QMI_INIT_SETUP_REQ_V01,
@@ -659,8 +709,8 @@ void cnss_daemon_connection_update_cb(bool status)
                 cnss_pr_info("CNSS Daemon connected\n");
                 complete(&svc->daemon_connected);
         } else {
-                cnss_pr_info("CNSS Daemon disconnected\n");
-                reinit_completion(&svc->daemon_connected);
+		cnss_pr_info("CNSS Daemon disconnected\n");
+		reinit_completion(&svc->daemon_connected);
         }
 }
 
