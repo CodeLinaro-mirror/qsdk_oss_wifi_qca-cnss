@@ -24,6 +24,7 @@
 #include "qmi.h"
 #include "pci.h"
 #include "cnss_plat_ipc_qmi.h"
+#include "genl.h"
 
 #define WLFW_SERVICE_INS_ID_V01		1
 #define WLFW_CLIENT_ID			0x4b4e454c
@@ -1232,6 +1233,139 @@ out:
 	qmi_record(plat_priv->wlfw_service_instance_id,
 		   QMI_WLFW_M3_INFO_REQ_V01, ret, resp_error_msg);
 	CNSS_ASSERT(0);
+	kfree(req);
+	kfree(resp);
+	return ret;
+}
+
+int cnss_wlfw_qdss_data_send_sync(struct cnss_plat_data *plat_priv,
+				  char *file_name, u32 total_size)
+{
+	int ret = 0;
+	int resp_error_msg = 0;
+	struct wlfw_qdss_trace_data_req_msg_v01 *req;
+	struct wlfw_qdss_trace_data_resp_msg_v01 *resp;
+	unsigned char *p_qdss_trace_data_temp, *p_qdss_trace_data = NULL;
+	u32 remaining;
+	struct qmi_txn txn;
+
+	cnss_pr_dbg("%s: %s\n", __func__, file_name);
+
+	req = kzalloc(sizeof(*req), GFP_KERNEL);
+	if (!req)
+		return -ENOMEM;
+
+	resp = kzalloc(sizeof(*resp), GFP_KERNEL);
+	if (!resp) {
+		kfree(req);
+		return -ENOMEM;
+	}
+
+	p_qdss_trace_data = kzalloc(total_size, GFP_KERNEL);
+	if (!p_qdss_trace_data) {
+		ret = -ENOMEM;
+		goto end;
+	}
+
+	remaining = total_size;
+	p_qdss_trace_data_temp = p_qdss_trace_data;
+	qmi_record(plat_priv->wlfw_service_instance_id,
+		   QMI_WLFW_QDSS_TRACE_DATA_REQ_V01, ret, resp_error_msg);
+	while (remaining && resp->end == 0) {
+		ret = qmi_txn_init(&plat_priv->qmi_wlfw, &txn,
+				   wlfw_qdss_trace_data_resp_msg_v01_ei, resp);
+
+		if (ret < 0) {
+			cnss_pr_err("Fail to init txn for QDSS trace resp %d\n",
+				    ret);
+			goto fail;
+		}
+
+		ret = qmi_send_request
+		      (&plat_priv->qmi_wlfw, NULL, &txn,
+		       QMI_WLFW_QDSS_TRACE_DATA_REQ_V01,
+		       WLFW_QDSS_TRACE_DATA_REQ_MSG_V01_MAX_MSG_LEN,
+		       wlfw_qdss_trace_data_req_msg_v01_ei, req);
+
+		if (ret < 0) {
+			qmi_txn_cancel(&txn);
+			cnss_pr_err("Fail to send QDSS trace data req %d\n",
+				    ret);
+			goto fail;
+		}
+
+		ret = qmi_txn_wait(&txn, plat_priv->ctrl_params.qmi_timeout);
+
+		if (ret < 0) {
+			cnss_pr_err("QDSS trace resp wait failed with rc %d\n",
+				    ret);
+			goto fail;
+		} else if (resp->resp.result != QMI_RESULT_SUCCESS_V01) {
+			cnss_pr_err("QMI QDSS trace request rejected, result:%d error:%d\n",
+				    resp->resp.result, resp->resp.error);
+			ret = -resp->resp.result;
+			resp_error_msg = resp->resp.error;
+			goto fail;
+		} else {
+			ret = 0;
+		}
+
+		cnss_pr_dbg("%s: response total size  %d data len %d",
+			    __func__, resp->total_size, resp->data_len);
+
+		if ((resp->total_size_valid == 1 &&
+		     resp->total_size == total_size) &&
+		    (resp->seg_id_valid == 1 && resp->seg_id == req->seg_id) &&
+		    (resp->data_valid == 1 &&
+		     resp->data_len <= QMI_WLFW_MAX_DATA_SIZE_V01)) {
+			memcpy(p_qdss_trace_data_temp,
+			       resp->data, resp->data_len);
+		} else {
+			cnss_pr_err("%s: Unmatched qdss trace data, Expect total_size %u, seg_id %u, Recv total_size_valid %u, total_size %u, seg_id_valid %u, seg_id %u, data_len_valid %u, data_len %u",
+				    __func__,
+				    total_size, req->seg_id,
+				    resp->total_size_valid,
+				    resp->total_size,
+				    resp->seg_id_valid,
+				    resp->seg_id,
+				    resp->data_valid,
+				    resp->data_len);
+			ret = -EINVAL;
+			goto fail;
+		}
+
+		remaining -= resp->data_len;
+		p_qdss_trace_data_temp += resp->data_len;
+		req->seg_id++;
+	}
+
+	qmi_record(plat_priv->wlfw_service_instance_id,
+		   QMI_WLFW_QDSS_TRACE_DATA_REQ_V01, ret, resp_error_msg);
+
+	if (remaining == 0 && (resp->end_valid && resp->end)) {
+		ret = cnss_genl_send_msg(p_qdss_trace_data,
+					 CNSS_GENL_MSG_TYPE_QDSS, file_name,
+					 total_size);
+		if (ret < 0) {
+			cnss_pr_err("Fail to save QDSS trace data: %d\n",
+				    ret);
+		ret = -EINVAL;
+		goto fail;
+		}
+	} else {
+		cnss_pr_err("%s: QDSS trace file corrupted: remaining %u, end_valid %u, end %u",
+			    __func__,
+			    remaining, resp->end_valid, resp->end);
+		ret = -EINVAL;
+		goto fail;
+	}
+
+fail:
+	qmi_record(plat_priv->wlfw_service_instance_id,
+		   QMI_WLFW_QDSS_TRACE_DATA_REQ_V01, ret, resp_error_msg);
+	kfree(p_qdss_trace_data);
+
+end:
 	kfree(req);
 	kfree(resp);
 	return ret;
@@ -2817,13 +2951,27 @@ static void cnss_wlfw_qdss_trace_save_ind_cb(struct qmi_handle *qmi_wlfw,
 		    ind_msg->source, ind_msg->total_size,
 		    ind_msg->file_name_valid, ind_msg->file_name);
 
-	if (ind_msg->source == 1)
-		return;
-
 	event_data = kzalloc(sizeof(*event_data), GFP_KERNEL);
 	if (!event_data)
 		return;
 
+	event_data->total_size = ind_msg->total_size;
+
+	if (ind_msg->file_name_valid)
+		strlcpy(event_data->file_name, ind_msg->file_name,
+			QDSS_TRACE_FILE_NAME_MAX + 1);
+	else
+		strlcpy(event_data->file_name, "qdss_trace",
+			QDSS_TRACE_FILE_NAME_MAX + 1);
+
+	if (ind_msg->source == 1) {
+		cnss_driver_event_post(plat_priv,
+				       CNSS_DRIVER_EVENT_QDSS_TRACE_REQ_DATA,
+				       0, event_data);
+		return;
+        }
+
+	/* Source 0 */
 	if (ind_msg->mem_seg_valid) {
 		if (ind_msg->mem_seg_len > QDSS_TRACE_SEG_LEN_MAX) {
 			cnss_pr_err("Invalid seg len %u\n",
@@ -2842,16 +2990,8 @@ static void cnss_wlfw_qdss_trace_save_ind_cb(struct qmi_handle *qmi_wlfw,
 		}
 	}
 
-	event_data->total_size = ind_msg->total_size;
-
-	if (ind_msg->file_name_valid)
-		strlcpy(event_data->file_name, ind_msg->file_name,
-			QDSS_TRACE_FILE_NAME_MAX + 1);
-	else
-		strlcpy(event_data->file_name, "qdss_trace",
-			QDSS_TRACE_FILE_NAME_MAX + 1);
-
-	cnss_driver_event_post(plat_priv, CNSS_DRIVER_EVENT_QDSS_TRACE_SAVE,
+	cnss_driver_event_post(plat_priv,
+			       CNSS_DRIVER_EVENT_QDSS_TRACE_SAVE,
 			       0, event_data);
 
 	return;
