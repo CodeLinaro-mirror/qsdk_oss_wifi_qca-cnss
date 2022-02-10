@@ -1467,6 +1467,8 @@ static char *cnss_driver_event_to_str(enum cnss_driver_event_type type)
 		return "QDSS_MEM_READY";
 	case CNSS_DRIVER_EVENT_M3_DUMP_UPLOAD_REQ:
 		return "M3_DUMP_UPLOAD_REQ";
+	case CNSS_DRIVER_EVENT_QDSS_TRACE_REQ_DATA:
+		return "QDSS_TRACE_REQ_DATA";
 	case CNSS_DRIVER_EVENT_MAX:
 		return "EVENT_MAX";
 	}
@@ -2927,6 +2929,60 @@ void *cnss_qdss_trace_pa_to_va(struct cnss_plat_data *plat_priv,
 	return va;
 }
 
+static void get_updated_qdss_trace_filename(struct cnss_plat_data *plat_priv,
+					    char *raw_file_name,
+					    char *file_name, size_t size)
+{
+	char *file_suffix = NULL;
+	char file_prefix[QDSS_TRACE_FILE_NAME_MAX] = {};
+
+	file_suffix = strnstr(raw_file_name, ".bin",
+			      QDSS_TRACE_FILE_NAME_MAX);
+
+	if (file_suffix) {
+		strlcpy(file_prefix, raw_file_name,
+			(file_suffix - &raw_file_name[0]) + 1);
+
+		if (plat_priv->device_id == QCN6122_DEVICE_ID)
+			snprintf(file_name, size,
+				 "%s_qcn6122_%d%s", file_prefix,
+				 (plat_priv->userpd_id - QCN6122_0),
+				 file_suffix);
+
+		if (plat_priv->device_id == QCN9000_DEVICE_ID)
+			snprintf(file_name, size,
+				 "%s_qcn9000_pci%d%s", file_prefix,
+				 (plat_priv->wlfw_service_instance_id -
+				 QCN9000_NODE_ID_BASE), file_suffix);
+
+		if (plat_priv->device_id == QCN9224_DEVICE_ID)
+			snprintf(file_name, size,
+				 "%s_qcn9224_pci%d%s", file_prefix,
+				 (plat_priv->wlfw_service_instance_id -
+				 QCN9224_NODE_ID_BASE), file_suffix);
+	} else {
+		if (plat_priv->device_id == QCN6122_DEVICE_ID)
+			snprintf(file_name, size,
+				 "%s_qcn6122_%d",
+				 raw_file_name,
+				 (plat_priv->userpd_id - QCN6122_0));
+
+		if (plat_priv->device_id == QCN9000_DEVICE_ID)
+			snprintf(file_name, size,
+				 "%s_qcn9000_pci%d",
+				 raw_file_name,
+				 (plat_priv->wlfw_service_instance_id -
+				 QCN9000_NODE_ID_BASE));
+
+		if (plat_priv->device_id == QCN9224_DEVICE_ID)
+			snprintf(file_name, size,
+				 "%s_qcn9224_pci%d",
+				 raw_file_name,
+				 (plat_priv->wlfw_service_instance_id -
+				 QCN9224_NODE_ID_BASE));
+	}
+}
+
 static int cnss_qdss_trace_save_hdlr(struct cnss_plat_data *plat_priv,
 				     void *data)
 {
@@ -2934,8 +2990,6 @@ static int cnss_qdss_trace_save_hdlr(struct cnss_plat_data *plat_priv,
 	struct cnss_fw_mem *qdss_mem = plat_priv->qdss_mem;
 	int ret = 0;
 	int i;
-	char *file_suffix = NULL;
-	char file_prefix[QDSS_TRACE_FILE_NAME_MAX] = {};
 	char file_name[CNSS_GENL_STR_LEN_MAX];
 
 	if (!plat_priv->qdss_mem_seg_len) {
@@ -2943,51 +2997,9 @@ static int cnss_qdss_trace_save_hdlr(struct cnss_plat_data *plat_priv,
 		return -ENOMEM;
 	}
 
-	file_suffix = strnstr(event_data->file_name, ".bin",
-			      QDSS_TRACE_FILE_NAME_MAX);
-
-	if (file_suffix) {
-		strlcpy(file_prefix, event_data->file_name,
-			(file_suffix - &event_data->file_name[0]) + 1);
-
-		if (plat_priv->device_id == QCN6122_DEVICE_ID)
-			snprintf(file_name, sizeof(file_name),
-				 "%s_qcn6122_%d%s", file_prefix,
-				 (plat_priv->userpd_id - QCN6122_0),
-				 file_suffix);
-
-		if (plat_priv->device_id == QCN9000_DEVICE_ID)
-			snprintf(file_name, sizeof(file_name),
-				 "%s_qcn9000_pci%d%s", file_prefix,
-				 (plat_priv->wlfw_service_instance_id -
-				 QCN9000_NODE_ID_BASE), file_suffix);
-
-		if (plat_priv->device_id == QCN9224_DEVICE_ID)
-			snprintf(file_name, sizeof(file_name),
-				 "%s_qcn9224_pci%d%s", file_prefix,
-				 (plat_priv->wlfw_service_instance_id -
-				 QCN9224_NODE_ID_BASE), file_suffix);
-	} else {
-		if (plat_priv->device_id == QCN6122_DEVICE_ID)
-			snprintf(file_name, sizeof(file_name),
-				 "%s_qcn6122_%d",
-				 event_data->file_name,
-				 (plat_priv->userpd_id - QCN6122_0));
-
-		if (plat_priv->device_id == QCN9000_DEVICE_ID)
-			snprintf(file_name, sizeof(file_name),
-				 "%s_qcn9000_pci%d",
-				 event_data->file_name,
-				 (plat_priv->wlfw_service_instance_id -
-				 QCN9000_NODE_ID_BASE));
-
-		if (plat_priv->device_id == QCN9224_DEVICE_ID)
-			snprintf(file_name, sizeof(file_name),
-				 "%s_qcn9224_pci%d",
-				 event_data->file_name,
-				 (plat_priv->wlfw_service_instance_id -
-				 QCN9224_NODE_ID_BASE));
-	}
+	get_updated_qdss_trace_filename(plat_priv,
+					event_data->file_name, file_name,
+					sizeof(file_name));
 
 	if (event_data->mem_seg_len == 0) {
 		for (i = 0; i < plat_priv->qdss_mem_seg_len; i++) {
@@ -3401,6 +3413,26 @@ send_resp:
 	return ret;
 }
 
+static int cnss_qdss_trace_req_data_hdlr(struct cnss_plat_data *plat_priv,
+					 void *data)
+{
+	int ret = 0;
+	struct cnss_qmi_event_qdss_trace_save_data *event_data = data;
+	char file_name[CNSS_GENL_STR_LEN_MAX];
+
+	if (!plat_priv)
+		return -ENODEV;
+
+	get_updated_qdss_trace_filename(plat_priv, event_data->file_name,
+					file_name, sizeof(file_name));
+
+	ret = cnss_wlfw_qdss_data_send_sync(plat_priv, file_name,
+					    event_data->total_size);
+
+	kfree(data);
+	return ret;
+}
+
 static void cnss_driver_event_work(struct work_struct *work)
 {
 	struct cnss_plat_data *plat_priv =
@@ -3501,6 +3533,10 @@ static void cnss_driver_event_work(struct work_struct *work)
 		case CNSS_DRIVER_EVENT_M3_DUMP_UPLOAD_REQ:
 			ret = cnss_m3_dump_upload_req_hdlr(plat_priv,
 							   event->data);
+			break;
+		case CNSS_DRIVER_EVENT_QDSS_TRACE_REQ_DATA:
+			ret = cnss_qdss_trace_req_data_hdlr(plat_priv,
+							    event->data);
 			break;
 		default:
 			cnss_pr_err("Invalid driver event type: %d",
