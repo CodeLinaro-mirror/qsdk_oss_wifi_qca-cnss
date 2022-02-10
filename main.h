@@ -381,6 +381,7 @@ enum cnss_driver_state {
 	CNSS_IMS_CONNECTED,
 	CNSS_IN_SUSPEND_RESUME,
 	CNSS_DAEMON_CONNECTED,
+	CNSS_QDSS_STARTED,
 };
 
 struct cnss_recovery_data {

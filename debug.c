@@ -129,6 +129,9 @@ static int cnss_stats_show_state(struct seq_file *s,
 		case CNSS_DAEMON_CONNECTED:
 			seq_puts(s, "DAEMON_CONNECTED");
 			continue;
+		case CNSS_QDSS_STARTED:
+			seq_puts(s, "QDSS_STARTED");
+			continue;
 		}
 
 		seq_printf(s, "UNKNOWN-%d", i);
