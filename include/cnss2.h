@@ -283,12 +283,6 @@ static inline int cnss_wlan_pm_control(struct device *dev, bool vote)
 	return -EINVAL;
 }
 
-static inline struct qgic2_msi *cnss_qgic2_enable_msi(
-			struct cnss_plat_data *plat_priv, int qgicm_id)
-{
-	return ERR_PTR(-EINVAL);
-}
-
 static inline int cnss_get_user_msi_assignment(struct device *dev,
 					       char *user_name,
 					       int *num_vectors,
@@ -420,7 +414,7 @@ static inline int cnss_set_driver_mode(unsigned int mode)
 }
 static inline
 int cnss_send_buffer_to_afcmem(struct device *dev, char *afcdb, uint32_t len,
-			    uint8_t slotid)
+			       uint8_t slotid)
 {
 	return -EINVAL;
 }
@@ -447,6 +441,11 @@ static inline int cnss_get_num_mlo_links(struct device *dev)
 }
 static inline int cnss_get_num_mlo_capable_devices(unsigned int *device_id,
 						   int num_elements)
+{
+	return -EINVAL;
+}
+static inline int cnss_get_dev_link_ids(struct device *dev, u8 *link_ids,
+					int max_elements)
 {
 	return -EINVAL;
 }
@@ -527,8 +526,6 @@ extern int cnss_pci_is_drv_connected(struct device *dev);
 extern int cnss_pci_force_wake_request(struct device *dev);
 extern int cnss_pci_is_device_awake(struct device *dev);
 extern int cnss_pci_force_wake_release(struct device *dev);
-extern struct qgic2_msi *cnss_qgic2_enable_msi(struct cnss_plat_data *plat_priv,
-					       int qgicm_id);
 extern int cnss_get_user_msi_assignment(struct device *dev, char *user_name,
 					int *num_vectors,
 					uint32_t *user_base_data,
@@ -581,6 +578,7 @@ int cnss_get_mlo_global_config_region_info(struct device *dev, void **bar,
 int cnss_get_num_mlo_links(struct device *dev);
 int cnss_get_num_mlo_capable_devices(unsigned int *device_id,
 				     int num_elements);
+int cnss_get_dev_link_ids(struct device *dev, u8 *link_ids, int max_elements);
 int cnss_reg_read(struct device *dev, u32 addr, u32 *val);
 int cnss_reg_write(struct device *dev, u32 addr, u32 val);
 int cnss_set_bar_addr(struct device *dev, void __iomem *mem);

@@ -27,9 +27,11 @@ ifeq ($(CONFIG_BUILD_YOCTO),y)
 	ccflags-y += -DCONFIG_CNSS2_KERNEL_MSM
 	ccflags-y += -DCONFIG_CNSS2_DMA_ALLOC
 	ccflags-y += -DCONFIG_CNSS2_SMMU
+	ccflags-y += -DCONFIG_CNSS2_KERNEL_SSR_FRAMEWORK
 else
 	ccflags-y += -DCONFIG_CNSS2_KERNEL_IPQ
 	ccflags-y += -DCONFIG_CNSS2_QGIC2M
+	ccflags-y += -DCONFIG_CNSS2_KERNEL_RPROC_FRAMEWORK
 endif
 
 all:

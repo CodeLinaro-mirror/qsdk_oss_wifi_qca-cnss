@@ -15,13 +15,16 @@
 #define _CNSS_MAIN_H
 #include <linux/version.h>
 #include <asm/arch_timer.h>
-#include <linux/esoc_client.h>
 #include <linux/etherdevice.h>
 #include <linux/pm_qos.h>
 #include <linux/platform_device.h>
 #include <cnss2.h>
 #include <soc/qcom/memory_dump.h>
+
+#ifdef CONFIG_CNSS2_KERNEL_SSR_FRAMEWORK
 #include <soc/qcom/subsystem_restart.h>
+#include <linux/esoc_client.h>
+#endif
 
 #include "qmi.h"
 #include "bus.h"
@@ -32,9 +35,11 @@
 #define CNSS_RDDM_TIMEOUT_MS		20000
 #define RECOVERY_TIMEOUT		60000
 #define TIME_CLOCK_FREQ_HZ		19200000
+#define CNSS_DEVICE_NAME_MAX_LEN	16
 #define CNSS_NUM_META_INFO_SEGMENTS	1
 #define CNSS_RAMDUMP_MAGIC		0x574C414E /* WLAN in ASCII */
 #define CNSS_RAMDUMP_VERSION		0
+#define CNSS_RAMDUMP_FILE_NAME_MAX_LEN	(2 * CNSS_DEVICE_NAME_MAX_LEN)
 
 #define CNSS_DMS_QMI_CONNECTION_WAIT_MS 50
 #define CNSS_DMS_QMI_CONNECTION_WAIT_RETRY 200
@@ -212,6 +217,13 @@ struct cnss_pinctrl_info {
 	struct pinctrl_state *wlan_en_active;
 	struct pinctrl_state *wlan_en_sleep;
 };
+
+#ifdef CONFIG_CNSS2_KERNEL_RPROC_FRAMEWORK
+struct subsys_desc {
+	const char *name;
+	struct device *dev;
+};
+#endif
 
 struct cnss_subsys_info {
 	struct subsys_device *subsys_device;
@@ -501,6 +513,15 @@ struct m3_dump {
 	void *dump_addr;
 };
 
+#ifdef CONFIG_CNSS2_QGIC2M
+struct qgic2_msi {
+	int irq_num;
+	uint32_t msi_gicm_base_data;
+	uint32_t msi_gicm_addr_lo;
+	uint32_t msi_gicm_addr_hi;
+};
+#endif
+
 struct target_qcn6122 {
 	void *bar_addr_va;
 	u64 bar_addr_pa;
@@ -515,9 +536,10 @@ struct cnss_plat_data {
 	void *pci_dev;
 	void *pci_dev_id;
 	void *bus_priv;
+	void *rproc_handle;
 	int qrtr_node_id;
 	int userpd_id;
-	char device_name[16];
+	char device_name[CNSS_DEVICE_NAME_MAX_LEN];
 	struct cnss_vreg_info *vreg_info;
 	enum cnss_dev_bus_type bus_type;
 	struct list_head vreg_list;
