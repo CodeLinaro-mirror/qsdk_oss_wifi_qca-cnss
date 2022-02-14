@@ -26,7 +26,9 @@
 #include <linux/dma-direction.h>
 #include <linux/slab.h>
 #include <linux/mhi.h>
+#ifdef CONFIG_PCI_MSM
 #include <linux/msm_pcie.h>
+#endif
 #include <linux/pci.h>
 
 #include "main.h"
@@ -119,7 +121,9 @@ struct cnss_pci_data {
 	u8 pci_link_down_ind;
 	struct pci_saved_state *saved_state;
 	struct pci_saved_state *default_state;
+#ifdef CONFIG_PCI_MSM
 	struct msm_pcie_register_event msm_pci_event;
+#endif
 	atomic_t auto_suspended;
 	atomic_t drv_connected;
 	u8 drv_connected_last;
@@ -278,4 +282,8 @@ void cnss_free_soc_info(struct cnss_plat_data *plat_priv);
 void cnss_dump_ce_reg(struct cnss_plat_data *plat_priv, enum cnss_ce_index ce,
 		      struct cnss_ce_base_addr *ce_object);
 struct cnss_ce_base_addr *register_ce_object(struct cnss_plat_data *plat_priv);
+#ifdef CONFIG_CNSS2_QGIC2M
+struct qgic2_msi *cnss_qgic2_enable_msi(struct cnss_plat_data *plat_priv);
+void cnss_qgic2_disable_msi(struct cnss_plat_data *plat_priv);
+#endif
 #endif /* _CNSS_PCI_H */

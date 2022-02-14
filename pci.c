@@ -35,9 +35,14 @@
 #include "pci.h"
 #include "bus.h"
 
-/* pci0_num_msi_bmap and pci1_num_msi_bmap needs to be defined in format of
- * 0xDPCEMH where 0xDP denotes the number of MSIs available for DP, 0xCE
- * denotes the number of MSIs available for CE and 0xMH denotes the number of
+static int pageable_dump_region;
+module_param(pageable_dump_region, int, 0644);
+MODULE_PARM_DESC(pageable_dump_region,
+		 "Collect Pageable Region as separate dump segment");
+
+/* pciX_num_msi_bmap needs to be defined in format of 0xDPCEMH
+ * where 0xDP denotes the number of MSIs available for DP, 0xCE denotes
+ * the number of MSIs available for CE and 0xMH denotes the number of
  * MSIs available for MHI. Total number of MSIs will be DP + CE + MH
  */
 static int pci0_num_msi_bmap;
@@ -134,6 +139,7 @@ extern int qcom_pcie_rescan(void);
 extern void qcom_pcie_remove_bus(void);
 #endif
 
+extern int timeout_factor;
 static DEFINE_SPINLOCK(pci_reg_window_lock);
 
 #define MHI_TIMEOUT_OVERWRITE_MS	(plat_priv->ctrl_params.mhi_timeout)
@@ -360,6 +366,136 @@ static struct cnss_pci_reg qdss_csr[] = {
 	{ NULL },
 };
 
+#ifdef CONFIG_CNSS2_KERNEL_IPQ
+static struct mhi_channel_config cnss_pci_mhi_channels[] = {
+	{
+		.num = 0,
+		.name = "LOOPBACK",
+		.num_elements = 32,
+		.event_ring = 1,
+		.dir = DMA_TO_DEVICE,
+		.ee_mask = 0x4,
+		.pollcfg = 0,
+		.doorbell = MHI_DB_BRST_DISABLE,
+		.lpm_notify = false,
+		.offload_channel = false,
+		.doorbell_mode_switch = false,
+		.auto_queue = false,
+		.auto_start = false,
+	},
+	{
+		.num = 1,
+		.name = "LOOPBACK",
+		.num_elements = 32,
+		.event_ring = 1,
+		.dir = DMA_FROM_DEVICE,
+		.ee_mask = 0x4,
+		.pollcfg = 0,
+		.doorbell = MHI_DB_BRST_DISABLE,
+		.lpm_notify = false,
+		.offload_channel = false,
+		.doorbell_mode_switch = false,
+		.auto_queue = false,
+		.auto_start = false,
+	},
+	{
+		.num = 4,
+		.name = "DIAG",
+		.num_elements = 32,
+		.event_ring = 1,
+		.dir = DMA_TO_DEVICE,
+		.ee_mask = 0x4,
+		.pollcfg = 0,
+		.doorbell = MHI_DB_BRST_DISABLE,
+		.lpm_notify = false,
+		.offload_channel = false,
+		.doorbell_mode_switch = false,
+		.auto_queue = false,
+		.auto_start = false,
+	},
+	{
+		.num = 5,
+		.name = "DIAG",
+		.num_elements = 32,
+		.event_ring = 1,
+		.dir = DMA_FROM_DEVICE,
+		.ee_mask = 0x4,
+		.pollcfg = 0,
+		.doorbell = MHI_DB_BRST_DISABLE,
+		.lpm_notify = false,
+		.offload_channel = false,
+		.doorbell_mode_switch = false,
+		.auto_queue = false,
+		.auto_start = false,
+	},
+	{
+		.num = 20,
+		.name = "IPCR",
+		.num_elements = 32,
+		.event_ring = 1,
+		.dir = DMA_TO_DEVICE,
+		.ee_mask = 0x4,
+		.pollcfg = 0,
+		.doorbell = MHI_DB_BRST_DISABLE,
+		.lpm_notify = false,
+		.offload_channel = false,
+		.doorbell_mode_switch = false,
+		.auto_queue = false,
+		.auto_start = true,
+	},
+	{
+		.num = 21,
+		.name = "IPCR",
+		.num_elements = 32,
+		.event_ring = 1,
+		.dir = DMA_FROM_DEVICE,
+		.ee_mask = 0x4,
+		.pollcfg = 0,
+		.doorbell = MHI_DB_BRST_DISABLE,
+		.lpm_notify = false,
+		.offload_channel = false,
+		.doorbell_mode_switch = false,
+		.auto_queue = true,
+		.auto_start = true,
+	},
+};
+
+static struct mhi_event_config cnss_pci_mhi_events[] = {
+	{
+		.num_elements = 32,
+		.irq_moderation_ms = 0,
+		.irq = 1,
+		.mode = MHI_DB_BRST_DISABLE,
+		.priority = 1,
+		.data_type = MHI_ER_CTRL,
+		.hardware_event = false,
+		.client_managed = false,
+		.offload_channel = false,
+	},
+	{
+		.num_elements = 256,
+		.irq_moderation_ms = 1,
+		.irq = 2,
+		.mode = MHI_DB_BRST_DISABLE,
+		.priority = 1,
+		.hardware_event = false,
+		.client_managed = false,
+		.offload_channel = false,
+	},
+};
+
+static struct mhi_controller_config cnss_pci_mhi_config = {
+	.max_channels = 30,
+	.timeout_ms = 10000,
+	.use_bounce_buf = false,
+	.buf_len = 0,
+	.num_channels = ARRAY_SIZE(cnss_pci_mhi_channels),
+	.ch_cfg = cnss_pci_mhi_channels,
+	.num_events = ARRAY_SIZE(cnss_pci_mhi_events),
+	.event_cfg = cnss_pci_mhi_events,
+};
+#endif
+
 static int cnss_pci_check_link_status(struct cnss_pci_data *pci_priv)
 {
 #ifdef CONFIG_PCI_SUSPENDRESUME
@@ -412,6 +548,13 @@ static void cnss_pci_select_window(struct cnss_pci_data *pci_priv, u32 addr)
 	writel_relaxed(WINDOW_ENABLE_BIT | curr_window,
 		       QCN9000_PCIE_REMAP_BAR_CTRL_OFFSET +
 		       pci_priv->bar);
+
+	/* Introduce a delay of 10 mseconds due to emulation
+	 * Wait for the window configuration to reflect before
+	 * allowing further writes or reads
+	 */
+	if (pci_priv->device_id == QCN9224_DEVICE_ID)
+		mdelay(10);
 }
 
 static int cnss_get_mhi_region_len(struct cnss_plat_data *plat_priv,
@@ -649,19 +792,12 @@ struct paging_header hdr;
 
 int cnss_pcie_rescan(void)
 {
-#ifdef CONFIG_PCIE_QCOM
-	return qcom_pcie_rescan();
-#else
 	return -EINVAL;
-#endif
 }
 EXPORT_SYMBOL(cnss_pcie_rescan);
 
 void cnss_pcie_remove_bus(void)
 {
-#ifdef CONFIG_PCIE_QCOM
-	qcom_pcie_remove_bus();
-#endif
 }
 EXPORT_SYMBOL(cnss_pcie_remove_bus);
 
@@ -1267,6 +1403,7 @@ static int cnss_pci_set_qrtr_node_id(struct cnss_pci_data *pci_priv)
 
 	switch (plat_priv->device_id) {
 	case QCN9000_DEVICE_ID:
+	case QCN9224_DEVICE_ID:
 		cnss_pr_info("Setting 0x%x to QRTR_NODE_ID_REG\n",
 			     plat_priv->qrtr_node_id);
 
@@ -3360,6 +3497,33 @@ int cnss_ahb_alloc_fw_mem(struct cnss_plat_data *plat_priv)
 	return 0;
 }
 
+#ifdef CONFIG_CNSS2_KERNEL_IPQ
+static int
+cnss_mhi_update_bhie_table_for_dyn_paging(struct cnss_plat_data *plat_priv,
+					  void *va, phys_addr_t pa, size_t size)
+{
+	struct cnss_pci_data *pci_priv = plat_priv->bus_priv;
+	int ret = 0;
+
+	/* Attach Pageable region to MHI buffer so that it is
+	 * included as part of pageable region in dumps
+	 */
+	if (!pageable_dump_region) {
+		cnss_pr_info("Adding dynamic paging to mhi buf table\n");
+		ret = mhi_update_bhie_table_for_dyn_paging(pci_priv->mhi_ctrl,
+							   va, pa, size);
+	}
+	return ret;
+}
+#else
+static int
+cnss_mhi_update_bhie_table_for_dyn_paging(struct cnss_plat_data *plat_priv,
+					  void *va, phys_addr_t pa, size_t size)
+{
+	return 0;
+}
+#endif
+
 int cnss_pci_alloc_fw_mem(struct cnss_plat_data *plat_priv)
 {
 	struct cnss_fw_mem *fw_mem = plat_priv->fw_mem;
@@ -3369,7 +3533,7 @@ int cnss_pci_alloc_fw_mem(struct cnss_plat_data *plat_priv)
 	u32 caldb_size = 0;
 	u32 pageable_size = 0;
 	struct device *dev, *pci_bus_dev;
-	int i, chip_id;
+	int i, chip_id, ret;
 	struct cnss_pci_data *pci_priv = plat_priv->bus_priv;
 	struct pci_dev *pci_dev = (struct pci_dev *)plat_priv->pci_dev;
 	struct device_node *mlo_global_mem_node = NULL;
@@ -3483,7 +3647,7 @@ int cnss_pci_alloc_fw_mem(struct cnss_plat_data *plat_priv)
 			if (of_property_read_u32(dev->of_node,
 						 "pageable-size",
 						 &pageable_size)) {
-				cnss_pr_err("Error: No pageable-size in dts\n\n");
+				cnss_pr_err("Error: No pageable-size in dts\n");
 				CNSS_ASSERT(0);
 				return -ENOMEM;
 			}
@@ -3497,8 +3661,8 @@ int cnss_pci_alloc_fw_mem(struct cnss_plat_data *plat_priv)
 			}
 			if (fw_mem[i].size < pageable_size) {
 				cnss_pr_warn("More memory is reserved. Reserved size 0x%x, Requested size 0x%x.\n",
-					    pageable_size,
-					    (unsigned int)fw_mem[i].size);
+					     pageable_size,
+					     (unsigned int)fw_mem[i].size);
 			}
 			if (of_property_read_u32(dev->of_node,
 						 "pageable-addr",
@@ -3507,10 +3671,24 @@ int cnss_pci_alloc_fw_mem(struct cnss_plat_data *plat_priv)
 				CNSS_ASSERT(0);
 				return -ENOMEM;
 			}
+
 			fw_mem[i].pa = (phys_addr_t)addr;
 			fw_mem[i].va = ioremap(fw_mem[i].pa, fw_mem[i].size);
-			if (!fw_mem[i].va)
+			if (!fw_mem[i].va) {
 				cnss_pr_err("WARNING: Host DDR remap failed\n");
+				CNSS_ASSERT(0);
+				return -ENOMEM;
+			}
+			ret = cnss_mhi_update_bhie_table_for_dyn_paging(
+						plat_priv,
+						fw_mem[i].va, fw_mem[i].pa,
+						fw_mem[i].size);
+			if (ret) {
+				cnss_pr_err("Failed to add Dynamiv Paging region to MHI Buffer table, ret: %d",
+					    ret);
+				CNSS_ASSERT(0);
+				return -ENOMEM;
+			}
 			break;
 		case AFC_REGION_TYPE:
 			if (fw_mem[i].size != AFC_MEM_SIZE) {
@@ -3686,8 +3864,8 @@ void cnss_pci_free_qdss_mem(struct cnss_plat_data *plat_priv)
 	if (plat_priv->dma_alloc_supported) {
 		for (i = 0; i < plat_priv->qdss_mem_seg_len; i++) {
 			if (qdss_mem[i].va && qdss_mem[i].size) {
-				cnss_pr_dbg("Freeing memory for QDSS, va: 0x%pK, pa: 0x%x, size: 0x%zx, type: %u\n",
-					    qdss_mem[i].va, qdss_mem[i].pa,
+				cnss_pr_dbg("Freeing memory for QDSS, va: 0x%pK, pa: 0x%pa, size: 0x%zx, type: %u\n",
+					    qdss_mem[i].va, &qdss_mem[i].pa,
 					    qdss_mem[i].size, qdss_mem[i].type);
 				dma_free_attrs(dev, qdss_mem[i].size,
 					       qdss_mem[i].va, qdss_mem[i].pa,
@@ -3722,8 +3900,8 @@ void cnss_pci_free_fw_mem(struct cnss_plat_data *plat_priv)
 	if (plat_priv->dma_alloc_supported) {
 		for (i = 0; i < plat_priv->fw_mem_seg_len; i++) {
 			if (fw_mem[i].va && fw_mem[i].size) {
-				cnss_pr_dbg("Freeing memory for FW, va: 0x%pK, pa: 0x%x, size: 0x%zx, type: %u\n",
-					    fw_mem[i].va, fw_mem[i].pa,
+				cnss_pr_dbg("Freeing memory for FW, va: 0x%pK, pa: 0x%pa, size: 0x%zx, type: %u\n",
+					    fw_mem[i].va, &fw_mem[i].pa,
 					    fw_mem[i].size, fw_mem[i].type);
 				dma_free_attrs(dev, fw_mem[i].size,
 					       fw_mem[i].va, fw_mem[i].pa,
@@ -4334,6 +4512,21 @@ static void pci_override_msi_assignment(struct cnss_plat_data *plat_priv,
 				    num_dp_vectors;
 }
 
+#ifdef CONFIG_CNSS2_QGIC2M
+static struct cnss_msi_config*
+cnss_get_msi_config_qcn6122(struct cnss_plat_data *plat_priv)
+{
+	if (plat_priv->userpd_id == QCN6122_0) {
+		return &msi_config_qcn6122_pci0;
+	} else if (plat_priv->userpd_id == QCN6122_1) {
+		return &msi_config_qcn6122_pci1;
+	} else {
+		cnss_pr_err("Unknown userpd_id 0x%X", plat_priv->userpd_id);
+		return NULL;
+	}
+}
+#endif
+
 static int cnss_pci_get_msi_assignment(struct cnss_pci_data *pci_priv)
 {
 	int qrtr_node_id = pci_priv->plat_priv->qrtr_node_id;
@@ -4385,6 +4578,7 @@ static int cnss_pci_get_msi_assignment(struct cnss_pci_data *pci_priv)
 	}
 	return 0;
 }
+
 static int cnss_pci_enable_msi(struct cnss_pci_data *pci_priv)
 {
 	int ret = 0;
@@ -4451,37 +4645,91 @@ static void cnss_pci_disable_msi(struct cnss_pci_data *pci_priv)
 	pci_free_irq_vectors(pci_priv->pci_dev);
 }
 
-struct qgic2_msi *cnss_qgic2_enable_msi(struct cnss_plat_data *plat_priv,
-					int qgicm_id)
-{
-	struct qgic2_msi *qgic2_msi = NULL;
-
 #ifdef CONFIG_CNSS2_QGIC2M
-	if (plat_priv->userpd_id == QCN6122_0) {
-		pci_override_msi_assignment(plat_priv,
-					    &msi_config_qcn6122_pci0);
-		qgic2_msi =
-			qgic2_enable_msi(qgicm_id,
-					 msi_config_qcn6122_pci0.total_vectors);
-	} else if (plat_priv->userpd_id == QCN6122_1) {
-		pci_override_msi_assignment(plat_priv,
-					    &msi_config_qcn6122_pci1);
-		qgic2_msi =
-			qgic2_enable_msi(qgicm_id,
-					 msi_config_qcn6122_pci1.total_vectors);
-	} else {
-		pr_err("Unknown userpd_id 0x%X", plat_priv->userpd_id);
-		return NULL;
-	}
-	if (IS_ERR(qgic2_msi)) {
-		pr_err("qgic2_enable_msi fails %ld\n", PTR_ERR(qgic2_msi));
-		return NULL;
-	}
-#endif
-
-	return qgic2_msi;
+static void cnss_qgic2m_msg_handler(struct msi_desc *desc, struct msi_msg *msg)
+{
+	desc->msg.address_lo = msg->address_lo;
+	desc->msg.address_hi = msg->address_hi;
+	desc->msg.data = msg->data;
 }
-EXPORT_SYMBOL(cnss_qgic2_enable_msi);
+
+static irqreturn_t dummy_irq_handler(int irq, void *context)
+{
+	return IRQ_HANDLED;
+}
+
+struct qgic2_msi *cnss_qgic2_enable_msi(struct cnss_plat_data *plat_priv)
+{
+	int ret;
+	struct qgic2_msi *qgic;
+	struct msi_desc *msi_desc;
+	struct cnss_msi_config *msi_config;
+	struct device *dev = &plat_priv->plat_dev->dev;
+	struct irq_data *irq_data;
+
+	msi_config = cnss_get_msi_config_qcn6122(plat_priv);
+	if (!msi_config) {
+		cnss_pr_err("qcn6122 msi_config NULL");
+		return NULL;
+	}
+
+	pci_override_msi_assignment(plat_priv, msi_config);
+	ret = platform_msi_domain_alloc_irqs(&plat_priv->plat_dev->dev,
+					     msi_config->total_vectors,
+					     cnss_qgic2m_msg_handler);
+	if (ret) {
+		cnss_pr_err("platform_msi_domain_alloc_irqs failed %d\n", ret);
+		return NULL;
+	}
+
+	qgic = devm_kzalloc(&plat_priv->plat_dev->dev,
+			    sizeof(*qgic), GFP_KERNEL);
+	if (!qgic) {
+		cnss_pr_err("qgic alloc failed\n");
+		platform_msi_domain_free_irqs(&plat_priv->plat_dev->dev);
+		return NULL;
+	}
+
+	plat_priv->qcn6122.qgic2_msi = qgic;
+
+	msi_desc = first_msi_entry(dev);
+	irq_data = irq_desc_get_irq_data(irq_to_desc(msi_desc->irq));
+
+	/* For QCN6122 device, to retrieve msi base address and irq data,
+	 * request a dummy irq  store the base address and data in qgic
+	 * private to provide the required base address/data info in
+	 * cnss_get_msi_address and cnss_get_user_msi_assignment API calls.
+	 */
+	ret = request_irq(msi_desc->irq, dummy_irq_handler,
+			  IRQF_SHARED, "dummy", qgic);
+	if (ret) {
+		cnss_pr_err("dummy request_irq fails %d\n", ret);
+		return NULL;
+	}
+
+	qgic->irq_num = msi_desc->irq;
+	qgic->msi_gicm_base_data = msi_desc->msg.data;
+	qgic->msi_gicm_addr_lo = msi_desc->msg.address_lo;
+	qgic->msi_gicm_addr_hi = msi_desc->msg.address_hi;
+
+	cnss_pr_dbg("irq %d msi addr lo 0x%x addr hi 0x%x msi data %d",
+		    qgic->irq_num, qgic->msi_gicm_addr_lo,
+		    qgic->msi_gicm_addr_hi, qgic->msi_gicm_base_data);
+
+	free_irq(msi_desc->irq, qgic);
+
+	return qgic;
+}
+
+void cnss_qgic2_disable_msi(struct cnss_plat_data *plat_priv)
+{
+	if (plat_priv->device_id == QCN6122_DEVICE_ID &&
+				plat_priv->qcn6122.qgic2_msi) {
+		platform_msi_domain_free_irqs(&plat_priv->plat_dev->dev);
+		plat_priv->qcn6122.qgic2_msi = NULL;
+	}
+}
+#endif
 
 int cnss_get_user_msi_assignment(struct device *dev, char *user_name,
 				 int *num_vectors, u32 *user_base_data,
@@ -4500,28 +4748,30 @@ int cnss_get_user_msi_assignment(struct device *dev, char *user_name,
 	if (!plat_priv)
 		return -ENODEV;
 
-#ifdef CONFIG_CNSS2_QGIC2M
+	if (plat_priv->device_id != QCN9000_DEVICE_ID &&
+	    plat_priv->device_id != QCN9224_DEVICE_ID &&
+	    plat_priv->device_id != QCN6122_DEVICE_ID) {
+		cnss_pr_dbg("MSI not supported on device 0x%lx",
+			    plat_priv->device_id);
+		return -EINVAL;
+	}
+
 	if (plat_priv->device_id == QCN6122_DEVICE_ID) {
+#ifdef CONFIG_CNSS2_QGIC2M
+		msi_config = cnss_get_msi_config_qcn6122(plat_priv);
+		if (!msi_config) {
+			cnss_pr_err("msi_config NULL");
+			return -EINVAL;
+		}
+
 		qgic2_msi = plat_priv->qcn6122.qgic2_msi;
 		if (!qgic2_msi) {
 			cnss_pr_err("qgic2_msi NULL");
 			return -EINVAL;
 		}
-		if (plat_priv->userpd_id == QCN6122_0) {
-			msi_config = &msi_config_qcn6122_pci0;
-		} else if (plat_priv->userpd_id == QCN6122_1) {
-			msi_config = &msi_config_qcn6122_pci1;
-		} else {
-			cnss_pr_err("Unknown userpd_id 0x%X",
-				    plat_priv->userpd_id);
-			return -EINVAL;
-		}
-
-		msi_ep_base_data = qgic2_msi->msi_gicm_base;
-	}
+		msi_ep_base_data = qgic2_msi->msi_gicm_base_data;
 #endif
-
-	if (plat_priv->device_id == QCN9000_DEVICE_ID) {
+	} else {
 		pci_dev = to_pci_dev(dev);
 		pci_priv = cnss_get_pci_priv(pci_dev);
 		if (!pci_priv) {
@@ -4535,11 +4785,6 @@ int cnss_get_user_msi_assignment(struct device *dev, char *user_name,
 			return -EINVAL;
 		}
 		msi_ep_base_data = pci_priv->msi_ep_base_data;
-	} else {
-		if (pci_dev)
-			cnss_pr_err("MSI not supported on device 0x%x",
-				    pci_dev->device);
-		return -EINVAL;
 	}
 
 	for (idx = 0; idx < msi_config->total_users; idx++) {
@@ -4548,14 +4793,17 @@ int cnss_get_user_msi_assignment(struct device *dev, char *user_name,
 			*user_base_data = msi_config->users[idx].base_vector +
 					  msi_ep_base_data;
 			*base_vector = msi_config->users[idx].base_vector;
+
 			cnss_pr_dbg("Assign MSI to user: %s, num_vectors: %d, user_base_data: %u, base_vector: %u\n",
 				    user_name, *num_vectors, *user_base_data,
 				    *base_vector);
+
 			return 0;
 		}
 	}
 
 	cnss_pr_err("Failed to find MSI assignment for %s!\n", user_name);
+
 	return -EINVAL;
 }
 EXPORT_SYMBOL(cnss_get_user_msi_assignment);
@@ -4585,35 +4833,45 @@ EXPORT_SYMBOL(cnss_get_pci_slot);
 
 int cnss_get_msi_irq(struct device *dev, unsigned int vector)
 {
-	int irq_num;
+	int irq_num = 0;
 	struct pci_dev *pci_dev = NULL;
 	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
 #ifdef CONFIG_CNSS2_QGIC2M
 	struct qgic2_msi *qgic2_msi = NULL;
+	struct cnss_msi_config *msi_config;
 #endif
 
-	if (!plat_priv)
+	if (!plat_priv) {
+		pr_err("plat_priv NULL");
 		return -ENODEV;
-
-#ifdef CONFIG_CNSS2_QGIC2M
-	if (plat_priv->device_id == QCN6122_DEVICE_ID) {
-		qgic2_msi = plat_priv->qcn6122.qgic2_msi;
-		if (!qgic2_msi) {
-			cnss_pr_err("%s: qgic2_msi NULL", __func__);
-			return -EINVAL;
-		}
-
-		if (vector >= MAX_MSI_IRQS) {
-			cnss_pr_err("%s: vector greater than MAX MSI IRQ",
-				    __func__);
-			return -EINVAL;
-		}
-		return qgic2_msi->msi[vector];
 	}
-#endif
 
-	pci_dev = to_pci_dev(dev);
-	irq_num = pci_irq_vector(pci_dev, vector);
+	if (plat_priv->device_id != QCN6122_DEVICE_ID) {
+		pci_dev = to_pci_dev(dev);
+		irq_num = pci_irq_vector(pci_dev, vector);
+		return irq_num;
+	}
+#ifdef CONFIG_CNSS2_QGIC2M
+	qgic2_msi = plat_priv->qcn6122.qgic2_msi;
+	if (!qgic2_msi) {
+		cnss_pr_err("%s: qcn6122 qgic2_msi NULL", __func__);
+		return -EINVAL;
+	}
+
+	msi_config = cnss_get_msi_config_qcn6122(plat_priv);
+	if (!msi_config) {
+		cnss_pr_err("qcn6122 msi_config NULL");
+		return -EINVAL;
+	}
+
+	if (vector > msi_config->total_vectors) {
+		cnss_pr_err("%s: vector greater than max total vectors %d",
+				__func__, msi_config->total_vectors);
+		return -EINVAL;
+	}
+
+	irq_num = qgic2_msi->irq_num + vector;
+#endif
 	return irq_num;
 }
 EXPORT_SYMBOL(cnss_get_msi_irq);
@@ -4627,8 +4885,10 @@ void cnss_get_msi_address(struct device *dev, u32 *msi_addr_low,
 	struct qgic2_msi *qgic2_msi = NULL;
 #endif
 
-	if (!plat_priv)
+	if (!plat_priv) {
+		cnss_pr_err("%s: plat_priv is NULL", __func__);
 		return;
+	}
 
 	if (plat_priv->device_id == QCN6122_DEVICE_ID) {
 #ifdef CONFIG_CNSS2_QGIC2M
@@ -4637,7 +4897,8 @@ void cnss_get_msi_address(struct device *dev, u32 *msi_addr_low,
 			cnss_pr_err("%s: qgic2_msi NULL", __func__);
 			return;
 		}
-		*msi_addr_low = qgic2_msi->msi_gicm_addr;
+		*msi_addr_low = qgic2_msi->msi_gicm_addr_lo;
+		*msi_addr_high = qgic2_msi->msi_gicm_addr_hi;
 #endif
 	} else if (plat_priv->device_id == QCN9000_DEVICE_ID) {
 		pci_dev = to_pci_dev(dev);
@@ -4759,8 +5020,12 @@ void cnss_pci_global_reset(struct cnss_pci_data *pci_priv)
 {
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 	int resetcount = 0, tx_count = 0;
-	int current_ee;
 	u32 errdbg1 = 0;
+#ifdef CONFIG_CNSS2_KERNEL_MSM
+	int current_ee;
+#else
+	enum mhi_ee_type current_ee;
+#endif
 
 	current_ee = mhi_get_exec_env(pci_priv->mhi_ctrl);
 
@@ -4795,6 +5060,7 @@ void cnss_pci_global_reset(struct cnss_pci_data *pci_priv)
 			     resetcount, tx_count);
 }
 
+#ifdef CONFIG_CNSS2_KERNEL_MSM
 static void cnss_reset_mhi_state(struct cnss_pci_data *pci_priv)
 {
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
@@ -4804,6 +5070,7 @@ static void cnss_reset_mhi_state(struct cnss_pci_data *pci_priv)
 	cnss_pr_info("Setting MHI State to reset, current state: 0x%x", val);
 	cnss_pci_reg_write(pci_priv, MHICTRL, MHICTRL_RESET_MASK);
 }
+#endif
 
 static void cnss_pci_disable_bus(struct cnss_pci_data *pci_priv)
 {
@@ -4819,8 +5086,11 @@ static void cnss_pci_disable_bus(struct cnss_pci_data *pci_priv)
 	/* On SOC_GLOBAL_RESET, target waits in PBL for host to set the
 	 * MHI_RESET bit to 1.
 	 */
+#ifdef CONFIG_CNSS2_KERNEL_MSM
 	cnss_reset_mhi_state(pci_priv);
-
+#else
+	mhi_set_mhi_state(pci_priv->mhi_ctrl, MHI_STATE_RESET);
+#endif
 	if (pci_priv->bar) {
 		pci_iounmap(pci_dev, pci_priv->bar);
 		pci_priv->bar = NULL;
@@ -5110,7 +5380,11 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 
 	plat_priv->target_assert_timestamp = ktime_to_ms(ktime_get());
 
+#ifdef CONFIG_CNSS2_KERNEL_MSM
 	ret = mhi_download_rddm_img(pci_priv->mhi_ctrl, in_panic);
+#else
+	ret = mhi_download_rddm_image(pci_priv->mhi_ctrl, in_panic);
+#endif
 	if (ret) {
 		cnss_fatal_err("Failed to download RDDM image, err = %d\n",
 			       ret);
@@ -5119,7 +5393,9 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 		return;
 	}
 
+#ifdef CONFIG_CNSS2_KERNEL_MSM
 	cnss_get_crash_reason(pci_priv);
+#endif
 
 	fw_image = pci_priv->mhi_ctrl->fbc_image;
 	rddm_image = pci_priv->mhi_ctrl->rddm_image;
@@ -5133,6 +5409,7 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 			skip_count++;
 			continue;
 		}
+
 		dump_seg->address = fw_image->mhi_buf[i].dma_addr;
 		dump_seg->v_address = fw_image->mhi_buf[i].buf;
 		dump_seg->size = fw_image->mhi_buf[i].len;
@@ -5247,20 +5524,23 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 		}
 	}
 
-	cnss_pr_dbg("Collect pageable memory dump segment\n");
-	for (i = 0; i < plat_priv->fw_mem_seg_len; i++) {
-		if (fw_mem[i].type == CNSS_MEM_PAGEABLE) {
-			if (!fw_mem[i].pa)
-				continue;
-			dump_seg->address = fw_mem[i].pa;
-			dump_seg->v_address = fw_mem[i].va;
-			dump_seg->size = fw_mem[i].size;
-			dump_seg->type = CNSS_FW_PAGEABLE;
-			cnss_pr_dbg("seg-%d: address 0x%lx, v_address %pK, size 0x%lx\n",
-				    i, dump_seg->address, dump_seg->v_address,
-				    dump_seg->size);
-			dump_seg++;
-			dump_data->nentries++;
+	if (pageable_dump_region) {
+		cnss_pr_dbg("Collect pageable memory dump segment\n");
+		for (i = 0; i < plat_priv->fw_mem_seg_len; i++) {
+			if (fw_mem[i].type == CNSS_MEM_PAGEABLE) {
+				if (!fw_mem[i].pa)
+					continue;
+				dump_seg->address = fw_mem[i].pa;
+				dump_seg->v_address = fw_mem[i].va;
+				dump_seg->size = fw_mem[i].size;
+				dump_seg->type = CNSS_FW_PAGEABLE;
+				cnss_pr_dbg("seg-%d: address 0x%lx, v_address %pK, size 0x%lx\n",
+					    i, dump_seg->address,
+					    dump_seg->v_address,
+					    dump_seg->size);
+				dump_seg++;
+				dump_data->nentries++;
+			}
 		}
 	}
 
@@ -5281,34 +5561,37 @@ void cnss_pci_clear_dump_info(struct cnss_pci_data *pci_priv)
 
 #ifdef CONFIG_CNSS2_KERNEL_MSM
 static int cnss_mhi_pm_runtime_get(struct mhi_controller *mhi_ctrl, void *priv)
-#else
-static int cnss_mhi_pm_runtime_get(struct mhi_controller *mhi_ctrl)
-#endif
 {
-#ifdef CONFIG_CNSS2_KERNEL_MSM
 	struct cnss_pci_data *pci_priv = priv;
-#else
-	struct cnss_pci_data *pci_priv = mhi_ctrl->priv_data;
-#endif
 
 	return cnss_pci_pm_runtime_get(pci_priv);
 }
+#else
+static int cnss_mhi_pm_runtime_get(struct mhi_controller *mhi_ctrl)
+{
+	struct cnss_pci_data *pci_priv = dev_get_drvdata(mhi_ctrl->cntrl_dev);
+
+	return cnss_pci_pm_runtime_get(pci_priv);
+}
+#endif
+
 
 #ifdef CONFIG_CNSS2_KERNEL_MSM
 static void cnss_mhi_pm_runtime_put_noidle(struct mhi_controller *mhi_ctrl,
 					   void *priv)
-#else
-static void cnss_mhi_pm_runtime_put_noidle(struct mhi_controller *mhi_ctrl)
-#endif
 {
-#ifdef CONFIG_CNSS2_KERNEL_MSM
 	struct cnss_pci_data *pci_priv = priv;
-#else
-	struct cnss_pci_data *pci_priv = mhi_ctrl->priv_data;
-#endif
 
 	cnss_pci_pm_runtime_put_noidle(pci_priv);
 }
+#else
+static void cnss_mhi_pm_runtime_put_noidle(struct mhi_controller *mhi_ctrl)
+{
+	struct cnss_pci_data *pci_priv = dev_get_drvdata(mhi_ctrl->cntrl_dev);
+
+	cnss_pci_pm_runtime_put_noidle(pci_priv);
+}
+#endif
 
 #ifdef CONFIG_CNSS2_KERNEL_MSM
 static char *cnss_mhi_notify_status_to_str(enum MHI_CB status)
@@ -5325,6 +5608,8 @@ static char *cnss_mhi_notify_status_to_str(enum mhi_callback status)
 		return "SYS_ERROR";
 	case MHI_CB_FATAL_ERROR:
 		return "FATAL_ERROR";
+	case MHI_CB_EE_MISSION_MODE:
+		return "MISSION MODE";
 	default:
 		return "UNKNOWN";
 	}
@@ -5347,15 +5632,8 @@ static void cnss_dev_rddm_timeout_hdlr(struct timer_list *timer)
 
 #ifdef CONFIG_CNSS2_KERNEL_MSM
 static int cnss_mhi_link_status(struct mhi_controller *mhi_ctrl, void *priv)
-#else
-static int cnss_mhi_link_status(struct mhi_controller *mhi_ctrl)
-#endif
 {
-#ifdef CONFIG_CNSS2_KERNEL_MSM
 	struct cnss_pci_data *pci_priv = priv;
-#else
-	struct cnss_pci_data *pci_priv = mhi_ctrl->priv_data;
-#endif
 
 	if (!pci_priv) {
 		pr_err("%s: pci_priv is NULL\n", __func__);
@@ -5364,6 +5642,7 @@ static int cnss_mhi_link_status(struct mhi_controller *mhi_ctrl)
 
 	return cnss_pci_check_link_status(pci_priv);
 }
+#endif
 
 #ifdef CONFIG_CNSS2_KERNEL_MSM
 static void cnss_mhi_notify_status(struct mhi_controller *mhi_ctrl, void *priv,
@@ -5376,7 +5655,7 @@ static void cnss_mhi_notify_status(struct mhi_controller *mhi_ctrl,
 #ifdef CONFIG_CNSS2_KERNEL_MSM
 	struct cnss_pci_data *pci_priv = priv;
 #else
-	struct cnss_pci_data *pci_priv = mhi_ctrl->priv_data;
+	struct cnss_pci_data *pci_priv = dev_get_drvdata(mhi_ctrl->cntrl_dev);
 #endif
 	struct cnss_plat_data *plat_priv = NULL;
 	enum cnss_recovery_reason cnss_reason;
@@ -5389,8 +5668,8 @@ static void cnss_mhi_notify_status(struct mhi_controller *mhi_ctrl,
 	plat_priv = pci_priv->plat_priv;
 
 	if (reason != MHI_CB_IDLE)
-		cnss_pr_dbg("MHI status cb is called with reason %s(%d)\n",
-			    cnss_mhi_notify_status_to_str(reason), reason);
+		cnss_pr_info("MHI status cb is called with reason %s(%d)\n",
+			     cnss_mhi_notify_status_to_str(reason), reason);
 
 	if (reason == MHI_CB_FATAL_ERROR || reason == MHI_CB_SYS_ERROR ||
 	    (reason == MHI_CB_EE_RDDM && !plat_priv->target_asserted)) {
@@ -5425,8 +5704,8 @@ static void cnss_mhi_notify_status(struct mhi_controller *mhi_ctrl,
 	case MHI_CB_SYS_ERROR:
 		set_bit(CNSS_DEV_ERR_NOTIFY, &plat_priv->driver_state);
 		del_timer(&plat_priv->fw_boot_timer);
-		mod_timer(&pci_priv->dev_rddm_timer,
-			  jiffies + msecs_to_jiffies(DEV_RDDM_TIMEOUT));
+		mod_timer(&pci_priv->dev_rddm_timer, jiffies +
+			  msecs_to_jiffies(DEV_RDDM_TIMEOUT * timeout_factor));
 		return;
 	case MHI_CB_EE_RDDM:
 		set_bit(CNSS_DEV_ERR_NOTIFY, &plat_priv->driver_state);
@@ -5434,6 +5713,8 @@ static void cnss_mhi_notify_status(struct mhi_controller *mhi_ctrl,
 		del_timer(&pci_priv->dev_rddm_timer);
 		cnss_reason = CNSS_REASON_RDDM;
 		break;
+	case MHI_CB_EE_MISSION_MODE:
+		return;
 	default:
 		cnss_pr_err("Unsupported MHI status cb reason: %d\n", reason);
 		return;
@@ -5441,6 +5722,29 @@ static void cnss_mhi_notify_status(struct mhi_controller *mhi_ctrl,
 
 	cnss_schedule_recovery(&pci_priv->pci_dev->dev, cnss_reason);
 }
+
+#ifdef CONFIG_CNSS2_KERNEL_IPQ
+#define CNSS_PCI_INVALID_READ(val) (val == U32_MAX)
+static int __must_check cnss_mhi_read_reg(struct mhi_controller *mhi_cntrl,
+					  void __iomem *addr, u32 *out)
+{
+	u32 tmp = readl(addr);
+
+	/* If the value is invalid, the link is down */
+	if (CNSS_PCI_INVALID_READ(tmp))
+		return -EIO;
+
+	*out = tmp;
+
+	return 0;
+}
+
+static void cnss_mhi_write_reg(struct mhi_controller *mhi_cntrl,
+			       void __iomem *addr, u32 val)
+{
+	writel(val, addr);
+}
+#endif
 
 static int cnss_pci_get_mhi_msi(struct cnss_pci_data *pci_priv)
 {
@@ -5467,25 +5771,15 @@ static int cnss_pci_get_mhi_msi(struct cnss_pci_data *pci_priv)
 					  base_vector + i);
 
 	pci_priv->mhi_ctrl->irq = irq;
+#ifdef CONFIG_CNSS2_KERNEL_MSM
 	pci_priv->mhi_ctrl->msi_allocated = num_vectors;
+#else
+	pci_priv->mhi_ctrl->nr_irqs = num_vectors;
+#endif
 
 	return 0;
 }
 
-static void cnss_pci_update_fw_name(struct cnss_pci_data *pci_priv)
-{
-	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
-	struct mhi_controller *mhi_ctrl = pci_priv->mhi_ctrl;
-
-	if (pci_priv->device_id == QCA6390_DEVICE_ID &&
-	    plat_priv->device_version.major_version >= FW_V2_NUMBER) {
-		scnprintf(plat_priv->firmware_name,
-			  sizeof(plat_priv->firmware_name), FW_V2_FILE_NAME);
-		mhi_ctrl->fw_image = plat_priv->firmware_name;
-	}
-
-	cnss_pr_dbg("Firmware name is %s\n", mhi_ctrl->fw_image);
-}
 
 static void cnss_update_soc_version(struct cnss_pci_data *pci_priv)
 {
@@ -5510,13 +5804,19 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 	struct pci_dev *pci_dev = pci_priv->pci_dev;
 	struct mhi_controller *mhi_ctrl;
+#ifdef CONFIG_CNSS2_KERNEL_MSM
 	char cnss_mhi_log_buf_name[20];
+#endif
 #ifndef CONFIG_CNSS2_SMMU
 	struct device_node *dev_node;
 	struct resource memory;
 #endif
 
+#ifdef CONFIG_CNSS2_KERNEL_MSM
 	mhi_ctrl = mhi_alloc_controller(0);
+#else
+	mhi_ctrl = mhi_alloc_controller();
+#endif
 	if (!mhi_ctrl) {
 		cnss_pr_err("Invalid MHI controller context\n");
 		return -EINVAL;
@@ -5524,6 +5824,7 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 
 	pci_priv->mhi_ctrl = mhi_ctrl;
 
+#ifdef CONFIG_CNSS2_KERNEL_MSM
 	mhi_ctrl->priv_data = pci_priv;
 	mhi_ctrl->dev = &pci_dev->dev;
 	mhi_ctrl->of_node = (&plat_priv->plat_dev->dev)->of_node;
@@ -5531,16 +5832,21 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 	mhi_ctrl->domain = pci_domain_nr(pci_dev->bus);
 	mhi_ctrl->bus = pci_dev->bus->number;
 	mhi_ctrl->slot = PCI_SLOT(pci_dev->devfn);
-
-	mhi_ctrl->fw_image = plat_priv->firmware_name;
-
-	mhi_ctrl->regs = pci_priv->bar;
-
-#ifdef CONFIG_CNSS2_KERNEL_MSM
 	mhi_ctrl->len = pci_resource_len(pci_priv->pci_dev, PCI_BAR_NUM);
 	cnss_pr_dbg("BAR length %x\n", mhi_ctrl->len);
+
+	mhi_ctrl->link_status = cnss_mhi_link_status;
+	mhi_ctrl->rddm_supported = true;
+#else /* CONFIG_CNSS2_KERNEL_IPQ */
+	dev_set_drvdata(&pci_dev->dev, pci_priv);
+	mhi_ctrl->cntrl_dev = &pci_dev->dev;
+	mhi_ctrl->read_reg = cnss_mhi_read_reg;
+	mhi_ctrl->write_reg = cnss_mhi_write_reg;
+	cnss_pci_mhi_config.timeout_ms *= timeout_factor;
 #endif
 
+	mhi_ctrl->fw_image = plat_priv->firmware_name;
+	mhi_ctrl->regs = pci_priv->bar;
 	cnss_pr_dbg("BAR starts at %pa\n",
 		    &pci_resource_start(pci_priv->pci_dev, PCI_BAR_NUM));
 
@@ -5565,7 +5871,7 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 		if (of_address_to_resource(dev_node, 0, &memory)) {
 			cnss_pr_err("%s: Unable to get resource: memory",
 				    __func__);
-			goto out;
+			goto free_mhi_ctrl;
 		}
 
 		mhi_ctrl->iova_start = (dma_addr_t)memory.start;
@@ -5578,7 +5884,6 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 	}
 #endif
 
-	mhi_ctrl->link_status = cnss_mhi_link_status;
 	mhi_ctrl->status_cb = cnss_mhi_notify_status;
 	mhi_ctrl->runtime_get = cnss_mhi_pm_runtime_get;
 	mhi_ctrl->runtime_put = cnss_mhi_pm_runtime_put_noidle;
@@ -5587,12 +5892,10 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 	mhi_ctrl->sbl_size = SZ_512K;
 	mhi_ctrl->seg_len = SZ_512K;
 	mhi_ctrl->fbc_download = true;
-#ifdef CONFIG_CNSS2_KERNEL_MSM
-	mhi_ctrl->rddm_supported = true;
-#endif
 
+#ifdef CONFIG_CNSS2_KERNEL_MSM
 	snprintf(cnss_mhi_log_buf_name, sizeof(cnss_mhi_log_buf_name),
-			"cnss-mhi_%x", plat_priv->wlfw_service_instance_id);
+		 "cnss-mhi_%x", plat_priv->wlfw_service_instance_id);
 
 	mhi_ctrl->log_buf = ipc_log_context_create(CNSS_IPC_LOG_PAGES,
 					(const char *)cnss_mhi_log_buf_name, 0);
@@ -5600,20 +5903,23 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 		cnss_pr_info("MHI IPC Logging is disabled!\n");
 
 	ret = of_register_mhi_controller(mhi_ctrl);
+#else
+	ret = mhi_register_controller(mhi_ctrl, &cnss_pci_mhi_config);
+#endif
+
 	if (ret) {
 		cnss_pr_err("Failed to register to MHI bus, err = %d\n", ret);
 		CNSS_ASSERT(0);
 		goto free_mhi_ctrl;
 	}
 
-	cnss_pci_update_fw_name(pci_priv);
 	cnss_update_soc_version(pci_priv);
 
 	return 0;
 
 free_mhi_ctrl:
 	mhi_free_controller(mhi_ctrl);
-
+	pci_priv->mhi_ctrl = NULL;
 	return ret;
 }
 
@@ -5621,9 +5927,21 @@ static void cnss_pci_unregister_mhi(struct cnss_pci_data *pci_priv)
 {
 	struct mhi_controller *mhi_ctrl = pci_priv->mhi_ctrl;
 
+#ifdef CONFIG_CNSS2_KERNEL_MSM
 	mhi_unregister_mhi_controller(mhi_ctrl);
 	ipc_log_context_destroy(mhi_ctrl->log_buf);
+#else
+	mhi_unregister_controller(mhi_ctrl);
+#endif
 	kfree(mhi_ctrl->irq);
+}
+
+static void cnss_pci_free_mhi_controller(struct cnss_pci_data *pci_priv)
+{
+	struct mhi_controller *mhi_ctrl = pci_priv->mhi_ctrl;
+
+	mhi_free_controller(mhi_ctrl);
+	pci_priv->mhi_ctrl = NULL;
 }
 
 static void cnss_boot_debug_timeout_hdlr(struct timer_list *timer)
@@ -5860,6 +6178,7 @@ void cnss_pci_remove(struct pci_dev *pci_dev)
 		cnss_pci_deinit_smmu(pci_priv);
 #endif
 	cnss_unregister_ramdump(plat_priv);
+	cnss_pci_free_mhi_controller(pci_priv);
 	plat_priv->bus_priv = NULL;
 }
 EXPORT_SYMBOL(cnss_pci_remove);
@@ -5922,8 +6241,8 @@ int cnss_pci_probe_basic(struct pci_dev *pci_dev,
 		return -EINVAL;
 	}
 
-	plat_priv->pci_dev = (void *)pci_dev;
-	plat_priv->pci_dev_id = (void *)id;
+	plat_priv->pci_dev = (struct platform_device *)pci_dev;
+	plat_priv->pci_dev_id = (struct platform_device_id *)id;
 
 #ifdef CONFIG_CNSS2_DMA_ALLOC
 	ret = cnss_pci_of_reserved_mem_device_init(plat_priv);
