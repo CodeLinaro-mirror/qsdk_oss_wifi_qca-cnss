@@ -3922,8 +3922,12 @@ int cnss_register_subsys(struct cnss_plat_data *plat_priv)
 
 		break;
 	case CNSS_BUS_PCI:
+		/* If plat_priv->pci_dev is NULL, the PCI device is not probed,
+		 * return 0 here so that driver loading does not fail for other
+		 * devices
+		 */
 		if (!plat_priv->pci_dev)
-			return -ENODEV;
+			return 0;
 
 		if (!plat_priv->rproc_handle) {
 			/* Should never happen as rproc_handle is allocated
