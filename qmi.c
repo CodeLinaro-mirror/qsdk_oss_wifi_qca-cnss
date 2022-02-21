@@ -1873,6 +1873,19 @@ int cnss_wlfw_qdss_dnld_send_sync(struct cnss_plat_data *plat_priv)
 	unsigned int remaining;
 	int ret = 0, resp_error_msg = 0;
 
+	if (!(test_bit(CNSS_FW_READY, &plat_priv->driver_state) &&
+	      (test_bit(CNSS_QMI_WLFW_CONNECTED, &plat_priv->driver_state)))) {
+		cnss_pr_err("Invalid state to download QDSS config: 0x%lx\n",
+			    plat_priv->driver_state);
+		return -EINVAL;
+	}
+
+	if (test_bit(CNSS_QDSS_STARTED, &plat_priv->driver_state)) {
+		cnss_pr_info("QDSS is already started: 0x%lx\n",
+			     plat_priv->driver_state);
+		return -EINVAL;
+	}
+
 	cnss_pr_info("Sending QDSS config download message, state: 0x%lx\n",
 		     plat_priv->driver_state);
 
@@ -2080,6 +2093,11 @@ out:
 	kfree(req);
 	if (ret < 0)
 		CNSS_ASSERT(0);
+
+	if (mode == QMI_WLFW_QDSS_TRACE_ON_V01)
+		set_bit(CNSS_QDSS_STARTED, &plat_priv->driver_state);
+	else if (mode == QMI_WLFW_QDSS_TRACE_OFF_V01)
+		clear_bit(CNSS_QDSS_STARTED, &plat_priv->driver_state);
 
 	return ret;
 }

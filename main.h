@@ -334,6 +334,7 @@ enum cnss_driver_state {
 	CNSS_COEX_CONNECTED,
 	CNSS_IMS_CONNECTED,
 	CNSS_IN_SUSPEND_RESUME,
+	CNSS_QDSS_STARTED,
 };
 
 struct cnss_recovery_data {

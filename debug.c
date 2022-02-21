@@ -125,6 +125,9 @@ static int cnss_stats_show_state(struct seq_file *s,
 		case CNSS_IN_SUSPEND_RESUME:
 			seq_puts(s, "IN_SUSPEND_RESUME");
 			continue;
+		case CNSS_QDSS_STARTED:
+			seq_puts(s, "QDSS_STARTED");
+			continue;
 		}
 
 		seq_printf(s, "UNKNOWN-%d", i);
