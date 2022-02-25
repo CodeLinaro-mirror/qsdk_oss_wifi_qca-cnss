@@ -11,6 +11,8 @@ ipq_cnss2-objs += qmi.o
 ipq_cnss2-objs += wlan_firmware_service_v01.o
 ipq_cnss2-objs += bus.o
 ipq_cnss2-objs += genl.o
+ipq_cnss2-objs += cnss_plat_ipc_qmi.o
+ipq_cnss2-objs += cnss_plat_ipc_service_v01.o
 
 CNSS2_INCLUDE = -I$(obj)
 CNSS2_INCLUDE += -I$(obj)/include
@@ -25,9 +27,11 @@ ifeq ($(CONFIG_BUILD_YOCTO),y)
 	ccflags-y += -DCONFIG_CNSS2_KERNEL_MSM
 	ccflags-y += -DCONFIG_CNSS2_DMA_ALLOC
 	ccflags-y += -DCONFIG_CNSS2_SMMU
+	ccflags-y += -DCONFIG_CNSS2_KERNEL_SSR_FRAMEWORK
 else
 	ccflags-y += -DCONFIG_CNSS2_KERNEL_IPQ
 	ccflags-y += -DCONFIG_CNSS2_QGIC2M
+	ccflags-y += -DCONFIG_CNSS2_KERNEL_RPROC_FRAMEWORK
 endif
 
 all:
