@@ -624,7 +624,7 @@ struct cnss_plat_data {
 	};
 	bool hds_support;
 	bool regdb_support;
-	bool qdss_support;
+	u32 qdss_support;
 	enum wlfw_bdf_dnld_method_v01 bdf_dnld_method;
 	u32 probe_order;
 	bool mlo_support;

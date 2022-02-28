@@ -714,7 +714,7 @@ skip_cfg:
 
 	ret = cnss_wlfw_wlan_mode_send_sync(plat_priv, mode);
 
-	if (mode == CNSS_MISSION && plat_priv->qdss_support) {
+	if (plat_priv->qdss_support & (1 << mode)) {
 		cnss_pr_info("Starting QDSS for %s\n", plat_priv->device_name);
 		cnss_wlfw_qdss_dnld_send_sync(plat_priv);
 	}
