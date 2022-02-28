@@ -217,11 +217,6 @@ struct cnss_plat_data;
  * for targets that don't support CNSS2
  */
 #if defined(CONFIG_ARCH_IPQ40XX) || defined(CONFIG_ARCH_IPQ806x)
-static inline int cnss_wlan_register_driver(struct cnss_wlan_driver *driver)
-{
-	return 0;
-}
-
 static inline void cnss_wlan_unregister_driver(struct cnss_wlan_driver *driver)
 {
 }
@@ -482,7 +477,6 @@ static inline void cnss_set_led_gpio(int led_gpio, unsigned int value,
 {
 }
 #else
-extern int cnss_wlan_register_driver(struct cnss_wlan_driver *driver);
 extern int cnss_wlan_register_driver_ops(struct cnss_wlan_driver *driver);
 extern int cnss_wlan_probe_driver(void);
 extern void cnss_wlan_unregister_driver(struct cnss_wlan_driver *driver);

@@ -248,7 +248,16 @@ static ssize_t cnss_dev_boot_debug_write(struct file *fp,
 	cmd = (char *)buf;
 
 	if (sysfs_streq("test_driver_load", cmd)) {
-		cnss_wlan_register_driver(&debug_driver_ops);
+		ret = cnss_wlan_register_driver_ops(&debug_driver_ops);
+		if (ret) {
+			cnss_pr_err("Fail to register driver ops\n");
+			return ret;
+		}
+		ret = cnss_wlan_probe_driver();
+		if (ret) {
+			cnss_pr_err("Fail to register driver probe\n");
+			return ret;
+		}
 		return count;
 	}
 
