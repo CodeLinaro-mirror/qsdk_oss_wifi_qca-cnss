@@ -45,23 +45,23 @@ MODULE_PARM_DESC(pageable_dump_region,
  * the number of MSIs available for CE and 0xMH denotes the number of
  * MSIs available for MHI. Total number of MSIs will be DP + CE + MH
  */
-static int pci0_num_msi_bmap;
-module_param(pci0_num_msi_bmap, int, 0644);
+static unsigned int pci0_num_msi_bmap;
+module_param(pci0_num_msi_bmap, uint, 0644);
 MODULE_PARM_DESC(pci0_num_msi_bmap,
 		 "Bitmap to indicate number of available MSIs for PCI 0");
 
-static int pci1_num_msi_bmap;
-module_param(pci1_num_msi_bmap, int, 0644);
+static unsigned int pci1_num_msi_bmap;
+module_param(pci1_num_msi_bmap, uint, 0644);
 MODULE_PARM_DESC(pci1_num_msi_bmap,
 		 "Bitmap to indicate number of available MSIs for PCI 1");
 
-static int pci2_num_msi_bmap;
-module_param(pci2_num_msi_bmap, int, 0644);
+static unsigned int pci2_num_msi_bmap;
+module_param(pci2_num_msi_bmap, uint, 0644);
 MODULE_PARM_DESC(pci2_num_msi_bmap,
 		 "Bitmap to indicate number of available MSIs for PCI 2");
 
-static int pci3_num_msi_bmap;
-module_param(pci3_num_msi_bmap, int, 0644);
+static unsigned int pci3_num_msi_bmap;
+module_param(pci3_num_msi_bmap, uint, 0644);
 MODULE_PARM_DESC(pci3_num_msi_bmap,
 		 "Bitmap to indicate number of available MSIs for PCI 3");
 
@@ -82,11 +82,11 @@ MODULE_PARM_DESC(pci3_num_msi_bmap,
 #define MIN_MHI_VECTORS 3
 #define DEFAULT_MHI_VECTORS 3
 
-#define MAX_CE_VECTORS 5
+#define MAX_CE_VECTORS 8
 #define MIN_CE_VECTORS 1
 #define DEFAULT_CE_VECTORS MIN_CE_VECTORS
 
-#define MAX_DP_VECTORS 8
+#define MAX_DP_VECTORS 16
 #define MIN_DP_VECTORS 1
 #define DEFAULT_DP_VECTORS MIN_DP_VECTORS
 static void *mlo_global_mem;
@@ -4467,32 +4467,40 @@ static void pci_update_msi_vectors(struct cnss_msi_config *msi_config,
 static void pci_override_msi_assignment(struct cnss_plat_data *plat_priv,
 					struct cnss_msi_config *msi_config)
 {
-	int num_mhi_vectors;
-	int num_ce_vectors;
-	int num_dp_vectors;
-	int interrupt_bmap = 0;
+	u32 num_mhi_vectors;
+	u32 num_ce_vectors;
+	u32 num_dp_vectors;
+	u32 interrupt_bmap = 0;
+	u32 bmap = 0;
 	int vector_idx = 0;
+	struct device *dev = &plat_priv->plat_dev->dev;
 
 	if (plat_priv->qrtr_node_id == QCN9000_0 ||
 	    plat_priv->userpd_id == QCN6122_0 ||
 	    plat_priv->qrtr_node_id == QCN9224_0)
-		interrupt_bmap = pci0_num_msi_bmap;
+		bmap = pci0_num_msi_bmap;
 
 	if (plat_priv->qrtr_node_id == QCN9000_1 ||
 	    plat_priv->userpd_id == QCN6122_1 ||
 	    plat_priv->qrtr_node_id == QCN9224_1)
-		interrupt_bmap = pci1_num_msi_bmap;
+		bmap = pci1_num_msi_bmap;
 
 	if (plat_priv->qrtr_node_id == QCN9224_2 ||
 	    plat_priv->qrtr_node_id == QCN9000_2)
-		interrupt_bmap = pci2_num_msi_bmap;
+		bmap = pci2_num_msi_bmap;
 
 	if (plat_priv->qrtr_node_id == QCN9000_3 ||
 	    plat_priv->qrtr_node_id == QCN9224_3)
-		interrupt_bmap = pci3_num_msi_bmap;
+		bmap = pci3_num_msi_bmap;
 
-	if (!interrupt_bmap)
+	if (bmap) {
+		interrupt_bmap = bmap;
+	} else if (!of_property_read_u32(dev->of_node, "interrupt-bmap",
+		   &bmap)) {
+		interrupt_bmap = bmap;
+	} else {
 		return;
+	}
 
 	num_mhi_vectors = (interrupt_bmap & MSI_MHI_VECTOR_MASK) >>
 			   MSI_MHI_VECTOR_SHIFT;
@@ -4517,7 +4525,10 @@ static void pci_override_msi_assignment(struct cnss_plat_data *plat_priv,
 	pci_update_msi_vectors(msi_config, "CE", num_ce_vectors, &vector_idx);
 	pci_update_msi_vectors(msi_config, "DP", num_dp_vectors, &vector_idx);
 	msi_config->total_vectors = num_mhi_vectors + num_ce_vectors +
-				    num_dp_vectors;
+					num_dp_vectors;
+	/* Linux only allows number of interrupts to be a power of 2 */
+	msi_config->total_vectors =
+			1U << get_count_order(msi_config->total_vectors);
 }
 
 #ifdef CONFIG_CNSS2_QGIC2M
