@@ -150,6 +150,7 @@ struct cnss_pci_data {
 	struct delayed_work time_sync_work;
 	u8 disable_pc;
 	struct cnss_pci_debug_reg *debug_reg;
+	int os_legacy_irq;
 };
 
 struct paging_header {

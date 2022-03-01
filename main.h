@@ -534,6 +534,7 @@ struct cnss_plat_data {
 	struct platform_device *plat_dev;
 	struct platform_device_id *plat_dev_id;
 	void *pci_dev;
+	void *lvirq;
 	void *pci_dev_id;
 	void *bus_priv;
 	void *rproc_handle;
@@ -633,6 +634,7 @@ struct cnss_plat_data {
 	void __iomem *bar;
 	struct cnss_mlo_group_info *mlo_group_info;
 	struct cnss_mlo_chip_info *mlo_chip_info;
+	bool enable_intx;
 };
 
 #ifdef CONFIG_ARCH_QCOM
