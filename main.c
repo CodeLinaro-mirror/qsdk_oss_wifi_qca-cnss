@@ -5142,6 +5142,15 @@ static int cnss_remove(struct platform_device *plat_dev)
 {
 	struct cnss_plat_data *plat_priv = platform_get_drvdata(plat_dev);
 
+	/* For platforms that support dma_alloc, FW memory is allocated during
+	 * first wifi load and not freed during wifi down, so we are freeing
+	 * here during rmmod of cnss2
+	 */
+	if (plat_priv->dma_alloc_supported) {
+		cnss_bus_free_fw_mem(plat_priv);
+		cnss_bus_free_qdss_mem(plat_priv);
+	}
+
 	cnss_deinit_m3_dump_class();
 #ifdef CONFIG_CNSS2_QGIC2M
 	cnss_qgic2_disable_msi(plat_priv);
