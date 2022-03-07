@@ -4909,7 +4909,7 @@ void cnss_get_msi_address(struct device *dev, u32 *msi_addr_low,
 		*msi_addr_low = qgic2_msi->msi_gicm_addr_lo;
 		*msi_addr_high = qgic2_msi->msi_gicm_addr_hi;
 #endif
-	} else if (plat_priv->device_id == QCN9000_DEVICE_ID) {
+	} else {
 		pci_dev = to_pci_dev(dev);
 		pci_read_config_dword(pci_dev, pci_dev->msi_cap +
 				      PCI_MSI_ADDRESS_LO, msi_addr_low);
@@ -5006,17 +5006,19 @@ static int cnss_pci_enable_bus(struct cnss_pci_data *pci_priv)
 		goto release_region;
 	}
 
+	pci_set_master(pci_dev);
+
 	pci_priv->bar = pci_iomap(pci_dev, PCI_BAR_NUM, 0);
 	if (!pci_priv->bar) {
 		cnss_pr_err("Failed to do PCI IO map!\n");
 		ret = -EIO;
-		goto release_region;
+		goto clear_master;
 	}
-
-	pci_set_master(pci_dev);
 
 	return 0;
 
+clear_master:
+	pci_clear_master(pci_dev);
 release_region:
 	pci_release_region(pci_dev, PCI_BAR_NUM);
 disable_device:
@@ -6115,11 +6117,6 @@ int cnss_pci_probe(struct pci_dev *pci_dev,
 		goto disable_bus;
 	}
 
-	ret = cnss_pci_alloc_m3_mem(plat_priv);
-	if (ret) {
-		cnss_pr_err("%s: Failed to allocate M3 mem\n", __func__);
-		return ret;
-	}
 	return 0;
 
 disable_bus:
@@ -6269,6 +6266,12 @@ int cnss_pci_probe_basic(struct pci_dev *pci_dev,
 
 	cnss_pr_info("PCI device %pK probed successfully\n",
 		     plat_priv->pci_dev);
+
+	ret = cnss_pci_alloc_m3_mem(plat_priv);
+	if (ret) {
+		cnss_pr_err("%s: Failed to allocate M3 mem\n", __func__);
+		return ret;
+	}
 
 	return 0;
 }
