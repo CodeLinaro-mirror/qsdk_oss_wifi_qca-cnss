@@ -5461,6 +5461,9 @@ out:
 
 void cnss_pci_deinit(struct cnss_plat_data *plat_priv)
 {
-	pci_unregister_driver(&cnss_pci_driver);
-	cnss_pci_registered = false;
+	if (cnss_pci_registered) {
+
+		pci_unregister_driver(&cnss_pci_driver);
+		cnss_pci_registered = false;
+	}
 }
