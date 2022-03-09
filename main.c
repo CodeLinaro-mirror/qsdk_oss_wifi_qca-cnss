@@ -5250,8 +5250,16 @@ static int __init cnss_initialize(void)
 
 	cnss_debug_init();
 	ret = platform_driver_register(&cnss_platform_driver);
-	if (ret)
+	if (ret) {
 		cnss_debug_deinit();
+		return ret;
+	}
+	ret = cnss_legacy_irq_init();
+	if (ret) {
+		platform_driver_unregister(&cnss_platform_driver);
+		cnss_debug_deinit();
+		return ret;
+	}
 	cnss_bus_init_by_type(CNSS_BUS_PCI);
 	cnss_plat_ipc_qmi_svc_init();
 
@@ -5264,6 +5272,7 @@ static int __init cnss_initialize(void)
 static void __exit cnss_exit(void)
 {
 	cnss_plat_ipc_qmi_svc_exit();
+	cnss_legacy_irq_deinit();
 	platform_driver_unregister(&cnss_platform_driver);
 	cnss_debug_deinit();
 }

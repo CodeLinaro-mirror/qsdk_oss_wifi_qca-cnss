@@ -72,7 +72,6 @@ void cnss_pci_enable_legacy_intx(void __iomem *bar,
 	pci_intx(pci_dev, 1);
 
 }
-EXPORT_SYMBOL(cnss_pci_enable_legacy_intx);
 
 void set_lvirq_bar(void *lvirqptr, void *bar)
 {
@@ -80,7 +79,6 @@ void set_lvirq_bar(void *lvirqptr, void *bar)
 		(struct legacy2virtual_irqdata *)lvirqptr;
 	lvirq->regbase = bar;
 }
-EXPORT_SYMBOL(set_lvirq_bar);
 
 void clear_lvirq_bar(void *lvirqptr)
 {
@@ -88,7 +86,6 @@ void clear_lvirq_bar(void *lvirqptr)
 		(struct legacy2virtual_irqdata *)lvirqptr;
 	lvirq->regbase = NULL;
 }
-EXPORT_SYMBOL(clear_lvirq_bar);
 
 static inline int is_irq_set_in(int *isr, int bit)
 {
@@ -513,7 +510,6 @@ void *cnss_get_lvirq_by_qrtr_id(int qrtr_node_id)
 	}
 	return NULL;
 }
-EXPORT_SYMBOL(cnss_get_lvirq_by_qrtr_id);
 
 int qcn9224_register_legacy_irq(void *lvirqptr, int irq)
 {
@@ -531,7 +527,6 @@ int qcn9224_register_legacy_irq(void *lvirqptr, int irq)
 	return ret;
 
 }
-EXPORT_SYMBOL(qcn9224_register_legacy_irq);
 
 int qcn9224_unregister_legacy_irq(void *lvirqptr, int irq)
 {
@@ -545,7 +540,6 @@ int qcn9224_unregister_legacy_irq(void *lvirqptr, int irq)
 	}
 	return 0;
 }
-EXPORT_SYMBOL(qcn9224_unregister_legacy_irq);
 
 static int qcom_qcn9224_remove(struct platform_device *pdev)
 {
@@ -571,5 +565,12 @@ struct platform_driver qcom_qcn9224_driver = {
 	},
 };
 
-MODULE_DESCRIPTION("QCN9224 IRQ driver");
-MODULE_LICENSE("GPL v2");
+int cnss_legacy_irq_init(void)
+{
+	return platform_driver_register(&qcom_qcn9224_driver);
+}
+
+void cnss_legacy_irq_deinit(void)
+{
+	platform_driver_unregister(&qcom_qcn9224_driver);
+}

@@ -583,7 +583,7 @@ int cnss_set_bar_addr(struct device *dev, void __iomem *mem);
 int cnss_set_mlo_config(struct cnss_mlo_group_info *group_info, int num_groups);
 void cnss_print_mlo_config(void);
 void cnss_set_led_gpio(int led_gpio, unsigned int value, unsigned int flags);
-extern bool cnss_get_enable_intx(struct device *dev);
+bool cnss_get_enable_intx(struct device *dev);
 void *cnss_get_plat_dev_by_bus_dev(struct device *dev);
 #endif
 #endif /* _NET_CNSS2_H */
