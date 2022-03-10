@@ -2457,6 +2457,9 @@ static int cnss_qdss_trace_free_hdlr(struct cnss_plat_data *plat_priv)
 
 static int cnss_qdss_mem_ready_hdlr(struct cnss_plat_data *plat_priv)
 {
+	if (!plat_priv->qdss_support)
+		return 0;
+
 	return cnss_wlfw_send_qdss_trace_mode_req(plat_priv,
 						  QMI_WLFW_QDSS_TRACE_ON_V01,
 						  0);
