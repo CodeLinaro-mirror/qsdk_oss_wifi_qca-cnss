@@ -2010,13 +2010,6 @@ int cnss_wlfw_send_qdss_trace_mode_req(struct cnss_plat_data *plat_priv,
 	if (!plat_priv)
 		return -ENODEV;
 
-	if (!(test_bit(CNSS_FW_READY, &plat_priv->driver_state) &&
-	      (test_bit(CNSS_QMI_WLFW_CONNECTED, &plat_priv->driver_state)))) {
-		cnss_pr_err("Invalid state for QDSS Mode Message: 0x%lx\n",
-			    plat_priv->driver_state);
-		return -EINVAL;
-	}
-
 	req = kzalloc(sizeof(*req), GFP_KERNEL);
 	if (!req)
 		return -ENOMEM;
