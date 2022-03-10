@@ -755,7 +755,7 @@ void cnss_set_led_gpio(int led_gpio, unsigned int value, unsigned int flags)
 	    !gpiod_is_active_low(led_gpio_desc)) {
 		gpiod_toggle_active_low(led_gpio_desc);
 	}
-	gpiod_set_value_cansleep(led_gpio_desc, value);
+	gpiod_set_value(led_gpio_desc, value);
 }
 EXPORT_SYMBOL(cnss_set_led_gpio);
 
