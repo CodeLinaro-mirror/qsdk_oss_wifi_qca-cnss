@@ -91,8 +91,7 @@ MODULE_PARM_DESC(pci1_num_msi_bmap,
 #define MHI_MSI_NAME			"MHI"
 
 #define MAX_M3_FILE_NAME_LENGTH		15
-#define DEFAULT_M3_FILE_NAME		"qcn9000/m3.bin"
-#define DEFAULT_FW_FILE_NAME		"qcn9000/amss.bin"
+#define DEFAULT_M3_FILE_NAME		"m3.bin"
 #define FW_V2_FILE_NAME			"amss20.bin"
 #define FW_V2_NUMBER			2
 #define AFC_SLOT_SIZE			0x1000
@@ -3498,7 +3497,9 @@ int cnss_pci_load_m3(struct cnss_pci_data *pci_priv)
 			    m3_mem->va, &m3_mem->pa, SZ_512K);
 	}
 	CNSS_ASSERT(m3_mem->va);
+
 	snprintf(filename, sizeof(filename),
+		 "%s%s", cnss_get_fw_path(plat_priv),
 		 DEFAULT_M3_FILE_NAME);
 
 	ret = request_firmware(&fw_entry, filename,
@@ -3609,6 +3610,7 @@ static int cnss_pci_smmu_fault_handler(struct iommu_domain *domain,
 		return -ENODEV;
 	}
 
+	CNSS_ASSERT(0);
 	cnss_force_fw_assert(&pci_priv->pci_dev->dev);
 
 	/* IOMMU driver requires non-zero return value to print debug info. */
@@ -5166,8 +5168,6 @@ int cnss_pci_probe(struct pci_dev *pci_dev,
 	cnss_set_pci_priv(pci_dev, pci_priv);
 	plat_priv->device_id = pci_dev->device;
 	plat_priv->bus_priv = pci_priv;
-	snprintf(plat_priv->firmware_name, sizeof(plat_priv->firmware_name),
-		 DEFAULT_FW_FILE_NAME);
 
 	ret = cnss_register_ramdump(plat_priv);
 	if (ret)
@@ -5273,9 +5273,13 @@ void cnss_pci_remove(struct pci_dev *pci_dev)
 		return;
 	}
 
-	cnss_bus_free_fw_mem(plat_priv);
-	cnss_bus_free_qdss_mem(plat_priv);
-
+	/* For the platforms that support dma_alloc, FW mem free won't
+	 * happen during wifi down
+	 */
+	if (!plat_priv->dma_alloc_supported) {
+		cnss_bus_free_fw_mem(plat_priv);
+		cnss_bus_free_qdss_mem(plat_priv);
+	}
 	switch (pci_dev->device) {
 	case QCN9000_EMULATION_DEVICE_ID:
 	case QCN9000_DEVICE_ID:
