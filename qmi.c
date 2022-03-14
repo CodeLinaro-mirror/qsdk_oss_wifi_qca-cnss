@@ -39,6 +39,8 @@
 #define REGDB_FILE_NAME			"regdb.bin"
 #define DUMMY_BDF_FILE_NAME		"bdwlan.dmy"
 #define HDS_FILE_NAME			"hds.bin"
+#define FW_INI_CFG_FILE_NAME		"fw_ini_cfg.bin"
+#define FW_INI_FILE_NAME_LEN		100
 
 #define DEFAULT_CAL_FILE_NAME		"caldata.bin"
 #define CAL_FILE_NAME_PREFIX		"caldata.b"
@@ -242,6 +244,132 @@ qmi_registered:
 	return ret;
 }
 
+static int cnss_wlfw_ini_file_send_sync(struct cnss_plat_data *plat_priv,
+					enum wlfw_ini_file_type_v01 file_type)
+{
+	struct wlfw_ini_file_download_req_msg_v01 *req;
+	struct wlfw_ini_file_download_resp_msg_v01 *resp;
+	struct qmi_txn txn;
+	int ret = 0;
+	int resp_error_msg = 0;
+	const struct firmware *fw;
+	char filename[FW_INI_FILE_NAME_LEN] = {0};
+	const u8 *temp;
+	unsigned int remaining;
+
+	cnss_pr_info("FW File %u download\n", file_type);
+
+	req = kzalloc(sizeof(*req), GFP_KERNEL);
+	if (!req)
+		return -ENOMEM;
+
+	resp = kzalloc(sizeof(*resp), GFP_KERNEL);
+	if (!resp) {
+		kfree(req);
+		return -ENOMEM;
+	}
+
+	switch (file_type) {
+	case WLFW_INI_CFG_FILE_V01:
+		snprintf(filename, sizeof(filename), "%s" FW_INI_CFG_FILE_NAME,
+			 cnss_get_fw_path(plat_priv));
+		break;
+	default:
+		cnss_pr_err("Invalid file type: %u\n", file_type);
+		ret = -EINVAL;
+		goto err;
+	}
+
+	/* Fetch the file */
+	ret = request_firmware_direct(&fw, filename, &plat_priv->plat_dev->dev);
+	if (ret) {
+		cnss_pr_err("Failed to get FW file %s (%d)",
+			    filename, ret);
+		goto err;
+	}
+
+	temp = fw->data;
+	remaining = fw->size;
+	qmi_record(plat_priv->wlfw_service_instance_id,
+		   QMI_WLFW_INI_FILE_DOWNLOAD_REQ_V01, ret, resp_error_msg);
+
+	while (remaining) {
+		req->file_type_valid = 1;
+		req->file_type = file_type;
+		req->total_size_valid = 1;
+		req->total_size = remaining;
+		req->seg_id_valid = 1;
+		req->data_valid = 1;
+		req->end_valid = 1;
+
+		if (remaining > QMI_WLFW_MAX_DATA_SIZE_V01) {
+			req->data_len = QMI_WLFW_MAX_DATA_SIZE_V01;
+		} else {
+			req->data_len = remaining;
+			req->end = 1;
+		}
+
+		memcpy(req->data, temp, req->data_len);
+
+		ret = qmi_txn_init(&plat_priv->qmi_wlfw, &txn,
+				   wlfw_ini_file_download_resp_msg_v01_ei,
+				   resp);
+		if (ret < 0) {
+			cnss_pr_err("Failed to initialize txn for FW file download request, err: %d\n",
+				    ret);
+			goto err;
+		}
+
+		ret = qmi_send_request
+			(&plat_priv->qmi_wlfw, NULL, &txn,
+			 QMI_WLFW_INI_FILE_DOWNLOAD_REQ_V01,
+			 WLFW_INI_FILE_DOWNLOAD_REQ_MSG_V01_MAX_MSG_LEN,
+			 wlfw_ini_file_download_req_msg_v01_ei, req);
+		if (ret < 0) {
+			qmi_txn_cancel(&txn);
+			cnss_pr_err("Failed to send FW File download request, err: %d\n",
+				    ret);
+			goto err;
+		}
+
+		ret = qmi_txn_wait(&txn, QMI_WLFW_TIMEOUT_JF);
+		if (ret < 0) {
+			cnss_pr_err("Failed to wait for response of FW File download request, err: %d\n",
+				    ret);
+			goto err;
+		}
+
+		if (resp->resp.result != QMI_RESULT_SUCCESS_V01) {
+			cnss_pr_err("FW file download request failed, result: %d, err: %d\n",
+				    resp->resp.result, resp->resp.error);
+			ret = -resp->resp.result;
+			resp_error_msg = resp->resp.error;
+			goto err;
+		}
+
+		remaining -= req->data_len;
+		temp += req->data_len;
+		req->seg_id++;
+	}
+
+	release_firmware(fw);
+
+	qmi_record(plat_priv->wlfw_service_instance_id,
+		   QMI_WLFW_INI_FILE_DOWNLOAD_REQ_V01, ret, resp_error_msg);
+	kfree(req);
+	kfree(resp);
+	return 0;
+
+err:
+	kfree(req);
+	kfree(resp);
+	qmi_record(plat_priv->wlfw_service_instance_id,
+		   QMI_WLFW_INI_FILE_DOWNLOAD_REQ_V01, ret, resp_error_msg);
+	CNSS_ASSERT(0);
+
+	return ret;
+}
+
 static int cnss_wlfw_host_cap_send_sync(struct cnss_plat_data *plat_priv)
 {
 	struct wlfw_host_cap_req_msg_v01 *req;
@@ -254,6 +382,8 @@ static int cnss_wlfw_host_cap_send_sync(struct cnss_plat_data *plat_priv)
 	const char *model = NULL;
 	struct device_node *root;
 	struct device *dev = &plat_priv->plat_dev->dev;
+	const struct firmware *fw;
+	char filename[FW_INI_FILE_NAME_LEN] = {0};
 
 	cnss_pr_dbg("Sending host capability message, state: 0x%lx\n",
 		    plat_priv->driver_state);
@@ -269,6 +399,19 @@ static int cnss_wlfw_host_cap_send_sync(struct cnss_plat_data *plat_priv)
 	}
 	req->num_clients_valid = 1;
 	req->num_clients = 1;
+
+	/* Check whether FW INI CFG file is present or not */
+	snprintf(filename, sizeof(filename), "%s" FW_INI_CFG_FILE_NAME,
+		 cnss_get_fw_path(plat_priv));
+	ret = request_firmware_direct(&fw, filename, &plat_priv->plat_dev->dev);
+	if (!ret) {
+		/* File is present, set the corresponding flag */
+		cnss_pr_info("FW INI CFG file %s is present\n", filename);
+		req->fw_ini_cfg_support_valid = 1;
+		req->fw_ini_cfg_support = 1;
+	}
+
+	plat_priv->fw_ini_cfg_support = !!req->fw_ini_cfg_support;
 
 	/* Check if cnss-daemon is connected to cnss2 QMI service.
 	 * If so, send number of clients to FW as 1. Else, check
@@ -3232,6 +3375,13 @@ int cnss_wlfw_server_arrive(struct cnss_plat_data *plat_priv, void *data)
 	if (ret < 0)
 		goto out;
 
+	/* Send FW INI CFG QMI message only if the file is present */
+	if (plat_priv->fw_ini_cfg_support) {
+		ret = cnss_wlfw_ini_file_send_sync(plat_priv,
+						   WLFW_INI_CFG_FILE_V01);
+		if (ret < 0)
+			goto out;
+	}
 	return 0;
 
 out:

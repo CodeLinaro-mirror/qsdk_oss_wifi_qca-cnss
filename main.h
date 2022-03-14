@@ -635,6 +635,7 @@ struct cnss_plat_data {
 	struct cnss_mlo_group_info *mlo_group_info;
 	struct cnss_mlo_chip_info *mlo_chip_info;
 	bool enable_intx;
+	bool fw_ini_cfg_support;
 };
 
 #ifdef CONFIG_ARCH_QCOM
