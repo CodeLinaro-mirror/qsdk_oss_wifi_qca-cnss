@@ -34,6 +34,7 @@
 #include "debug.h"
 #include "pci.h"
 #include "bus.h"
+#include "legacyirq/legacyirq.h"
 
 static int pageable_dump_region;
 module_param(pageable_dump_region, int, 0644);
@@ -67,6 +68,14 @@ MODULE_PARM_DESC(pci3_num_msi_bmap,
 
 #define PCI_BAR_WINDOW0_BASE	0x1E00000
 #define PCI_BAR_WINDOW0_END	0x1E7FFFC
+
+bool cnss_get_enable_intx(struct device *dev)
+{
+	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
+
+	return plat_priv->enable_intx;
+}
+EXPORT_SYMBOL(cnss_get_enable_intx);
 
 #define MSI_MHI_VECTOR_MASK 0xFF
 #define MSI_MHI_VECTOR_SHIFT 0
@@ -5026,6 +5035,9 @@ static int cnss_pci_enable_bus(struct cnss_pci_data *pci_priv)
 		goto clear_master;
 	}
 
+	if (plat_priv->enable_intx)
+		set_lvirq_bar(plat_priv->lvirq, pci_priv->bar);
+
 	return 0;
 
 clear_master:
@@ -5097,6 +5109,7 @@ static void cnss_reset_mhi_state(struct cnss_pci_data *pci_priv)
 static void cnss_pci_disable_bus(struct cnss_pci_data *pci_priv)
 {
 	struct pci_dev *pci_dev = pci_priv->pci_dev;
+	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 
 	/* Call global reset here */
 	cnss_pci_global_reset(pci_priv);
@@ -5113,6 +5126,8 @@ static void cnss_pci_disable_bus(struct cnss_pci_data *pci_priv)
 		pci_iounmap(pci_dev, pci_priv->bar);
 		pci_priv->bar = NULL;
 	}
+	if (plat_priv->enable_intx)
+		clear_lvirq_bar(plat_priv->lvirq);
 
 	pci_clear_master(pci_dev);
 	pci_release_region(pci_dev, PCI_BAR_NUM);
@@ -5766,27 +5781,42 @@ static void cnss_mhi_write_reg(struct mhi_controller *mhi_cntrl,
 
 static int cnss_pci_get_mhi_msi(struct cnss_pci_data *pci_priv)
 {
-	int ret, num_vectors, i;
+	int ret = 0, num_vectors, i;
 	u32 user_base_data, base_vector;
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 	int *irq;
 
-	ret = cnss_get_user_msi_assignment(&pci_priv->pci_dev->dev,
-					   MHI_MSI_NAME, &num_vectors,
-					   &user_base_data, &base_vector);
-	if (ret)
-		return ret;
+	num_vectors = 3;
+	if (!plat_priv->enable_intx) {
+		ret = cnss_get_user_msi_assignment(&pci_priv->pci_dev->dev,
+						   MHI_MSI_NAME,
+						   &num_vectors,
+						   &user_base_data,
+						   &base_vector);
+		if (ret)
+			return ret;
 
-	cnss_pr_dbg("Number of assigned MSI for MHI is %d, base vector is %d\n",
-		    num_vectors, base_vector);
+		cnss_pr_dbg("Number of assigned MSI for MHI is %d, base vector is %d\n",
+				num_vectors, base_vector);
+	}
 
 	irq = kcalloc(num_vectors, sizeof(int), GFP_KERNEL);
 	if (!irq)
 		return -ENOMEM;
 
-	for (i = 0; i < num_vectors; i++)
-		irq[i] = cnss_get_msi_irq(&pci_priv->pci_dev->dev,
-					  base_vector + i);
+	for (i = 0; i < num_vectors; i++) {
+		if (!plat_priv->enable_intx) {
+			irq[i] = cnss_get_msi_irq(&pci_priv->pci_dev->dev,
+						  base_vector + i);
+		} else {
+			char interrupt_name[5];
+
+			snprintf(interrupt_name, sizeof(interrupt_name),
+				 "mhi%d", i);
+			irq[i] = platform_get_irq_byname(plat_priv->plat_dev,
+							 interrupt_name);
+		}
+	}
 
 	pci_priv->mhi_ctrl->irq = irq;
 #ifdef CONFIG_CNSS2_KERNEL_MSM
@@ -6057,6 +6087,22 @@ int cnss_pci_probe(struct pci_dev *pci_dev,
 	plat_priv->device_id = pci_dev->device;
 	plat_priv->bus_priv = pci_priv;
 
+	if (plat_priv->enable_intx) {
+		pci_priv->os_legacy_irq =
+			platform_get_irq_byname(plat_priv->plat_dev, "inta");
+		if (pci_priv->os_legacy_irq < 0) {
+			pr_err("ERR: error identifying legacy irq ERR %d\n",
+			       pci_priv->os_legacy_irq);
+			return -EINVAL;
+		}
+
+		if (qcn9224_register_legacy_irq(plat_priv->lvirq,
+						pci_priv->os_legacy_irq)) {
+			pr_err("ERR: error registering legacy irq\n");
+			return -EINVAL;
+		}
+	}
+
 	ret = cnss_register_ramdump(plat_priv);
 	if (ret)
 		goto unregister_subsys;
@@ -6104,9 +6150,13 @@ int cnss_pci_probe(struct pci_dev *pci_dev,
 		INIT_DELAYED_WORK(&pci_priv->time_sync_work,
 				  cnss_pci_time_sync_work_hdlr);
 
-		ret = cnss_pci_enable_msi(pci_priv);
-		if (ret)
-			goto disable_bus;
+		if (!plat_priv->enable_intx) {
+			ret = cnss_pci_enable_msi(pci_priv);
+			if (ret)
+				goto disable_bus;
+		} else {
+			cnss_pci_enable_legacy_intx(pci_priv->bar, pci_dev);
+		}
 		ret = cnss_pci_register_mhi(pci_priv);
 		if (ret) {
 			cnss_pci_disable_msi(pci_priv);
@@ -6187,6 +6237,10 @@ void cnss_pci_remove(struct pci_dev *pci_dev)
 	pci_load_and_free_saved_state(pci_dev, &pci_priv->saved_state);
 
 	cnss_pci_disable_bus(pci_priv);
+	if (plat_priv->enable_intx) {
+		qcn9224_unregister_legacy_irq(plat_priv->lvirq,
+					      pci_priv->os_legacy_irq);
+	}
 #ifdef CONFIG_CNSS2_PCI_MSM
 	cnss_dereg_pci_event(pci_priv);
 #endif

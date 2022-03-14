@@ -13,6 +13,7 @@ ipq_cnss2-objs += bus.o
 ipq_cnss2-objs += genl.o
 ipq_cnss2-objs += cnss_plat_ipc_qmi.o
 ipq_cnss2-objs += cnss_plat_ipc_service_v01.o
+ipq_cnss2-objs += legacyirq/legacyirq.o
 
 CNSS2_INCLUDE = -I$(obj)
 CNSS2_INCLUDE += -I$(obj)/include
