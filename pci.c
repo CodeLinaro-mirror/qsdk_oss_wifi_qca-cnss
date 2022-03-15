@@ -73,6 +73,9 @@ bool cnss_get_enable_intx(struct device *dev)
 {
 	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
 
+	if (!plat_priv)
+		return false;
+
 	return plat_priv->enable_intx;
 }
 EXPORT_SYMBOL(cnss_get_enable_intx);
