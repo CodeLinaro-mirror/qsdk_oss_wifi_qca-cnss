@@ -6350,8 +6350,15 @@ void cnss_pci_remove_basic(struct pci_dev *pci_dev)
 	ret = of_property_read_u32(pci_dev->dev.of_node,
 				   "qrtr_instance_id", &qrtr_instance);
 	if (ret) {
-		cnss_pr_err("%s: Failed to get Instance ID\n", __func__);
-		return;
+		/* Temporarily look for qrtr_node_id as fallback for QCN9224
+		 * till we have a better way to link pci_dev to plat_priv
+		 */
+		ret = of_property_read_u32(pci_dev->dev.of_node,
+					   "qrtr_node_id", &qrtr_instance);
+		if (ret) {
+			pr_err("Failed to get Instance ID %d\n", ret);
+			return;
+		}
 	}
 
 	plat_priv = cnss_get_plat_priv_by_qrtr_node_id(qrtr_instance);
