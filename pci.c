@@ -2094,7 +2094,7 @@ static int cnss_qcn9000_shutdown(struct cnss_pci_data *pci_priv)
 		return ret;
 	}
 
-	cnss_pr_info("Shutting down QCN9000\n");
+	cnss_pr_info("Shutting down %s\n", plat_priv->device_name);
 	cnss_pci_pm_runtime_resume(pci_priv);
 
 	cnss_request_bus_bandwidth(&plat_priv->plat_dev->dev,
