@@ -540,6 +540,7 @@ struct cnss_plat_data {
 	void *rproc_handle;
 	int qrtr_node_id;
 	int userpd_id;
+	int pci_slot_id;
 	char device_name[CNSS_DEVICE_NAME_MAX_LEN];
 	struct cnss_vreg_info *vreg_info;
 	enum cnss_dev_bus_type bus_type;

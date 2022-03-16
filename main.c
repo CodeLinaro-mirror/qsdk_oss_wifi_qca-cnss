@@ -3153,43 +3153,11 @@ static void get_updated_qdss_trace_filename(struct cnss_plat_data *plat_priv,
 		strlcpy(file_prefix, raw_file_name,
 			(file_suffix - &raw_file_name[0]) + 1);
 
-		if (plat_priv->device_id == QCN6122_DEVICE_ID)
-			snprintf(file_name, size,
-				 "%s_qcn6122_%d%s", file_prefix,
-				 (plat_priv->userpd_id - QCN6122_0),
-				 file_suffix);
-
-		if (plat_priv->device_id == QCN9000_DEVICE_ID)
-			snprintf(file_name, size,
-				 "%s_qcn9000_pci%d%s", file_prefix,
-				 (plat_priv->wlfw_service_instance_id -
-				 QCN9000_NODE_ID_BASE), file_suffix);
-
-		if (plat_priv->device_id == QCN9224_DEVICE_ID)
-			snprintf(file_name, size,
-				 "%s_qcn9224_pci%d%s", file_prefix,
-				 (plat_priv->wlfw_service_instance_id -
-				 QCN9224_NODE_ID_BASE), file_suffix);
+		snprintf(file_name, size, "%s_%s%s",
+			 file_prefix, plat_priv->device_name, file_suffix);
 	} else {
-		if (plat_priv->device_id == QCN6122_DEVICE_ID)
-			snprintf(file_name, size,
-				 "%s_qcn6122_%d",
-				 raw_file_name,
-				 (plat_priv->userpd_id - QCN6122_0));
-
-		if (plat_priv->device_id == QCN9000_DEVICE_ID)
-			snprintf(file_name, size,
-				 "%s_qcn9000_pci%d",
-				 raw_file_name,
-				 (plat_priv->wlfw_service_instance_id -
-				 QCN9000_NODE_ID_BASE));
-
-		if (plat_priv->device_id == QCN9224_DEVICE_ID)
-			snprintf(file_name, size,
-				 "%s_qcn9224_pci%d",
-				 raw_file_name,
-				 (plat_priv->wlfw_service_instance_id -
-				 QCN9224_NODE_ID_BASE));
+		snprintf(file_name, size, "%s_%s",
+			 raw_file_name, plat_priv->device_name);
 	}
 }
 
@@ -3594,16 +3562,9 @@ static int cnss_m3_dump_upload_req_hdlr(struct cnss_plat_data *plat_priv,
 		    m3_dump_data->pdev_id, m3_dump_data->dump_addr,
 		    m3_dump_data->size);
 
-	if (plat_priv->device_id == QCN9000_DEVICE_ID)
+	if (plat_priv->bus_type == CNSS_BUS_PCI)
 		snprintf(dump_file_name, sizeof(dump_file_name),
-			 "m3_dump_qcn9000_pci%d.bin",
-			 (plat_priv->wlfw_service_instance_id -
-			  QCN9000_NODE_ID_BASE));
-	else if (plat_priv->device_id == QCN9224_DEVICE_ID)
-		snprintf(dump_file_name, sizeof(dump_file_name),
-			 "m3_dump_qcn9224_pci%d.bin",
-			 (plat_priv->wlfw_service_instance_id -
-			  QCN9224_NODE_ID_BASE));
+			 "m3_dump_%s.bin", plat_priv->device_name);
 	else
 		snprintf(dump_file_name, sizeof(dump_file_name),
 			 "m3_dump_wifi%d.bin", m3_dump_data->pdev_id);
@@ -4548,20 +4509,15 @@ cnss_set_mod_param_feature_support(struct cnss_plat_data *plat_priv,
 
 static int cnss_set_device_name(struct cnss_plat_data *plat_priv)
 {
-	u8 index = 0;
 
 	switch (plat_priv->device_id) {
 	case QCN9000_DEVICE_ID:
-		index = plat_priv->wlfw_service_instance_id -
-				QCN9000_NODE_ID_BASE;
 		snprintf(plat_priv->device_name, sizeof(plat_priv->device_name),
-			 "QCN9000_PCI%d", index);
+			 "QCN9000_PCI%d", plat_priv->pci_slot_id);
 		break;
 	case QCN9224_DEVICE_ID:
-		index = plat_priv->wlfw_service_instance_id -
-				QCN9224_NODE_ID_BASE;
 		snprintf(plat_priv->device_name, sizeof(plat_priv->device_name),
-			 "QCN9224_PCI%d", index);
+			 "QCN9224_PCI%d", plat_priv->pci_slot_id);
 		break;
 	case QCA8074_DEVICE_ID:
 		snprintf(plat_priv->device_name, sizeof(plat_priv->device_name),
@@ -4580,10 +4536,8 @@ static int cnss_set_device_name(struct cnss_plat_data *plat_priv)
 			 "QCA5018");
 		break;
 	case QCN6122_DEVICE_ID:
-		index = plat_priv->wlfw_service_instance_id -
-						WLFW_SERVICE_INS_ID_V01_QCN6122;
 		snprintf(plat_priv->device_name, sizeof(plat_priv->device_name),
-			 "QCN6122_%d", index);
+			 "QCN6122_%d", plat_priv->userpd_id);
 		break;
 	case QCA9574_DEVICE_ID:
 		snprintf(plat_priv->device_name, sizeof(plat_priv->device_name),
@@ -4993,7 +4947,10 @@ static int cnss_probe(struct platform_device *plat_dev)
 		else
 			node_id_base = QCN9000_NODE_ID_BASE;
 
-		switch (plat_priv->wlfw_service_instance_id - node_id_base) {
+		plat_priv->pci_slot_id = plat_priv->wlfw_service_instance_id -
+						node_id_base;
+
+		switch (plat_priv->pci_slot_id) {
 		case 0:
 			plat_priv->board_info.board_id_override = bdf_pci0;
 			break;
