@@ -912,7 +912,7 @@ static int cnss_wlfw_load_bdf(struct wlfw_bdf_download_req_msg_v01 *req,
 		return -EINVAL;
 	}
 
-	ret = request_firmware(&fw, filename, &plat_priv->plat_dev->dev);
+	ret = request_firmware_direct(&fw, filename, &plat_priv->plat_dev->dev);
 	if (ret) {
 		cnss_pr_err("Failed to get BDF file %s (%d)", filename, ret);
 		return ret;
@@ -1134,7 +1134,8 @@ int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv,
 		goto out;
 	}
 
-	ret = request_firmware(&fw_entry, filename, &plat_priv->plat_dev->dev);
+	ret = request_firmware_direct(&fw_entry, filename,
+				      &plat_priv->plat_dev->dev);
 	if (ret) {
 		if (bdf_type == CNSS_CALDATA_WIN) {
 			cnss_pr_warn("Caldata not present. Skipping caldata download: %s\n",
