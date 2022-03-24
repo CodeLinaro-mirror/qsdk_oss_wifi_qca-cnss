@@ -2335,7 +2335,15 @@ err_req_fw:
 	kfree(req);
 	kfree(resp);
 
-	if (ret < 0)
+	/* If cnsscli command is issued to start QDSS when wifi down is in
+	 * progress, there is a chance QMI message might fail and ECONNRESET
+	 * would be returned. Also, if cnsscli command is issued before VAPs
+	 * are created for AHB targets, FW would return INCOMPATIBLE state
+	 * error and sometimes leads to resp wait timeout error.
+	 * Avoiding assert for all these cases.
+	 */
+	if (ret < 0 && ret != -ECONNRESET && ret != -ETIMEDOUT &&
+	    resp_error_msg != QMI_ERR_INCOMPATIBLE_STATE_V01)
 		CNSS_ASSERT(0);
 
 	return ret;
@@ -2421,7 +2429,17 @@ out:
 
 	kfree(resp);
 	kfree(req);
-	if (ret < 0)
+
+	/* If cnsscli command is issued to start QDSS when wifi down is in
+	 * progress, there is a chance QMI message might fail and ECONNRESET
+	 * would be returned. Also, if cnsscli command is issued before VAPs
+	 * are created for AHB targets, FW would return INCOMPATIBLE state
+	 * error and sometimes leads to resp wait timeout error.
+	 * Avoiding assert for all these cases.
+	 */
+
+	if (ret < 0 && ret != -ECONNRESET && ret != -ETIMEDOUT &&
+	    resp_error_msg != QMI_ERR_INCOMPATIBLE_STATE_V01)
 		CNSS_ASSERT(0);
 
 	if (mode == QMI_WLFW_QDSS_TRACE_ON_V01)
