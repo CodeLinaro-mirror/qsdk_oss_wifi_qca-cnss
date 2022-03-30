@@ -4078,6 +4078,9 @@ int cnss_pci_force_fw_assert_hdlr(struct cnss_pci_data *pci_priv)
 	if (!plat_priv)
 		return -ENODEV;
 
+	cnss_fatal_err("Triggering CNSS_ASSERT\n");
+	CNSS_ASSERT(0);
+
 	cnss_auto_resume(&pci_priv->pci_dev->dev);
 	cnss_pci_dump_shadow_reg(pci_priv);
 
@@ -4126,7 +4129,6 @@ static int cnss_pci_smmu_fault_handler(struct iommu_domain *domain,
 		return -ENODEV;
 	}
 
-	CNSS_ASSERT(0);
 	cnss_force_fw_assert(&pci_priv->pci_dev->dev);
 
 	/* IOMMU driver requires non-zero return value to print debug info. */
