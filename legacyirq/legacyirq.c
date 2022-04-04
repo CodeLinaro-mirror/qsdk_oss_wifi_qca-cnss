@@ -475,11 +475,11 @@ static int qcom_qcn9224_probe(struct platform_device *pdev)
 	lvirq->qrtr_node_id = node_id;
 
 	snprintf(name, sizeof(name), "qcnvic%d", node_id - QCN9224_0);
-	irq_root_dentry = debugfs_create_dir(name, 0);
-	if (IS_ERR(irq_root_dentry))
-		ret = PTR_ERR(irq_root_dentry);
+	lvirq->irq_root_dentry = debugfs_create_dir(name, 0);
+	if (IS_ERR(lvirq->irq_root_dentry))
+		ret = PTR_ERR(lvirq->irq_root_dentry);
 
-	debugfs_create_file("statdebug", 0600, irq_root_dentry, lvirq,
+	debugfs_create_file("statdebug", 0600, lvirq->irq_root_dentry, lvirq,
 			    &cnss_statdebug_debug_fops);
 
 	for_each_available_child_of_node(pdev->dev.of_node, n) {
@@ -550,7 +550,10 @@ static int qcom_qcn9224_remove(struct platform_device *pdev)
 	disable_irq(lvirq->pci_legacy_irq);
 	free_irq(lvirq->pci_legacy_irq, lvirq);
 	irq_domain_remove(lvirq->domain);
-	debugfs_remove_recursive(irq_root_dentry);
+	if (lvirq->irq_root_dentry) {
+		debugfs_remove_recursive(lvirq->irq_root_dentry);
+		lvirq->irq_root_dentry = NULL;
+	}
 	kfree(lvirq);
 	lvirq = NULL;
 	return 0;

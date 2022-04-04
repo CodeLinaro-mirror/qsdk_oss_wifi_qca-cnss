@@ -538,6 +538,7 @@ struct legacy2virtual_irqdata {
 	struct list_head node;
 	const char *name;
 	struct irq_domain *domain;
+	struct dentry *irq_root_dentry;
 	int qrtr_node_id;
 	DECLARE_BITMAP(irq_enabled, INTX_MAX_INTERRUPTS);
 	DECLARE_BITMAP(irq_pending, INTX_MAX_INTERRUPTS);
@@ -553,7 +554,6 @@ struct legacy2virtual_irqdata {
 	int executiontime[INTX_MAX_INTERRUPTS][INTX_MAX_BUCKET];
 };
 
-struct dentry *irq_root_dentry;
 struct legacy2virtual_irqdata *lvirq_list[4];
 static int lvirq_index;
 
