@@ -36,7 +36,8 @@
 #define BIN_BDF_FILE_NAME_PREFIX	"bdwlan.b"
 #define DEFAULT_BDF_FILE_NAME		"bdwlan.bin"
 #define BDF_WIN_FILE_NAME_PREFIX	"bdwlan.b"
-#define REGDB_FILE_NAME			"regdb.bin"
+#define DEFAULT_REGDB_FILE_NAME		"regdb.bin"
+#define REGDB_WIN_FILE_NAME_PREFIX	"regdb.b"
 #define DUMMY_BDF_FILE_NAME		"bdwlan.dmy"
 #define HDS_FILE_NAME			"hds.bin"
 #define FW_INI_CFG_FILE_NAME		"fw_ini_cfg.bin"
@@ -904,7 +905,8 @@ static int cnss_wlfw_load_bdf(struct wlfw_bdf_download_req_msg_v01 *req,
 		break;
 	case BDF_TYPE_REGDB:
 		snprintf(filename, sizeof(filename),
-			 "%s" REGDB_FILE_NAME, cnss_get_fw_path(plat_priv));
+			 "%s" DEFAULT_REGDB_FILE_NAME,
+			 cnss_get_fw_path(plat_priv));
 		break;
 	default:
 		return -EINVAL;
@@ -974,9 +976,7 @@ int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv,
 	char filename[MAX_BDF_FILE_NAME];
 	const struct firmware *fw_entry = NULL;
 	const u8 *temp;
-	const char *board_id_str;
-	struct device *dev;
-	unsigned int remaining, id = 0;
+	unsigned int remaining;
 	struct wlfw_bdf_download_req_msg_v01 *req;
 	struct wlfw_bdf_download_resp_msg_v01 *resp;
 	int ret = 0;
@@ -1034,21 +1034,6 @@ int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv,
 		remaining = MAX_BDF_FILE_NAME;
 		goto bypass_bdf;
 	case CNSS_BDF_WIN:
-		if (plat_priv->bus_type == CNSS_BUS_AHB)
-			board_id_str = "qcom,board_id";
-		else
-			board_id_str = "board_id";
-
-		if (!plat_priv->board_info.board_id_override) {
-			dev = &plat_priv->plat_dev->dev;
-			if (!of_property_read_u32(dev->of_node, board_id_str,
-						  &id)) {
-				plat_priv->board_info.board_id_override = id;
-			} else {
-				cnss_pr_info("No board_id entry in device tree\n");
-			}
-		}
-
 		if (plat_priv->board_info.board_id_override)
 			snprintf(filename, sizeof(filename),
 				 "%s" BDF_WIN_FILE_NAME_PREFIX "%02x",
@@ -1108,8 +1093,34 @@ int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv,
 		break;
 	case CNSS_BDF_REGDB:
 		fw_bdf_type = BDF_TYPE_REGDB;
-		snprintf(filename, sizeof(filename),
-			 "%s" REGDB_FILE_NAME, cnss_get_fw_path(plat_priv));
+
+		if (plat_priv->board_info.board_id_override) {
+			snprintf(filename, sizeof(filename),
+				 "%s" REGDB_WIN_FILE_NAME_PREFIX "%02x",
+				 cnss_get_fw_path(plat_priv),
+				 plat_priv->board_info.board_id_override);
+		} else {
+			/* If plat_priv->board_info.board_id is 0xFF,
+			 * regdb.bff will not be found and eventually,
+			 * cnss2 would consider regdb.bin in this case
+			 * as well, hence there is no need for a separate
+			 * check for plat_priv->board_info.board_id as 0xFF.
+			 */
+			snprintf(filename, sizeof(filename),
+				 "%s" REGDB_WIN_FILE_NAME_PREFIX "%02x",
+				 cnss_get_fw_path(plat_priv),
+				 plat_priv->board_info.board_id);
+		}
+		/* If the regdb corresponding to board ID is not found,
+		 * download regdb.bin which is the default file.
+		 */
+		ret = request_firmware_direct(&fw_entry, filename,
+					      &plat_priv->plat_dev->dev);
+		if (ret) {
+			snprintf(filename, sizeof(filename),
+				 "%s" DEFAULT_REGDB_FILE_NAME,
+				 cnss_get_fw_path(plat_priv));
+		}
 		break;
 	case CNSS_BDF_HDS:
 		fw_bdf_type = BDF_TYPE_HDS;
