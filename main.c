@@ -4809,6 +4809,8 @@ static int cnss_probe(struct platform_device *plat_dev)
 	u32 node_id = 0, userpd_id = 0, node_id_base;
 	const char *firmware_name = NULL;
 	u32 firmware_name_len;
+	unsigned int id = 0;
+	const char *board_id_str;
 #ifdef CONFIG_CNSS2_KERNEL_IPQ
 	const int *soc_version;
 #endif
@@ -5026,9 +5028,30 @@ static int cnss_probe(struct platform_device *plat_dev)
 		return -ENODEV;
 	}
 
+	/* Update board_id_override with DTS board_id in case
+	 * bootargs didn't specify any.
+	 */
+
+	if (plat_priv->bus_type == CNSS_BUS_AHB)
+		board_id_str = "qcom,board_id";
+	else
+		board_id_str = "board_id";
+
+	if (!plat_priv->board_info.board_id_override) {
+		if (!of_property_read_u32(plat_dev->dev.of_node, board_id_str,
+					  &id))
+			plat_priv->board_info.board_id_override = id;
+		else
+			cnss_pr_info("No board_id entry in device tree\n");
+	}
+
 	ret = cnss_set_device_name(plat_priv);
 	if (ret)
 		return -ENODEV;
+
+	cnss_pr_dbg("%s: board_id_override 0x%x for device %s\n", __func__,
+		    plat_priv->board_info.board_id_override,
+		    plat_priv->device_name);
 
 #ifdef CONFIG_CNSS2_KERNEL_RPROC_FRAMEWORK
 	ret = cnss_rproc_register(plat_priv);
