@@ -801,8 +801,10 @@ int cnss_wlfw_tgt_cap_send_sync(struct cnss_plat_data *plat_priv)
 
 	if (resp->bdf_dnld_method_valid)
 		plat_priv->bdf_dnld_method = resp->bdf_dnld_method;
+	if (resp->regdb_mandatory_valid)
+		plat_priv->regdb_mandatory = !!resp->regdb_mandatory;
 
-	cnss_pr_info("Target capability: chip_id: 0x%x, chip_family: 0x%x, board_id: 0x%x, soc_id: 0x%x, fw_version: 0x%x, fw_build_timestamp: %s, otp_version: 0x%x eeprom_caldata_read_timeout %ds bdf_dnld_method %d\n",
+	cnss_pr_info("Target capability: chip_id: 0x%x, chip_family: 0x%x, board_id: 0x%x, soc_id: 0x%x, fw_version: 0x%x, fw_build_timestamp: %s, otp_version: 0x%x eeprom_caldata_read_timeout %ds bdf_dnld_method %d regdb_mandatory %u\n",
 		     plat_priv->chip_info.chip_id,
 		     plat_priv->chip_info.chip_family,
 		     plat_priv->board_info.board_id, plat_priv->soc_info.soc_id,
@@ -810,7 +812,8 @@ int cnss_wlfw_tgt_cap_send_sync(struct cnss_plat_data *plat_priv)
 		     plat_priv->fw_version_info.fw_build_timestamp,
 		     plat_priv->otp_version,
 		     plat_priv->eeprom_caldata_read_timeout,
-		     plat_priv->bdf_dnld_method);
+		     plat_priv->bdf_dnld_method,
+		     plat_priv->regdb_mandatory);
 
 	kfree(req);
 	kfree(resp);
@@ -1147,11 +1150,16 @@ int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv,
 			ret = 0;
 			goto out;
 		} else if (bdf_type == CNSS_BDF_REGDB) {
-			/* If REGDB bin file is not present,
+			/* If REGDB bin file is not present, but
+			 * regdb_mandatory is true, assert. If it is false,
 			 * just print the message and skip it.
 			 */
 			cnss_pr_info("Failed to load RegDB %s\n", filename);
-			ret = 0;
+			if (!plat_priv->regdb_mandatory) {
+				cnss_pr_info("Skipping regdb download for %s since it is not mandatory as indicated by the target caps\n",
+					     plat_priv->device_name);
+				ret = 0;
+			}
 			goto out;
 		} else {
 			/* BDF download is mandatory for all targets */
