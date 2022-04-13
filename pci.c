@@ -2167,7 +2167,7 @@ static int cnss_qcn9000_ramdump(struct cnss_pci_data *pci_priv)
 	if (!ramdump_segs)
 		return -ENOMEM;
 
-	meta_info = kzalloc(sizeof(*meta_info), GFP_KERNEL);
+	meta_info = kzalloc(PAGE_SIZE, GFP_KERNEL);
 	if (!meta_info) {
 		kfree(ramdump_segs);
 		return -ENOMEM;
