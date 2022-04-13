@@ -1,4 +1,5 @@
 /* Copyright (c) 2016-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -58,6 +59,7 @@
 #define MAX_NUMBER_OF_SOCS 4
 struct cnss_plat_data *plat_env[MAX_NUMBER_OF_SOCS];
 int plat_env_index;
+static DEFINE_SPINLOCK(plat_env_spinlock);
 
 #ifdef CONFIG_CNSS2_PM
 static DECLARE_RWSEM(cnss_pm_sem);
@@ -3704,6 +3706,7 @@ static int cnss_probe(struct platform_device *plat_dev)
 	const struct of_device_id *of_id;
 	const struct platform_device_id *device_id;
 	u32 node_id = 0, userpd_id = 0;
+	unsigned long flags;
 #ifdef CONFIG_CNSS2_KERNEL_IPQ
 	const int *soc_version;
 #endif
@@ -3880,8 +3883,11 @@ static int cnss_probe(struct platform_device *plat_dev)
 	if (ret)
 		return -ENODEV;
 
-	plat_env[plat_env_index] = plat_priv;
-
+	/*
+	 * plat_env is initialized only at the end of cnss_probe.
+	 * plat_env should not be referred to in any functions within cnss_probe
+	 * till it is initialized.
+	 */
 	cnss_set_mod_param_feature_support(plat_priv, CALDATA);
 	cnss_set_mod_param_feature_support(plat_priv, REGDB);
 	platform_set_drvdata(plat_dev, plat_priv);
@@ -3946,7 +3952,9 @@ static int cnss_probe(struct platform_device *plat_dev)
 	/* Incrementing plat_env_index only after the probe for the device
 	 * is completed
 	 */
-	plat_env_index++;
+	spin_lock_irqsave(&plat_env_spinlock, flags);
+	plat_env[plat_env_index++] = plat_priv;
+	spin_unlock_irqrestore(&plat_env_spinlock, flags);
 	cnss_pr_info("Platform driver probed successfully. plat %pK tgt 0x%lx\n",
 		     plat_priv, plat_priv->device_id);
 
@@ -3985,6 +3993,7 @@ out:
 static int cnss_remove(struct platform_device *plat_dev)
 {
 	int i = 0;
+	unsigned long flags = 0;
 	struct cnss_plat_data *plat_priv = platform_get_drvdata(plat_dev);
 
 	/* For platforms that support dma_alloc, FW memory is allocated during
@@ -4017,8 +4026,10 @@ static int cnss_remove(struct platform_device *plat_dev)
 
 	for (i = 0; i < MAX_NUMBER_OF_SOCS; i++) {
 		if (plat_env[i] == plat_priv) {
+			spin_lock_irqsave(&plat_env_spinlock, flags);
 			plat_env[i] = NULL;
 			plat_env_index--;
+			spin_unlock_irqrestore(&plat_env_spinlock, flags);
 			break;
 		}
 	}
