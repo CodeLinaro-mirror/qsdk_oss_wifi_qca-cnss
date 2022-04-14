@@ -153,10 +153,12 @@ MODULE_PARM_DESC(enable_intx_bmap, "enable_intx_bmap");
 
 #define FW_READY_DELAY	100  /* in msecs */
 
-/* In IPQ5018, if CPU load is high FW_READY might take longer than
- * default value of 15s. Increasing FW_READY timeout to 60s for IPQ5018
+/* In platforms with low power CPU like IPQ5018 or SDX65, if CPU load
+ * is high FW_READY might take longer than default value of 15s.
+ * Increasing FW_READY timeout to 60s for IPQ5018 and SDX.
  */
-#if defined(CONFIG_KASAN) || defined(CONFIG_IPQ_APSS_5018)
+#if defined(CONFIG_KASAN) || defined(CONFIG_IPQ_APSS_5018) || \
+				defined(CONFIG_CNSS2_KERNEL_MSM)
 static int fw_ready_timeout = 60;
 static int cold_boot_cal_timeout = 180;
 #else
