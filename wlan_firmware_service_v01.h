@@ -123,6 +123,7 @@
 #define QMI_WLFW_MAC_ADDR_SIZE_V01 6
 #define QMI_WLFW_MAX_NUM_GPIO_INFO_V01 20
 #define QMI_WLFW_MAX_NUM_MEM_CFG_V01 2
+#define QMI_WLFW_PMU_PARAMS_MAX_V01 16
 #define QMI_WLFW_MAX_NUM_MEM_SEG_V01 52
 #define QMI_WLFW_MAX_WFC_CALL_STATUS_DATA_SIZE_V01 256
 #define QMI_WLFW_MAX_DATA_SIZE_V01 6144
@@ -130,6 +131,7 @@
 #define QMI_WLFW_MAX_NUM_CE_V01 12
 #define QMI_WLFW_MAX_TIMESTAMP_LEN_V01 32
 #define QMI_WLFW_MAX_M3_SEGMENTS_SIZE_V01 10
+#define QMI_WLFW_PMU_PIN_NAME_MAX_LEN_V01 32
 #define QMI_WLFW_MAX_STR_LEN_V01 16
 #define QMI_WLFW_MAX_NUM_SHADOW_REG_V3_V01 60
 #define QMI_WLFW_MAX_NUM_SHADOW_REG_V2_V01 36
@@ -415,6 +417,19 @@ struct wlfw_host_mlo_chip_info_s_v01 {
 	u8 valid_mlo_link_id[QMI_WLFW_MAX_NUM_MLO_LINKS_PER_CHIP_V01];
 };
 
+struct wlfw_pmu_param_v01 {
+	u8 pin_name[QMI_WLFW_PMU_PIN_NAME_MAX_LEN_V01];
+	u32 wake_volt_valid;
+	u32 wake_volt;
+	u32 sleep_volt_valid;
+	u32 sleep_volt;
+};
+
+struct wlfw_pmu_cfg_v01 {
+	u32 pmu_param_len;
+	struct wlfw_pmu_param_v01 pmu_param[QMI_WLFW_PMU_PARAMS_MAX_V01];
+};
+
 struct wlfw_shadow_reg_v3_cfg_s_v01 {
 	u32 addr;
 };
@@ -592,8 +607,12 @@ struct wlfw_cap_resp_msg_v01 {
 	enum wlfw_bdf_dnld_method_v01 bdf_dnld_method;
 	u8 hwid_bitmap_valid;
 	u8 hwid_bitmap;
+	u8 ol_cpr_cfg_valid;
+	struct wlfw_pmu_cfg_v01 ol_cpr_cfg;
+	u8 regdb_mandatory_valid;
+	u8 regdb_mandatory;
 };
-#define WLFW_CAP_RESP_MSG_V01_MAX_MSG_LEN 362
+#define WLFW_CAP_RESP_MSG_V01_MAX_MSG_LEN 1138
 extern struct qmi_elem_info wlfw_cap_resp_msg_v01_ei[];
 
 struct wlfw_bdf_download_req_msg_v01 {

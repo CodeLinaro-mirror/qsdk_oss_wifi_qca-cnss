@@ -248,8 +248,6 @@ cnss_plat_ipc_qmi_file_upload_req_handler(struct qmi_handle *handle,
 		   decoded_msg;
 	if (!req_msg)
 		return;
-	cnss_pr_dbg("%s: File ID: %d Seg Index: %d\n", __func__,
-		    req_msg->file_id, req_msg->seg_index);
 
 	mutex_lock(&svc->file_idr_lock);
 	fd = idr_find(&svc->file_idr, req_msg->file_id);
@@ -277,10 +275,6 @@ cnss_plat_ipc_qmi_file_upload_req_handler(struct qmi_handle *handle,
 		 CNSS_PLAT_IPC_QMI_MAX_DATA_SIZE_V01 : fd->buf_size);
 	resp->end = (fd->seg_index == fd->seg_len);
 	memcpy(resp->seg_buf, fd->buf, resp->seg_buf_len);
-
-	cnss_pr_dbg("%s: ID: %d Seg ID: %d Len: %d End: %d\n", __func__,
-		    resp->file_id, resp->seg_index, resp->seg_buf_len,
-		    resp->end);
 
 	ret = qmi_send_response
 		(svc->svc_hdl, sq, txn,
