@@ -928,43 +928,6 @@ out:
 	return ret;
 }
 
-static int cnss_request_antenna_sharing(struct cnss_plat_data *plat_priv)
-{
-#ifdef CNSS2_COEX
-	int ret = 0;
-
-	if (!plat_priv->antenna) {
-		ret = cnss_wlfw_antenna_switch_send_sync(plat_priv);
-		if (ret)
-			goto out;
-	}
-
-	if (test_bit(CNSS_COEX_CONNECTED, &plat_priv->driver_state)) {
-		ret = coex_antenna_switch_to_wlan_send_sync_msg(plat_priv);
-		if (ret)
-			goto out;
-	}
-
-	ret = cnss_wlfw_antenna_grant_send_sync(plat_priv);
-	if (ret)
-		goto out;
-
-	return 0;
-
-out:
-	return ret;
-#endif
-	return 0;
-}
-
-static void cnss_release_antenna_sharing(struct cnss_plat_data *plat_priv)
-{
-#ifdef CNSS2_COEX
-	if (test_bit(CNSS_COEX_CONNECTED, &plat_priv->driver_state))
-		coex_antenna_switch_to_mdm_send_sync_msg(plat_priv);
-#endif
-}
-
 void cnss_get_ramdump_device_name(struct device *dev,
 				  char *ramdump_dev_name,
 				  size_t ramdump_dev_name_len)
@@ -1413,10 +1376,11 @@ EXPORT_SYMBOL(cnss_set_recovery_enabled);
 
 static int cnss_fw_ready_hdlr(struct cnss_plat_data *plat_priv)
 {
-	int ret = 0;
-
 	if (!plat_priv)
 		return -ENODEV;
+
+	cnss_pr_dbg("%s:%d FW ready received for %s\n", __func__, __LINE__,
+		    plat_priv->device_name);
 
 	del_timer(&plat_priv->fw_boot_timer);
 	set_bit(CNSS_FW_READY, &plat_priv->driver_state);
@@ -1427,39 +1391,7 @@ static int cnss_fw_ready_hdlr(struct cnss_plat_data *plat_priv)
 		clear_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state);
 	}
 
-	if (test_bit(ENABLE_WALTEST, &plat_priv->ctrl_params.quirks)) {
-		ret = cnss_wlfw_wlan_mode_send_sync(plat_priv,
-						    CNSS_WALTEST);
-	} else if (test_bit(CNSS_COLD_BOOT_CAL, &plat_priv->driver_state)) {
-		cnss_request_antenna_sharing(plat_priv);
-		ret = cnss_wlfw_wlan_mode_send_sync(plat_priv,
-						    CNSS_CALIBRATION);
-	} else if (test_bit(CNSS_DRIVER_LOADING, &plat_priv->driver_state) ||
-		   test_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state)) {
-	} else {
-		ret = cnss_bus_call_driver_probe(plat_priv);
-		complete(&plat_priv->power_up_complete);
-	}
-
-	if (ret && test_bit(CNSS_DEV_ERR_NOTIFY, &plat_priv->driver_state))
-		goto out;
-	else if (ret)
-		goto shutdown;
-#ifdef CNSS2_VREG
-	cnss_vreg_unvote_type(plat_priv, CNSS_VREG_PRIM);
-#endif
-
 	return 0;
-
-shutdown:
-	cnss_bus_dev_shutdown(plat_priv);
-
-	clear_bit(CNSS_FW_READY, &plat_priv->driver_state);
-	clear_bit(CNSS_FW_MEM_READY, &plat_priv->driver_state);
-
-out:
-	cnss_pr_err("%s:%d ret %d\n", __func__, __LINE__, ret);
-	return ret;
 }
 
 static char *cnss_driver_event_to_str(enum cnss_driver_event_type type)
@@ -3051,7 +2983,7 @@ static int cnss_cold_boot_cal_done_hdlr(struct cnss_plat_data *plat_priv,
 		plat_priv->cal_done = true;
 		break;
 	case CNSS_CAL_TIMEOUT:
-		cnss_pr_dbg("Calibration timed out, force shutdown\n");
+		cnss_pr_dbg("Calibration timed out!\n");
 		break;
 	default:
 		cnss_pr_err("Unknown calibration status: %u\n",
@@ -3059,7 +2991,6 @@ static int cnss_cold_boot_cal_done_hdlr(struct cnss_plat_data *plat_priv,
 		break;
 	}
 
-	cnss_release_antenna_sharing(plat_priv);
 	complete(&plat_priv->cal_complete);
 	clear_bit(CNSS_COLD_BOOT_CAL, &plat_priv->driver_state);
 
