@@ -1,4 +1,5 @@
 /* Copyright (c) 2016-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -58,6 +59,7 @@
 #define MAX_NUMBER_OF_SOCS 4
 struct cnss_plat_data *plat_env[MAX_NUMBER_OF_SOCS];
 int plat_env_index;
+static DEFINE_SPINLOCK(plat_env_spinlock);
 
 #ifdef CONFIG_CNSS2_PM
 static DECLARE_RWSEM(cnss_pm_sem);
@@ -104,7 +106,13 @@ module_param(disable_regdb_bmap, int, 0644);
 MODULE_PARM_DESC(disable_regdb_bmap, "Bitmap to Disable RegDB download");
 
 #define FW_READY_DELAY	100  /* in msecs */
-#ifdef CONFIG_KASAN
+
+/* In platforms with low power CPU like IPQ5018 or SDX65, if CPU load
+ * is high FW_READY might take longer than default value of 15s.
+ * Increasing FW_READY timeout to 60s for IPQ5018 and SDX.
+ */
+#if defined(CONFIG_KASAN) || defined(CONFIG_IPQ_APSS_5018) || \
+				defined(CONFIG_CNSS2_KERNEL_MSM)
 static int fw_ready_timeout = 60;
 static int cold_boot_cal_timeout = 180;
 #else
@@ -154,16 +162,6 @@ struct cnss_driver_event {
 /* M3 Dump related global structures/variables */
 static int m3_dump_major;
 static struct class *m3_dump_class;
-
-static void cnss_set_plat_priv(struct platform_device *plat_dev,
-			       struct cnss_plat_data *plat_priv)
-{
-	if (plat_env_index >= MAX_NUMBER_OF_SOCS) {
-		pr_err("ERROR: No space to allocate save the plat_priv\n");
-		return;
-	}
-	plat_env[plat_env_index++] = plat_priv;
-}
 
 void *cnss_get_pci_dev_by_device_id(int device_id)
 {
@@ -2142,12 +2140,8 @@ int cnss_force_fw_assert(struct device *dev)
 		return 0;
 	}
 
-	if (in_interrupt() || irqs_disabled())
-		cnss_driver_event_post(plat_priv,
-				       CNSS_DRIVER_EVENT_FORCE_FW_ASSERT,
-				       0, NULL);
-	else
-		cnss_bus_force_fw_assert_hdlr(plat_priv);
+	cnss_driver_event_post(plat_priv, CNSS_DRIVER_EVENT_FORCE_FW_ASSERT, 0,
+			       NULL);
 
 	return 0;
 }
@@ -3712,6 +3706,7 @@ static int cnss_probe(struct platform_device *plat_dev)
 	const struct of_device_id *of_id;
 	const struct platform_device_id *device_id;
 	u32 node_id = 0, userpd_id = 0;
+	unsigned long flags;
 #ifdef CONFIG_CNSS2_KERNEL_IPQ
 	const int *soc_version;
 #endif
@@ -3796,6 +3791,12 @@ static int cnss_probe(struct platform_device *plat_dev)
 		}
 	}
 #endif
+	if (plat_env_index >= MAX_NUMBER_OF_SOCS) {
+		pr_err("cnss: plat_env_index %d greater than MAX_NUMBER_OF_SOCS\n",
+			plat_env_index);
+		ret = -ENOMEM;
+		goto out;
+	}
 
 	plat_priv = devm_kzalloc(&plat_dev->dev, sizeof(*plat_priv),
 				 GFP_KERNEL);
@@ -3882,9 +3883,13 @@ static int cnss_probe(struct platform_device *plat_dev)
 	if (ret)
 		return -ENODEV;
 
+	/*
+	 * plat_env is initialized only at the end of cnss_probe.
+	 * plat_env should not be referred to in any functions within cnss_probe
+	 * till it is initialized.
+	 */
 	cnss_set_mod_param_feature_support(plat_priv, CALDATA);
 	cnss_set_mod_param_feature_support(plat_priv, REGDB);
-	cnss_set_plat_priv(plat_dev, plat_priv);
 	platform_set_drvdata(plat_dev, plat_priv);
 	memset(&qmi_log, 0, sizeof(struct qmi_history) * QMI_HISTORY_SIZE);
 	INIT_LIST_HEAD(&plat_priv->vreg_list);
@@ -3944,6 +3949,12 @@ static int cnss_probe(struct platform_device *plat_dev)
 	if (ret)
 		goto deinit_genl;
 
+	/* Incrementing plat_env_index only after the probe for the device
+	 * is completed
+	 */
+	spin_lock_irqsave(&plat_env_spinlock, flags);
+	plat_env[plat_env_index++] = plat_priv;
+	spin_unlock_irqrestore(&plat_env_spinlock, flags);
 	cnss_pr_info("Platform driver probed successfully. plat %pK tgt 0x%lx\n",
 		     plat_priv, plat_priv->device_id);
 
@@ -3974,13 +3985,15 @@ free_res:
 	cnss_put_resources(plat_priv);
 reset_ctx:
 	platform_set_drvdata(plat_dev, NULL);
-	cnss_set_plat_priv(plat_dev, NULL);
+	plat_env[plat_env_index] = NULL;
 out:
 	return ret;
 }
 
 static int cnss_remove(struct platform_device *plat_dev)
 {
+	int i = 0;
+	unsigned long flags = 0;
 	struct cnss_plat_data *plat_priv = platform_get_drvdata(plat_dev);
 
 	/* For platforms that support dma_alloc, FW memory is allocated during
@@ -4011,6 +4024,15 @@ static int cnss_remove(struct platform_device *plat_dev)
 	cnss_put_resources(plat_priv);
 	platform_set_drvdata(plat_dev, NULL);
 
+	for (i = 0; i < MAX_NUMBER_OF_SOCS; i++) {
+		if (plat_env[i] == plat_priv) {
+			spin_lock_irqsave(&plat_env_spinlock, flags);
+			plat_env[i] = NULL;
+			plat_env_index--;
+			spin_unlock_irqrestore(&plat_env_spinlock, flags);
+			break;
+		}
+	}
 	return 0;
 }
 
