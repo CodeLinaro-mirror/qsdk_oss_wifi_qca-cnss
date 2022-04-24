@@ -132,6 +132,9 @@ static int cnss_stats_show_state(struct seq_file *s,
 		case CNSS_QDSS_STARTED:
 			seq_puts(s, "QDSS_STARTED");
 			continue;
+		case CNSS_RECOVERY_WAIT_FOR_DRIVER:
+			seq_puts(s, "CNSS_RECOVERY_WAIT_FOR_DRIVER");
+			continue;
 		}
 
 		seq_printf(s, "UNKNOWN-%d", i);

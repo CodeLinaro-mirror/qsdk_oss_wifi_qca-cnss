@@ -50,6 +50,7 @@ enum cnss_notif_type {
 	CNSS_PROXY_UNVOTE,
 	CNSS_SOC_RESET,
 	CNSS_PREPARE_FOR_FATAL_SHUTDOWN,
+	CNSS_RAMDUMP_DONE,
 	/* The below event should be the last event for all devices */
 	CNSS_NOTIF_TYPE_MAX
 };

@@ -258,7 +258,7 @@ static int cnss_get_event(unsigned long subsys_event,
 		break;
 #endif
 	default:
-		cnss_pr_err("Invalid event, event: %ld", subsys_event);
+		event = subsys_event;
 		break;
 	}
 	return event;
@@ -1440,6 +1440,8 @@ static char *cnss_driver_event_to_str(enum cnss_driver_event_type type)
 		return "M3_DUMP_UPLOAD_REQ";
 	case CNSS_DRIVER_EVENT_QDSS_TRACE_REQ_DATA:
 		return "QDSS_TRACE_REQ_DATA";
+	case CNSS_DRIVER_EVENT_RAMDUMP_DONE:
+		return "RAMDUMP_DONE";
 	case CNSS_DRIVER_EVENT_MAX:
 		return "EVENT_MAX";
 	}
@@ -2282,11 +2284,17 @@ void  *cnss_subsystem_get(struct device *dev, int device_id)
 	plat_priv->target_assert_timestamp = 0;
 	subsys_info = &plat_priv->subsys_info;
 
-	if (subsys_info->subsys_handle) {
+	cnss_pr_info("%s: driver_state: 0x%lx\n", __func__,
+		     plat_priv->driver_state);
+	if (subsys_info->subsys_handle &&
+	    !test_bit(CNSS_RECOVERY_WAIT_FOR_DRIVER,
+		      &plat_priv->driver_state)) {
 		cnss_pr_err("%s: error: subsys handle %pK is not NULL\n",
 			    __func__, subsys_info->subsys_handle);
 		return NULL;
 	}
+	clear_bit(CNSS_RECOVERY_WAIT_FOR_DRIVER, &plat_priv->driver_state);
+
 #ifdef CONFIG_CNSS2_KERNEL_SSR_FRAMEWORK
 	subsys_info->subsys_handle =
 				subsystem_get(subsys_info->subsys_desc.name);
@@ -2755,7 +2763,27 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 #else /* CONFIG_CNSS2_KERNEL_RPROC_FRAMEWORK */
 	if (!subsys_info->subsys_handle)
 		return 0;
-	rproc_report_crash(subsys_info->subsys_handle, RPROC_FATAL_ERROR);
+
+	if (plat_priv->mlo_support) {
+		/* For MLO supported targets, power off the target and collect
+		 * dump. The power up would be handled by driver to ensure
+		 * multiple targets in the MLO group are all powered up in the
+		 * correct sequence
+		 */
+		rproc_shutdown(subsys_info->subsys_handle);
+		cnss_qcn9000_notifier_nb(&plat_priv->modem_nb,
+					 CNSS_RAMDUMP_NOTIFICATION, NULL);
+		cnss_subsys_ramdump(subsys_info->subsys_handle, NULL, NULL);
+		set_bit(CNSS_RECOVERY_WAIT_FOR_DRIVER,
+			&plat_priv->driver_state);
+		cnss_driver_event_post(plat_priv,
+				       CNSS_DRIVER_EVENT_RAMDUMP_DONE,
+				       0, NULL);
+	} else {
+		rproc_report_crash(subsys_info->subsys_handle,
+				   RPROC_FATAL_ERROR);
+	}
+
 #endif
 	return 0;
 
@@ -3625,6 +3653,10 @@ static void cnss_driver_event_work(struct work_struct *work)
 		case CNSS_DRIVER_EVENT_QDSS_TRACE_REQ_DATA:
 			ret = cnss_qdss_trace_req_data_hdlr(plat_priv,
 							    event->data);
+			break;
+		case CNSS_DRIVER_EVENT_RAMDUMP_DONE:
+			ret = cnss_qcn9000_notifier_nb(&plat_priv->modem_nb,
+						       CNSS_RAMDUMP_DONE, NULL);
 			break;
 		default:
 			cnss_pr_err("Invalid driver event type: %d",
