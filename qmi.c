@@ -3111,7 +3111,8 @@ static void cnss_wlfw_qdss_trace_save_ind_cb(struct qmi_handle *qmi_wlfw,
 
 	qmi_record(plat_priv->wlfw_service_instance_id,
 		   QMI_WLFW_QDSS_TRACE_SAVE_IND_V01, 0, 0);
-	cnss_pr_dbg("Received QMI WLFW QDSS trace save indication\n");
+	cnss_pr_info("Received QMI WLFW QDSS trace save indication. Source: %d\n",
+		     ind_msg->source);
 
 	if (!txn) {
 		cnss_pr_err("Spurious indication\n");
@@ -3131,9 +3132,13 @@ static void cnss_wlfw_qdss_trace_save_ind_cb(struct qmi_handle *qmi_wlfw,
 	case QCA6018_DEVICE_ID:
 	case QCA5018_DEVICE_ID:
 	case QCA9574_DEVICE_ID:
+		/* Source 0 is for ETR and not supported for AHB targets */
+		if (ind_msg->source == 1)
+			break;
+		/* fall through */
 	default:
-		cnss_pr_dbg("QDSS Trace save not supported for 0x%lx",
-			    plat_priv->device_id);
+		cnss_pr_info("QDSS Trace save not supported for %s, source %d\n",
+			     plat_priv->device_name, ind_msg->source);
 		return;
 	}
 
