@@ -151,6 +151,7 @@ struct cnss_pci_data {
 	u8 disable_pc;
 	struct cnss_pci_debug_reg *debug_reg;
 	int os_legacy_irq;
+	u16 otp_board_id;
 };
 
 struct paging_header {

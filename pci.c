@@ -67,7 +67,7 @@ MODULE_PARM_DESC(pci3_num_msi_bmap,
 		 "Bitmap to indicate number of available MSIs for PCI 3");
 
 #define PCI_BAR_WINDOW0_BASE	0x1E00000
-#define PCI_BAR_WINDOW0_END	0x1E7FFFC
+#define PCI_BAR_WINDOW0_END	0x1E0EC8C
 
 bool cnss_get_enable_intx(struct device *dev)
 {
@@ -241,6 +241,8 @@ static DEFINE_SPINLOCK(pci_reg_window_lock);
 #define QCN9224_PCI_MHIREGLEN_REG		0x1E0E100
 #define QCN9224_PCI_MHI_REGION_END		0x1E0EFFC
 #define QCN9224_CE_COMMON_REG_BASE		0x1BA0000
+#define QCN9224_QFPROM_RAW_RFA_PDET_ROW13_LSB	0x1E20338
+#define OTP_BOARD_ID_MASK			0xFFFF
 
 #define QCN9224_PCIE_PCIE_MHI_TIME_LOW          0x1E0EB28
 #define QCN9224_PCIE_PCIE_MHI_TIME_HIGH         0x1E0EB2C
@@ -6058,6 +6060,7 @@ int cnss_pci_probe(struct pci_dev *pci_dev,
 		   struct cnss_plat_data *plat_priv)
 {
 	int ret = 0;
+	u32 val = 0;
 	struct cnss_pci_data *pci_priv;
 	if (!pci_dev) {
 		pr_err("%s: ERROR: PCI device is NULL\n", __func__);
@@ -6143,9 +6146,16 @@ int cnss_pci_probe(struct pci_dev *pci_dev,
 				    ret);
 		cnss_power_off_device(plat_priv, 0);
 		break;
+	case QCN9224_DEVICE_ID:
+		cnss_pci_reg_read(pci_priv,
+				  QCN9224_QFPROM_RAW_RFA_PDET_ROW13_LSB,
+				  &val);
+		pci_priv->otp_board_id = (val & OTP_BOARD_ID_MASK);
+		cnss_pr_dbg("%s: OTP fused board id is 0x%x\n",
+			    __func__, pci_priv->otp_board_id);
+		/* fall through */
 	case QCN9000_EMULATION_DEVICE_ID:
 	case QCN9000_DEVICE_ID:
-	case QCN9224_DEVICE_ID:
 	case QCA6390_DEVICE_ID:
 	case QCA6490_DEVICE_ID:
 		timer_setup(&pci_priv->dev_rddm_timer,
@@ -6162,6 +6172,7 @@ int cnss_pci_probe(struct pci_dev *pci_dev,
 		} else {
 			cnss_pci_enable_legacy_intx(pci_priv->bar, pci_dev);
 		}
+
 		ret = cnss_pci_register_mhi(pci_priv);
 		if (ret) {
 			cnss_pci_disable_msi(pci_priv);
