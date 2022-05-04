@@ -5876,12 +5876,12 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 	}
 
 	pci_priv->mhi_ctrl = mhi_ctrl;
+	mhi_ctrl->dev_id = pci_priv->device_id;
 
 #ifdef CONFIG_CNSS2_KERNEL_MSM
 	mhi_ctrl->priv_data = pci_priv;
 	mhi_ctrl->dev = &pci_dev->dev;
 	mhi_ctrl->of_node = (&plat_priv->plat_dev->dev)->of_node;
-	mhi_ctrl->dev_id = pci_priv->device_id;
 	mhi_ctrl->domain = pci_domain_nr(pci_dev->bus);
 	mhi_ctrl->bus = pci_dev->bus->number;
 	mhi_ctrl->slot = PCI_SLOT(pci_dev->devfn);
