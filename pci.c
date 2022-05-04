@@ -21,9 +21,9 @@
 #include <linux/completion.h>
 #include <soc/qcom/ramdump.h>
 #include <linux/of_address.h>
+#include <linux/of_reserved_mem.h>
 #ifdef CONFIG_CNSS2_DMA_ALLOC
 #include <linux/cma.h>
-#include <linux/of_reserved_mem.h>
 #endif
 
 #ifdef KERNEL_SUPPORTS_QGIC2M
@@ -3557,7 +3557,7 @@ int cnss_pci_alloc_fw_mem(struct cnss_plat_data *plat_priv)
 	struct cnss_pci_data *pci_priv = plat_priv->bus_priv;
 	struct pci_dev *pci_dev = (struct pci_dev *)plat_priv->pci_dev;
 	struct device_node *mlo_global_mem_node = NULL;
-	struct resource mlo_mem;
+	struct reserved_mem *mlo_mem = NULL;
 
 	dev = &plat_priv->plat_dev->dev;
 
@@ -3735,34 +3735,40 @@ int cnss_pci_alloc_fw_mem(struct cnss_plat_data *plat_priv)
 			break;
 		case QMI_WLFW_MLO_GLOBAL_MEM_V01:
 			mlo_global_mem_node =
-				of_find_node_by_name(NULL, "mlo_global_mem0");
+				of_find_node_by_name(NULL, "mlo_global_mem_0");
 			if (!mlo_global_mem_node) {
 				cnss_pr_err("could not get mlo_global_mem_node\n");
 				CNSS_ASSERT(0);
 				return -ENOMEM;
 			}
 
-			if (of_address_to_resource(mlo_global_mem_node, 0,
-						   &mlo_mem)) {
-				cnss_pr_err("%s: Unable to mlo_mem", __func__);
+			mlo_mem = of_reserved_mem_lookup(mlo_global_mem_node);
+			if (!mlo_mem) {
+				cnss_pr_err("%s: Unable to get mlo_mem",
+					    __func__);
 				of_node_put(mlo_global_mem_node);
 				CNSS_ASSERT(0);
 				return -ENOMEM;
 			}
+
 			of_node_put(mlo_global_mem_node);
-			mlo_global_mem_size = resource_size(&mlo_mem);
+
+			mlo_global_mem_size = mlo_mem->size;
+
 			if (fw_mem[i].size > mlo_global_mem_size) {
 				cnss_pr_err("Error: Need more memory 0x%x\n",
 					    (unsigned int)fw_mem[i].size);
 				CNSS_ASSERT(0);
 				return -ENOMEM;
 			}
+
 			if (fw_mem[i].size < mlo_global_mem_size) {
 				cnss_pr_err("WARNING: More MLO global memory is reserved. Reserved size 0x%x, Requested size 0x%x.\n",
 					    mlo_global_mem_size,
 					    (unsigned int)fw_mem[i].size);
 			}
-			fw_mem[i].pa = mlo_mem.start;
+
+			fw_mem[i].pa = mlo_mem->base;
 			if (!mlo_global_mem)
 				mlo_global_mem = ioremap(fw_mem[i].pa,
 							 fw_mem[i].size);
