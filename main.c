@@ -1331,6 +1331,15 @@ void cnss_wait_for_cold_boot_cal_done(struct device *dev)
 			if (count++ > cold_boot_cal_timeout * 10) {
 				cnss_pr_err("Coldboot calibration timed out %d seconds\n",
 					    cold_boot_cal_timeout);
+				/* Collect the FW dump when there is no target
+				 * assert instead coldboot timeout happens and
+				 * host asserted.
+				 */
+				if (ramdump_enabled) {
+					cnss_bus_collect_dump_info(plat_priv,
+								   true);
+					cnss_bus_dev_ramdump(plat_priv);
+				}
 				CNSS_ASSERT(0);
 			}
 		}
