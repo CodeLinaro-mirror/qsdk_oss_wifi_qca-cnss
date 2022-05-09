@@ -36,11 +36,6 @@
 #include "bus.h"
 #include "legacyirq/legacyirq.h"
 
-static int pageable_dump_region;
-module_param(pageable_dump_region, int, 0644);
-MODULE_PARM_DESC(pageable_dump_region,
-		 "Collect Pageable Region as separate dump segment");
-
 /* pciX_num_msi_bmap needs to be defined in format of 0xDPCEMH
  * where 0xDP denotes the number of MSIs available for DP, 0xCE denotes
  * the number of MSIs available for CE and 0xMH denotes the number of
@@ -2149,7 +2144,7 @@ static int cnss_qcn9000_ramdump(struct cnss_pci_data *pci_priv)
 	struct cnss_dump_seg *dump_seg = info_v2->dump_data_vaddr;
 	struct ramdump_segment *ramdump_segs, *s;
 	struct cnss_dump_meta_info *meta_info;
-	int i, ret = 0;
+	int i, ret = 0, idx = 0;
 
 	if (!info_v2->dump_data_valid ||
 	    dump_data->nentries == 0)
@@ -2174,9 +2169,8 @@ static int cnss_qcn9000_ramdump(struct cnss_pci_data *pci_priv)
 	}
 
 	meta_info->magic = CNSS_RAMDUMP_MAGIC;
-	meta_info->version = CNSS_RAMDUMP_VERSION;
+	meta_info->version = CNSS_RAMDUMP_VERSION_V2;
 	meta_info->chipset = pci_priv->device_id;
-	meta_info->total_entries = CNSS_FW_DUMP_TYPE_MAX;
 
 	ramdump_segs->v_address = meta_info;
 	ramdump_segs->size = sizeof(*meta_info);
@@ -2189,12 +2183,15 @@ static int cnss_qcn9000_ramdump(struct cnss_pci_data *pci_priv)
 			continue;
 		}
 
-		if (meta_info->entry[dump_seg->type].entry_start == 0) {
-			meta_info->entry[dump_seg->type].type = dump_seg->type;
-			meta_info->entry[dump_seg->type].entry_start =
+		if (dump_seg->type != meta_info->entry[idx].type)
+			idx++;
+
+		if (meta_info->entry[idx].entry_start == 0) {
+			meta_info->entry[idx].type = dump_seg->type;
+			meta_info->entry[idx].entry_start =
 						i + CNSS_NUM_META_INFO_SEGMENTS;
 		}
-		meta_info->entry[dump_seg->type].entry_num++;
+		meta_info->entry[idx].entry_num++;
 
 		s->address = dump_seg->address;
 		s->v_address = dump_seg->v_address;
@@ -2202,6 +2199,16 @@ static int cnss_qcn9000_ramdump(struct cnss_pci_data *pci_priv)
 		s++;
 		dump_seg++;
 	}
+
+	meta_info->total_entries = idx + 1;
+
+	cnss_pr_dbg("Dumping meta_info: total_entries: %d",
+		    meta_info->total_entries);
+	for (i = 0; i < meta_info->total_entries; i++)
+		cnss_pr_dbg("entry %d type %d entry_start %d entry_num %d",
+			    i, meta_info->entry[i].type,
+			    meta_info->entry[i].entry_start,
+			    meta_info->entry[i].entry_num);
 
 #ifdef CONFIG_CNSS2_KERNEL_IPQ
 	ret = create_ramdump_device_file(info_v2->ramdump_dev);
@@ -3517,33 +3524,6 @@ int cnss_ahb_alloc_fw_mem(struct cnss_plat_data *plat_priv)
 	return 0;
 }
 
-#ifdef CONFIG_CNSS2_KERNEL_IPQ
-static int
-cnss_mhi_update_bhie_table_for_dyn_paging(struct cnss_plat_data *plat_priv,
-					  void *va, phys_addr_t pa, size_t size)
-{
-	struct cnss_pci_data *pci_priv = plat_priv->bus_priv;
-	int ret = 0;
-
-	/* Attach Pageable region to MHI buffer so that it is
-	 * included as part of pageable region in dumps
-	 */
-	if (!pageable_dump_region) {
-		cnss_pr_info("Adding dynamic paging to mhi buf table\n");
-		ret = mhi_update_bhie_table_for_dyn_paging(pci_priv->mhi_ctrl,
-							   va, pa, size);
-	}
-	return ret;
-}
-#else
-static int
-cnss_mhi_update_bhie_table_for_dyn_paging(struct cnss_plat_data *plat_priv,
-					  void *va, phys_addr_t pa, size_t size)
-{
-	return 0;
-}
-#endif
-
 int cnss_pci_alloc_fw_mem(struct cnss_plat_data *plat_priv)
 {
 	struct cnss_fw_mem *fw_mem = plat_priv->fw_mem;
@@ -3553,7 +3533,7 @@ int cnss_pci_alloc_fw_mem(struct cnss_plat_data *plat_priv)
 	u32 caldb_size = 0;
 	u32 pageable_size = 0;
 	struct device *dev, *pci_bus_dev;
-	int i, chip_id, ret;
+	int i, chip_id;
 	struct cnss_pci_data *pci_priv = plat_priv->bus_priv;
 	struct pci_dev *pci_dev = (struct pci_dev *)plat_priv->pci_dev;
 	struct device_node *mlo_global_mem_node = NULL;
@@ -3696,16 +3676,6 @@ int cnss_pci_alloc_fw_mem(struct cnss_plat_data *plat_priv)
 			fw_mem[i].va = ioremap(fw_mem[i].pa, fw_mem[i].size);
 			if (!fw_mem[i].va) {
 				cnss_pr_err("WARNING: Host DDR remap failed\n");
-				CNSS_ASSERT(0);
-				return -ENOMEM;
-			}
-			ret = cnss_mhi_update_bhie_table_for_dyn_paging(
-						plat_priv,
-						fw_mem[i].va, fw_mem[i].pa,
-						fw_mem[i].size);
-			if (ret) {
-				cnss_pr_err("Failed to add Dynamiv Paging region to MHI Buffer table, ret: %d",
-					    ret);
 				CNSS_ASSERT(0);
 				return -ENOMEM;
 			}
@@ -5484,14 +5454,30 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 
 	cnss_pr_dbg("Collect remote heap dump segment\n");
 	for (i = 0; i < plat_priv->fw_mem_seg_len; i++) {
-		if (fw_mem[i].type == CNSS_MEM_TYPE_DDR ||
-		    fw_mem[i].type == CNSS_MEM_M3) {
+		if (fw_mem[i].type == CNSS_MEM_TYPE_DDR) {
 			if (!fw_mem[i].pa)
 				continue;
 			dump_seg->address = fw_mem[i].pa;
 			dump_seg->v_address = fw_mem[i].va;
 			dump_seg->size = fw_mem[i].size;
 			dump_seg->type = CNSS_FW_REMOTE_HEAP;
+			cnss_pr_dbg("seg-%d: address 0x%lx, v_address %pK, size 0x%lx\n",
+				    i, dump_seg->address, dump_seg->v_address,
+				    dump_seg->size);
+			dump_seg++;
+			dump_data->nentries++;
+		}
+	}
+
+	cnss_pr_dbg("Collect PCSS SSR dump region\n");
+	for (i = 0; i < plat_priv->fw_mem_seg_len; i++) {
+		if (fw_mem[i].type == CNSS_MEM_M3) {
+			if (!fw_mem[i].pa)
+				continue;
+			dump_seg->address = fw_mem[i].pa;
+			dump_seg->v_address = fw_mem[i].va;
+			dump_seg->size = fw_mem[i].size;
+			dump_seg->type = CNSS_FW_REMOTE_M3_DUMP;
 			cnss_pr_dbg("seg-%d: address 0x%lx, v_address %pK, size 0x%lx\n",
 				    i, dump_seg->address, dump_seg->v_address,
 				    dump_seg->size);
@@ -5508,7 +5494,7 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 			dump_seg->address = qdss_mem[i].pa;
 			dump_seg->v_address = qdss_mem[i].va;
 			dump_seg->size = qdss_mem[i].size;
-			dump_seg->type = CNSS_FW_REMOTE_HEAP;
+			dump_seg->type = CNSS_FW_REMOTE_ETR;
 			cnss_pr_dbg("QDSS seg-%d: address 0x%lx, v_address %pK, size 0x%lx\n",
 				    i, dump_seg->address, dump_seg->v_address,
 				    dump_seg->size);
@@ -5525,7 +5511,7 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 			dump_seg->address = fw_mem[i].pa;
 			dump_seg->v_address = fw_mem[i].va;
 			dump_seg->size = fw_mem[i].size;
-			dump_seg->type = CNSS_FW_REMOTE_HEAP;
+			dump_seg->type = CNSS_FW_REMOTE_CALDB;
 			cnss_pr_dbg("seg-%d: address 0x%lx, v_address %pK, size 0x%lx\n",
 				    i, dump_seg->address, dump_seg->v_address,
 				    dump_seg->size);
@@ -5542,7 +5528,7 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 			dump_seg->address = fw_mem[i].pa;
 			dump_seg->v_address = fw_mem[i].va;
 			dump_seg->size = fw_mem[i].size;
-			dump_seg->type = CNSS_FW_REMOTE_HEAP;
+			dump_seg->type = CNSS_FW_REMOTE_AFC;
 			cnss_pr_dbg("seg-%d: address 0x%lx, v_address %pK, size 0x%lx\n",
 				    i, dump_seg->address, dump_seg->v_address,
 				    dump_seg->size);
@@ -5559,7 +5545,7 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 			dump_seg->address = fw_mem[i].pa;
 			dump_seg->v_address = fw_mem[i].va;
 			dump_seg->size = fw_mem[i].size;
-			dump_seg->type = CNSS_FW_REMOTE_HEAP;
+			dump_seg->type = CNSS_FW_REMOTE_MLO_GLOBAL;
 			cnss_pr_dbg("seg-%d: address 0x%lx, v_address %pK, size 0x%lx\n",
 				    i, dump_seg->address, dump_seg->v_address,
 				    dump_seg->size);
@@ -5568,23 +5554,21 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 		}
 	}
 
-	if (pageable_dump_region) {
-		cnss_pr_dbg("Collect pageable memory dump segment\n");
-		for (i = 0; i < plat_priv->fw_mem_seg_len; i++) {
-			if (fw_mem[i].type == CNSS_MEM_PAGEABLE) {
-				if (!fw_mem[i].pa)
-					continue;
-				dump_seg->address = fw_mem[i].pa;
-				dump_seg->v_address = fw_mem[i].va;
-				dump_seg->size = fw_mem[i].size;
-				dump_seg->type = CNSS_FW_PAGEABLE;
-				cnss_pr_dbg("seg-%d: address 0x%lx, v_address %pK, size 0x%lx\n",
-					    i, dump_seg->address,
-					    dump_seg->v_address,
-					    dump_seg->size);
-				dump_seg++;
-				dump_data->nentries++;
-			}
+	cnss_pr_dbg("Collect pageable memory dump segment\n");
+	for (i = 0; i < plat_priv->fw_mem_seg_len; i++) {
+		if (fw_mem[i].type == CNSS_MEM_PAGEABLE) {
+			if (!fw_mem[i].pa)
+				continue;
+			dump_seg->address = fw_mem[i].pa;
+			dump_seg->v_address = fw_mem[i].va;
+			dump_seg->size = fw_mem[i].size;
+			dump_seg->type = CNSS_FW_PAGEABLE;
+			cnss_pr_dbg("seg-%d: address 0x%lx, v_address %pK, size 0x%lx\n",
+				    i, dump_seg->address,
+				    dump_seg->v_address,
+				    dump_seg->size);
+			dump_seg++;
+			dump_data->nentries++;
 		}
 	}
 

@@ -53,6 +53,7 @@
 #define CNSS_MHI_SEG_LEN		SZ_512K
 #define CNSS_DUMP_DESC_TOLERANCE	64
 #define CNSS_DUMP_SEG_VER		0x1
+#define CNSS_DUMP_SEG_VER_V2		0x2
 #define WLAN_RECOVERY_DELAY		1000
 #define FILE_SYSTEM_READY		1
 #define FW_ASSERT_TIMEOUT		5000
@@ -4035,7 +4036,7 @@ static int cnss_register_ramdump_v2(struct cnss_plat_data *plat_priv)
 	dump_data->paddr = virt_to_phys(info_v2->dump_data_vaddr);
 	dump_data->version = CNSS_DUMP_FORMAT_VER_V2;
 	dump_data->magic = CNSS_DUMP_MAGIC_VER_V2;
-	dump_data->seg_version = CNSS_DUMP_SEG_VER;
+	dump_data->seg_version = CNSS_DUMP_SEG_VER_V2;
 	strlcpy(dump_data->name, CNSS_DUMP_NAME,
 		sizeof(dump_data->name));
 	dump_entry.id = MSM_DUMP_DATA_CNSS_WLAN;
