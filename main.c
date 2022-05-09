@@ -2764,7 +2764,7 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 	if (!subsys_info->subsys_handle)
 		return 0;
 
-	if (plat_priv->mlo_support) {
+	if (plat_priv->mlo_capable) {
 		/* For MLO supported targets, power off the target and collect
 		 * dump. The power up would be handled by driver to ensure
 		 * multiple targets in the MLO group are all powered up in the
