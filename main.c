@@ -601,7 +601,8 @@ static int cnss_cal_db_mem_update(struct cnss_plat_data *plat_priv,
 	}
 
 	/* Ensure cnss-daemon is connected */
-	if (!is_cnss_daemon_connected(timeout)) {
+	if (!is_ipc_qmi_client_connected(CNSS_PLAT_IPC_DAEMON_QMI_CLIENT_V01,
+					 timeout)) {
 		cnss_pr_err("Daemon not yet connected\n");
 		CNSS_ASSERT(0);
 		return ret;
@@ -615,14 +616,16 @@ static int cnss_cal_db_mem_update(struct cnss_plat_data *plat_priv,
 	/* Copy CAL DB file contents to/from CAL_TYPE_DDR mem allocated to FW */
 	if (op == CNSS_CAL_DB_DOWNLOAD) {
 		cnss_pr_dbg("Initiating Calibration file download to mem\n");
-		ret = cnss_plat_ipc_qmi_file_download(filename,
-						      plat_priv->cal_mem->va,
-						      size);
+		ret = cnss_plat_ipc_qmi_file_download(
+					 CNSS_PLAT_IPC_DAEMON_QMI_CLIENT_V01,
+					 filename, plat_priv->cal_mem->va,
+					 size);
 	} else {
 		cnss_pr_dbg("Initiating Calibration mem upload to file\n");
-		ret = cnss_plat_ipc_qmi_file_upload(filename,
-						    plat_priv->cal_mem->va,
-						    *size);
+		ret = cnss_plat_ipc_qmi_file_upload(
+					 CNSS_PLAT_IPC_DAEMON_QMI_CLIENT_V01,
+					 filename, plat_priv->cal_mem->va,
+					 *size);
 	}
 
 	if (ret)
@@ -716,7 +719,8 @@ skip_cfg:
 		 * It is not required to wait until it gets connected here.
 		 * Hence pass the timeout value as 0.
 		 */
-		if (is_cnss_daemon_connected(0)) {
+		if (is_ipc_qmi_client_connected
+				(CNSS_PLAT_IPC_DAEMON_QMI_CLIENT_V01, 0)) {
 			cnss_pr_dbg("%s: cal_file_size %u !\n", __func__,
 				    cal_file_size);
 			cnss_wlfw_cal_report_req_send_sync(plat_priv,
@@ -3017,7 +3021,8 @@ static int cnss_cold_boot_cal_done_hdlr(struct cnss_plat_data *plat_priv,
 		/* Send cal upload req to cnss-daemon after confirming that
 		 * it is connected to cnss2 over QMI.
 		 */
-		if (is_cnss_daemon_connected(0))
+		if (is_ipc_qmi_client_connected
+				(CNSS_PLAT_IPC_DAEMON_QMI_CLIENT_V01, 0))
 			cnss_cal_mem_upload_to_file(plat_priv);
 		plat_priv->cal_done = true;
 		break;
@@ -4183,6 +4188,21 @@ static void cnss_unregister_bus_scale(struct cnss_plat_data *plat_priv)
 }
 #endif
 
+void cnss_daemon_connection_update_cb(void *cb_ctx, bool status)
+{
+	int i;
+
+	for (i = 0; i < plat_env_index; i++) {
+		if (status)
+			set_bit(CNSS_DAEMON_CONNECTED,
+				&plat_env[i]->driver_state);
+		else
+			clear_bit(CNSS_DAEMON_CONNECTED,
+				  &plat_env[i]->driver_state);
+	}
+
+}
+
 static ssize_t fs_ready_store(struct device *dev,
 			      struct device_attribute *attr,
 			      const char *buf, size_t count)
@@ -5232,7 +5252,8 @@ static int __init cnss_initialize(void)
 	}
 	cnss_bus_init_by_type(CNSS_BUS_PCI);
 	cnss_plat_ipc_qmi_svc_init();
-
+	cnss_plat_ipc_register(CNSS_PLAT_IPC_DAEMON_QMI_CLIENT_V01,
+			       cnss_daemon_connection_update_cb, NULL);
 	if (enable_mlo_support)
 		cnss_set_default_mlo_config();
 
@@ -5241,6 +5262,7 @@ static int __init cnss_initialize(void)
 
 static void __exit cnss_exit(void)
 {
+	cnss_plat_ipc_unregister(CNSS_PLAT_IPC_DAEMON_QMI_CLIENT_V01, NULL);
 	cnss_plat_ipc_qmi_svc_exit();
 	cnss_legacy_irq_deinit();
 	platform_driver_unregister(&cnss_platform_driver);
