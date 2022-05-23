@@ -177,7 +177,7 @@ static int soc_version_major;
 module_param(soc_version_major, int, 0444);
 MODULE_PARM_DESC(soc_version_major, "SOC Major Version");
 
-unsigned int enable_mlo_support;
+static unsigned int enable_mlo_support = 1;
 module_param(enable_mlo_support, uint, 0600);
 MODULE_PARM_DESC(enable_mlo_support, "enable_mlo_support");
 
@@ -185,13 +185,6 @@ MODULE_PARM_DESC(enable_mlo_support, "enable_mlo_support");
 static unsigned int mlo_chip_bitmask = 0x7;
 module_param(mlo_chip_bitmask, uint, 0600);
 MODULE_PARM_DESC(mlo_chip_bitmask, "mlo_chip_bitmask");
-
-/* Temporary bootarg till driver ini changes are ready
- * If bit is 0, it is single-link MLO, if bit is 1, it is two-link MLO
- */
-static unsigned int mlo_num_link_bitmask;
-module_param(mlo_num_link_bitmask, uint, 0600);
-MODULE_PARM_DESC(mlo_num_link_bitmask, "mlo_num_link_bitmask");
 
 enum skip_cnss_options {
 	CNSS_SKIP_NONE,
@@ -1233,17 +1226,21 @@ static void cnss_set_default_mlo_config(void)
 	mlo_group_info.group_id = 0;
 	mlo_group_info.max_num_peers = 256;
 
-	for (i = 0; i < MAX_NUMBER_OF_SOCS; i++) {
+	for (i = 0; i < plat_env_index; i++) {
+		plat_priv = cnss_get_plat_priv_by_soc_id(i);
+		if (!plat_priv) {
+			cnss_pr_err("%s: Failed to get plat_priv for soc_id: %d",
+				    __func__, i);
+			return;
+		}
+
 		if (mlo_chip_bitmask & (1 << i)) {
 			/*Temporarily Hard coding group id as 0 */
 			mlo_group_info.chip_info[num_chip].group_id = 0;
 			mlo_group_info.chip_info[num_chip].soc_id = i;
 			mlo_group_info.chip_info[num_chip].chip_id = num_chip;
 
-			/* If mlo_num_link_bitmask is set, num_local_links
-			 * should be 2, else 1
-			 */
-			if (mlo_num_link_bitmask & ((1 << i)))
+			if (plat_priv->firmware_type == CNSS_FW_DUAL_MAC)
 				mlo_group_info.chip_info[num_chip].
 							num_local_links = 2;
 			else
@@ -4961,6 +4958,14 @@ static int cnss_probe(struct platform_device *plat_dev)
 		firmware_name_len = strlen(cnss_get_fw_path(plat_priv));
 		firmware_name = of_get_property(plat_dev->dev.of_node,
 						"firmware_name", NULL);
+
+		/* Temporarily set this here because MLO config uses this to
+		 * decide the number of links in the MLO chip info.
+		 * This will be removed once new BDFs with firmware_type
+		 * encoded in the most significant nibble is available
+		 */
+		if (firmware_name && plat_priv->device_id == QCN9224_DEVICE_ID)
+			plat_priv->firmware_type = CNSS_FW_DUAL_MAC;
 
 		/* If firmware_name not defined in DTS, use default FW name */
 		if (!firmware_name)

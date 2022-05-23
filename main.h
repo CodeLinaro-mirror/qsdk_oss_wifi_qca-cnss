@@ -538,6 +538,15 @@ struct target_qcn6122 {
 	struct qgic2_msi *qgic2_msi;
 };
 
+/* FW type value is encoded in the most significant nibble of board_id
+ * in DTS or in OTP register
+ */
+enum cnss_fw_type {
+	CNSS_FW_DEFAULT, /* 0 - amss.bin */
+	CNSS_FW_DUAL_MAC, /* 1 - amss_dualmac.bin */
+	CNSS_FW_MAX, /* 2 to 15 is reserved */
+};
+
 struct cnss_plat_data {
 	void *wlan_priv;
 	struct platform_device *plat_dev;
@@ -647,6 +656,7 @@ struct cnss_plat_data {
 	bool enable_intx;
 	bool fw_ini_cfg_support;
 	bool regdb_mandatory;
+	enum cnss_fw_type firmware_type;
 };
 
 #ifdef CONFIG_ARCH_QCOM
