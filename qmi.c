@@ -413,6 +413,7 @@ static int cnss_wlfw_host_cap_send_sync(struct cnss_plat_data *plat_priv)
 	}
 
 	plat_priv->fw_ini_cfg_support = !!req->fw_ini_cfg_support;
+	release_firmware(fw);
 
 	/* Check if cnss-daemon is connected to cnss2 QMI service.
 	 * If so, send number of clients to FW as 1. Else, check
