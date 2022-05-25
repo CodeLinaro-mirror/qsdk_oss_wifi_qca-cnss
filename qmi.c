@@ -421,7 +421,8 @@ static int cnss_wlfw_host_cap_send_sync(struct cnss_plat_data *plat_priv)
 	 * and then send the number of clients as 2.
 	 */
 
-	if (!is_cnss_daemon_connected(0)) {
+	if (!is_ipc_qmi_client_connected(CNSS_PLAT_IPC_DAEMON_QMI_CLIENT_V01,
+					 0)) {
 		if (plat_priv->daemon_support)
 			req->num_clients = 2;
 	}
@@ -2847,7 +2848,8 @@ static void cnss_wlfw_fw_mem_ready_ind_cb(struct qmi_handle *qmi_wlfw,
 		return;
 	}
 
-	if (is_cnss_daemon_connected(0)) {
+	if (is_ipc_qmi_client_connected(CNSS_PLAT_IPC_DAEMON_QMI_CLIENT_V01,
+					0)) {
 		driver_mode = cnss_get_global_driver_mode();
 
 		if (plat_priv->cold_boot_support &&
@@ -2892,7 +2894,7 @@ static void cnss_wlfw_fw_ready_ind_cb(struct qmi_handle *qmi_wlfw,
 	/* Return here as FW sends a different cold boot cal done indication
 	 * in case of single QMI client.
 	 */
-	if (is_cnss_daemon_connected(0))
+	if (is_ipc_qmi_client_connected(CNSS_PLAT_IPC_DAEMON_QMI_CLIENT_V01, 0))
 		return;
 
 	cal_info = kzalloc(sizeof(*cal_info), GFP_KERNEL);
