@@ -47,7 +47,7 @@ struct cnss_plat_ipc_file_data {
  * struct cnss_plat_ipc_qmi_client_ctx: Context for QMI IPC client
  * @client_sq: QMI IPC client QRTR socket
  * @client_connected: QMI IPC client connection status
- * @connection_update_cb: Registered user callback for QMI connection status
+ * @ipc_qmi_callbacks: Registered user callback functions for QMI req
  * @cb_ctx: Context for registered user
  * @num_user: Number of registered users
  */
@@ -55,8 +55,7 @@ struct cnss_plat_ipc_qmi_client_ctx {
 	struct sockaddr_qrtr client_sq;
 	bool client_connected;
 
-	cnss_plat_ipc_connection_update
-		connection_update_cb[CNSS_PLAT_IPC_MAX_USER];
+	struct cnss_plat_ipc_qmi_cb ipc_qmi_callbacks[CNSS_PLAT_IPC_MAX_USER];
 	void *cb_ctx[CNSS_PLAT_IPC_MAX_USER];
 	u32 num_user;
 };
@@ -165,8 +164,8 @@ cnss_plat_ipc_qmi_update_user(enum cnss_plat_ipc_qmi_client_id_v01 client_id)
 	int i;
 
 	for (i = 0; i < qmi_client->num_user; i++) {
-		if (qmi_client->connection_update_cb[i])
-			qmi_client->connection_update_cb[i]
+		if (qmi_client->ipc_qmi_callbacks[i].connection_update_cb)
+			qmi_client->ipc_qmi_callbacks[i].connection_update_cb
 						(qmi_client->cb_ctx[i],
 						 qmi_client->client_connected);
 	}
@@ -487,6 +486,63 @@ file_error:
 
 
 /**
+ * cnss_plat_ipc_qmi_send_config_param_req_handler() - Config param QMI message
+ * handler
+ * @handle: Pointer to QMI handle
+ * @sq: QMI socket
+ * @txn: QMI transaction pointer
+ * @decoded_msg: Pointer to decoded QMI message
+ *
+ * Handles the config parameters and their values from userspace.
+ *
+ * Return: None
+ */
+void
+cnss_plat_ipc_qmi_send_config_param_req_handler(struct qmi_handle *handle,
+						struct sockaddr_qrtr *sq,
+						struct qmi_txn *txn,
+						const void *decoded_msg)
+{
+	struct cnss_plat_ipc_qmi_send_config_param_req_msg_v01 *req_msg;
+	struct cnss_plat_ipc_qmi_send_config_param_resp_msg_v01 resp = {0};
+	struct cnss_plat_ipc_qmi_svc_ctx *svc = &plat_ipc_qmi_svc;
+	struct cnss_plat_ipc_qmi_client_ctx *qmi_client;
+	enum cnss_plat_ipc_qmi_client_id_v01 client_id;
+	int ret = 0, i = 0;
+	struct cnss_plat_data *plat_priv = NULL;
+
+	req_msg =
+	(struct cnss_plat_ipc_qmi_send_config_param_req_msg_v01 *)decoded_msg;
+
+	cnss_pr_info("%s: Param: %d Instance ID: 0x%x Value: %llu\n", __func__,
+		     req_msg->param, req_msg->instance_id, req_msg->value);
+
+	client_id = req_msg->client_id;
+
+	if (client_id <= CNSS_PLAT_IPC_MAX_QMI_CLIENTS) {
+		qmi_client = &svc->qmi_client_ctx[client_id];
+		for (i = 0; i < qmi_client->num_user; i++) {
+			if (qmi_client->ipc_qmi_callbacks[i].config_param_cb)
+				qmi_client->ipc_qmi_callbacks[i].config_param_cb(
+							req_msg->instance_id,
+							req_msg->param,
+							req_msg->value);
+		}
+	} else {
+		cnss_pr_err("%s: Invalid client ID %d\n", __func__,
+			    req_msg->client_id);
+	}
+
+	ret = qmi_send_response
+		(svc->svc_hdl, sq, txn,
+		 CNSS_PLAT_IPC_QMI_SEND_CONFIG_PARAM_RESP_V01,
+		 CNSS_PLAT_IPC_QMI_SEND_CONFIG_PARAM_RESP_MSG_V01_MAX_MSG_LEN,
+		 cnss_plat_ipc_qmi_send_config_param_resp_msg_v01_ei, &resp);
+	if (ret < 0)
+		cnss_pr_err("%s: QMI failed: %d\n", __func__, ret);
+}
+
+/**
  * cnss_plat_ipc_qmi_init_setup_req_handler() - Init_Setup QMI message handler
  * @handle: Pointer to QMI handle
  * @sq: QMI socket
@@ -729,6 +785,14 @@ static struct qmi_msg_handler cnss_plat_ipc_qmi_req_handlers[] = {
 		       sizeof(struct cnss_plat_ipc_qmi_file_upload_req_msg_v01),
 		.fn = cnss_plat_ipc_qmi_file_upload_req_handler,
 	},
+	{
+		.type = QMI_REQUEST,
+		.msg_id = CNSS_PLAT_IPC_QMI_SEND_CONFIG_PARAM_REQ_V01,
+		.ei = cnss_plat_ipc_qmi_send_config_param_req_msg_v01_ei,
+		.decoded_size =
+		   CNSS_PLAT_IPC_QMI_SEND_CONFIG_PARAM_REQ_MSG_V01_MAX_MSG_LEN,
+		.fn = cnss_plat_ipc_qmi_send_config_param_req_handler,
+	},
 	{}
 };
 
@@ -759,8 +823,8 @@ struct cnss_plat_ipc_daemon_config *cnss_plat_ipc_qmi_daemon_config(void)
  * Return: 0 on success, negative error value otherwise
  */
 int cnss_plat_ipc_register(enum cnss_plat_ipc_qmi_client_id_v01 client_id,
-			   cnss_plat_ipc_connection_update
-			   connection_update_cb, void *cb_ctx)
+			   struct cnss_plat_ipc_qmi_cb *ipc_qmi_callbacks,
+			   void *cb_ctx)
 {
 	struct cnss_plat_ipc_qmi_svc_ctx *svc = &plat_ipc_qmi_svc;
 	struct cnss_plat_ipc_qmi_client_ctx *qmi_client;
@@ -782,7 +846,10 @@ int cnss_plat_ipc_register(enum cnss_plat_ipc_qmi_client_id_v01 client_id,
 		return -EINVAL;
 	}
 
-	qmi_client->connection_update_cb[num_user] = connection_update_cb;
+	qmi_client->ipc_qmi_callbacks[num_user].connection_update_cb
+				= ipc_qmi_callbacks->connection_update_cb;
+	qmi_client->ipc_qmi_callbacks[num_user].config_param_cb
+				= ipc_qmi_callbacks->config_param_cb;
 	qmi_client->cb_ctx[num_user] = cb_ctx;
 	qmi_client->num_user++;
 	cnss_pr_dbg("%s Successful registration for QMI IPC Client status update\n",
@@ -817,7 +884,10 @@ void cnss_plat_ipc_unregister(enum cnss_plat_ipc_qmi_client_id_v01 client_id,
 	for (i = 0; i < qmi_client->num_user; i++) {
 		if (qmi_client->cb_ctx[i] == cb_ctx) {
 			qmi_client->cb_ctx[i] = NULL;
-			qmi_client->connection_update_cb[i] = NULL;
+			qmi_client->ipc_qmi_callbacks[i].connection_update_cb
+									= NULL;
+			qmi_client->ipc_qmi_callbacks[i].config_param_cb
+									= NULL;
 			qmi_client->num_user--;
 			break;
 		}
