@@ -3997,7 +3997,8 @@ int cnss_pci_load_m3(struct cnss_pci_data *pci_priv)
 	ret = request_firmware_direct(&fw_entry, filename,
 				      &pci_priv->pci_dev->dev);
 	if (ret) {
-		cnss_pr_err("Failed to load M3 image: %s\n", filename);
+		cnss_pr_err("Failed to load M3 image: %s ret: %d\n",
+			    filename, ret);
 		return ret;
 	}
 

@@ -253,7 +253,7 @@ static int cnss_wlfw_ini_file_send_sync(struct cnss_plat_data *plat_priv,
 	struct qmi_txn txn;
 	int ret = 0;
 	int resp_error_msg = 0;
-	const struct firmware *fw;
+	const struct firmware *fw = NULL;
 	char filename[FW_INI_FILE_NAME_LEN] = {0};
 	const u8 *temp;
 	unsigned int remaining;
@@ -362,6 +362,9 @@ static int cnss_wlfw_ini_file_send_sync(struct cnss_plat_data *plat_priv,
 	return 0;
 
 err:
+	if (fw)
+		release_firmware(fw);
+
 	kfree(req);
 	kfree(resp);
 	qmi_record(plat_priv->wlfw_service_instance_id,
@@ -839,7 +842,7 @@ static int cnss_wlfw_load_bdf(struct wlfw_bdf_download_req_msg_v01 *req,
 	char filename[30];
 	const struct firmware *fw;
 	char *bdf_addr;
-	unsigned int bdf_addr_pa, location[MAX_TGT_MEM_MODES], board_id;
+	unsigned int bdf_addr_pa, location[MAX_TGT_MEM_MODES];
 	int size;
 	struct device *dev;
 
@@ -847,49 +850,22 @@ static int cnss_wlfw_load_bdf(struct wlfw_bdf_download_req_msg_v01 *req,
 
 	switch (bdf_type) {
 	case BDF_TYPE_GOLDEN:
-		if (plat_priv->board_info.board_id_override) {
-			cnss_pr_info("Using Boardid from bootargs:0x%02x\n",
-				     plat_priv->board_info.board_id_override);
+		if (plat_priv->board_info.board_id_override)
 			snprintf(filename, sizeof(filename),
-				 "%s" BDF_WIN_FILE_NAME_PREFIX "%02x",
+				 "%s" BDF_WIN_FILE_NAME_PREFIX "%.*x",
 				 cnss_get_fw_path(plat_priv),
+				 (plat_priv->board_info.num_bytes * 2),
 				 plat_priv->board_info.board_id_override);
-		} else if (!of_property_read_u32(dev->of_node, "qcom,board_id",
-					  &board_id)) {
-			if ((board_id == 0xFF) &&
-			    (plat_priv->board_info.board_id == 0xFF)) {
-				snprintf(filename, sizeof(filename),
-					 "%s" DEFAULT_BDF_FILE_NAME,
-					 cnss_get_fw_path(plat_priv));
-			} else if (board_id == 0xFF) {
-				snprintf(filename, sizeof(filename),
-					 "%s" BDF_WIN_FILE_NAME_PREFIX "%02x",
-					 cnss_get_fw_path(plat_priv),
-					 plat_priv->board_info.board_id);
-			} else {
-				if (board_id != plat_priv->board_info.board_id)
-					cnss_pr_info(
-					"Boardid from dts:%02x,FW:%02x\n",
-					board_id,
-					plat_priv->board_info.board_id);
-
-				snprintf(filename, sizeof(filename),
-					 "%s" BDF_WIN_FILE_NAME_PREFIX "%02x",
-					 cnss_get_fw_path(plat_priv),
-					 board_id);
-			}
-		} else {
-			cnss_pr_info("No board_id entry in device tree\n");
-			if (plat_priv->board_info.board_id == 0xFF)
-				snprintf(filename, sizeof(filename),
-					 "%s" DEFAULT_BDF_FILE_NAME,
-					 cnss_get_fw_path(plat_priv));
-			else
-				snprintf(filename, sizeof(filename),
-					 "%s" BDF_WIN_FILE_NAME_PREFIX "%02x",
-					 cnss_get_fw_path(plat_priv),
-					 plat_priv->board_info.board_id);
-		}
+		else if (plat_priv->board_info.board_id == 0xFF)
+			snprintf(filename, sizeof(filename),
+				 "%s" DEFAULT_BDF_FILE_NAME,
+				 cnss_get_fw_path(plat_priv));
+		else
+			snprintf(filename, sizeof(filename),
+				 "%s" BDF_WIN_FILE_NAME_PREFIX "%.*x",
+				 cnss_get_fw_path(plat_priv),
+				 (plat_priv->board_info.num_bytes * 2),
+				 plat_priv->board_info.board_id);
 		break;
 	case BDF_TYPE_CALDATA:
 		if (plat_priv->device_id == QCN6122_DEVICE_ID) {
@@ -1002,47 +978,12 @@ int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv,
 	}
 
 	switch (bdf_type) {
-	case CNSS_BDF_ELF:
-		if (plat_priv->board_info.board_id == 0xFF)
-			snprintf(filename, sizeof(filename), ELF_BDF_FILE_NAME);
-		else if (plat_priv->board_info.board_id < 0xFF)
-			snprintf(filename, sizeof(filename),
-				 "%s" ELF_BDF_FILE_NAME_PREFIX "%02x",
-				 cnss_get_fw_path(plat_priv),
-				 plat_priv->board_info.board_id);
-		else
-			snprintf(filename, sizeof(filename),
-				 "%s" BDF_FILE_NAME_PREFIX "%02x.e%02x",
-				 cnss_get_fw_path(plat_priv),
-				 plat_priv->board_info.board_id >> 8 & 0xFF,
-				 plat_priv->board_info.board_id & 0xFF);
-		break;
-	case CNSS_BDF_BIN:
-		if (plat_priv->board_info.board_id == 0xFF)
-			snprintf(filename, sizeof(filename), BIN_BDF_FILE_NAME);
-		else if (plat_priv->board_info.board_id < 0xFF)
-			snprintf(filename, sizeof(filename),
-				 "%s" BIN_BDF_FILE_NAME_PREFIX "%02x",
-				 cnss_get_fw_path(plat_priv),
-				 plat_priv->board_info.board_id);
-		else
-			snprintf(filename, sizeof(filename),
-				 "%s" BDF_FILE_NAME_PREFIX "%02x.b%02x",
-				 cnss_get_fw_path(plat_priv),
-				 plat_priv->board_info.board_id >> 8 & 0xFF,
-				 plat_priv->board_info.board_id & 0xFF);
-		break;
-	case CNSS_BDF_DUMMY:
-		cnss_pr_dbg("CNSS_BDF_DUMMY is set, sending dummy BDF\n");
-		snprintf(filename, sizeof(filename), DUMMY_BDF_FILE_NAME);
-		temp = DUMMY_BDF_FILE_NAME;
-		remaining = MAX_BDF_FILE_NAME;
-		goto bypass_bdf;
 	case CNSS_BDF_WIN:
 		if (plat_priv->board_info.board_id_override)
 			snprintf(filename, sizeof(filename),
-				 "%s" BDF_WIN_FILE_NAME_PREFIX "%02x",
+				 "%s" BDF_WIN_FILE_NAME_PREFIX "%.*x",
 				 cnss_get_fw_path(plat_priv),
+				 (plat_priv->board_info.num_bytes * 2),
 				 plat_priv->board_info.board_id_override);
 		else if (plat_priv->board_info.board_id == 0xFF)
 			snprintf(filename, sizeof(filename),
@@ -1050,9 +991,24 @@ int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv,
 				 cnss_get_fw_path(plat_priv));
 		else
 			snprintf(filename, sizeof(filename),
+				 "%s" BDF_WIN_FILE_NAME_PREFIX "%.*x",
+				 cnss_get_fw_path(plat_priv),
+				 (plat_priv->board_info.num_bytes * 2),
+				 plat_priv->board_info.board_id);
+
+		/* Temporary check to be compatible with older FW which
+		 * still has 1 byte board_id based BDF files
+		 */
+		if (plat_priv->device_id == QCN9224_DEVICE_ID &&
+		    request_firmware_direct(&fw_entry, filename,
+					    &plat_priv->plat_dev->dev))
+			snprintf(filename, sizeof(filename),
 				 "%s" BDF_WIN_FILE_NAME_PREFIX "%02x",
 				 cnss_get_fw_path(plat_priv),
-				 plat_priv->board_info.board_id);
+				 (plat_priv->board_info.board_id_override &
+				  ~CNSS_FW_TYPE_MASK));
+		if (fw_entry)
+			release_firmware(fw_entry);
 
 		if (plat_priv->bdf_dnld_method == WLFW_DIRECT_BDF_COPY_V01) {
 			cnss_pr_dbg("BDF download through direct copy\n");
@@ -1101,8 +1057,9 @@ int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv,
 
 		if (plat_priv->board_info.board_id_override) {
 			snprintf(filename, sizeof(filename),
-				 "%s" REGDB_WIN_FILE_NAME_PREFIX "%02x",
+				 "%s" REGDB_WIN_FILE_NAME_PREFIX "%.*x",
 				 cnss_get_fw_path(plat_priv),
+				 (plat_priv->board_info.num_bytes * 2),
 				 plat_priv->board_info.board_id_override);
 		} else {
 			/* If plat_priv->board_info.board_id is 0xFF,
@@ -1112,8 +1069,9 @@ int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv,
 			 * check for plat_priv->board_info.board_id as 0xFF.
 			 */
 			snprintf(filename, sizeof(filename),
-				 "%s" REGDB_WIN_FILE_NAME_PREFIX "%02x",
+				 "%s" REGDB_WIN_FILE_NAME_PREFIX "%.*x",
 				 cnss_get_fw_path(plat_priv),
+				 (plat_priv->board_info.num_bytes * 2),
 				 plat_priv->board_info.board_id);
 		}
 		/* If the regdb corresponding to board ID is not found,
@@ -1126,6 +1084,9 @@ int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv,
 				 "%s" DEFAULT_REGDB_FILE_NAME,
 				 cnss_get_fw_path(plat_priv));
 		}
+
+		if (fw_entry)
+			release_firmware(fw_entry);
 		break;
 	case CNSS_BDF_HDS:
 		fw_bdf_type = BDF_TYPE_HDS;
@@ -2275,8 +2236,8 @@ int cnss_wlfw_qdss_dnld_send_sync(struct cnss_plat_data *plat_priv)
 		ret = request_firmware_direct(&fw_entry, default_cfg_file_name,
 					      &plat_priv->plat_dev->dev);
 		if (ret) {
-			cnss_pr_info("Failed to load QDSS Config: %s\n",
-				     default_cfg_file_name);
+			cnss_pr_info("Failed to load QDSS Config: %s ret:%d\n",
+				     default_cfg_file_name, ret);
 			goto err_req_fw;
 		}
 	}

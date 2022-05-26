@@ -69,6 +69,7 @@
 #define CNSS_BDF_TYPE_DEFAULT		CNSS_BDF_ELF
 #define CNSS_TIME_SYNC_PERIOD_DEFAULT	900000
 #define DEFAULT_FW_FILE_NAME		"amss.bin"
+#define DUALMAC_FW_FILE_NAME		"amss_dualmac.bin"
 
 #define CNSS_INTX_SUPPORT_MASK          0xF
 #define CNSS_INTX_SUPPORT_SHIFT         4
@@ -4793,6 +4794,136 @@ static void cnss_get_legacy_intx_support(struct cnss_plat_data *plat_priv)
 	}
 }
 
+static u32 cnss_get_bdf_mod_param(int slot_id)
+{
+	u32 ret = 0;
+
+	switch (slot_id) {
+	case 0:
+		ret = (u32)bdf_pci0;
+		break;
+	case 1:
+		ret = (u32)bdf_pci1;
+		break;
+	case 2:
+		ret = (u32)bdf_pci2;
+		break;
+	case 3:
+		ret = (u32)bdf_pci3;
+		break;
+	default:
+		break;
+	}
+	return ret;
+}
+
+/* Set board_id_override field in plat_priv based on the below priority order
+ * Bootargs -- bdf_integrated, bdf_pciX...
+ * DTS entry
+ *
+ * If both these are not present, board_id_override would be 0 and board_id
+ * from OTP register or target capabilities would be used.
+ */
+static void cnss_set_board_id(struct cnss_plat_data *plat_priv)
+{
+	struct wlfw_rf_board_info *board_info = &plat_priv->board_info;
+	struct device *dev = &plat_priv->plat_dev->dev;
+	const char *board_id_str;
+
+	switch (plat_priv->device_id) {
+	case QCA8074_DEVICE_ID:
+	case QCA8074V2_DEVICE_ID:
+	case QCA5018_DEVICE_ID:
+	case QCA6018_DEVICE_ID:
+	case QCA9574_DEVICE_ID:
+		board_id_str = "qcom,board_id";
+		board_info->num_bytes = 1;
+		board_info->board_id_override = (u32)bdf_integrated;
+		break;
+	case QCN6122_DEVICE_ID:
+		board_id_str = "qcom,board_id";
+		board_info->num_bytes = 1;
+		board_info->board_id_override =
+			cnss_get_bdf_mod_param(plat_priv->userpd_id - 1);
+		break;
+	case QCN9000_DEVICE_ID:
+		board_id_str = "board_id";
+		board_info->num_bytes = 1;
+		board_info->board_id_override =
+			cnss_get_bdf_mod_param(plat_priv->pci_slot_id);
+		break;
+	case QCN9224_DEVICE_ID:
+		board_id_str = "board_id";
+		board_info->num_bytes = 2;
+		board_info->board_id_override =
+			cnss_get_bdf_mod_param(plat_priv->pci_slot_id);
+		break;
+	default:
+		cnss_pr_err("No such device id 0x%lx\n", plat_priv->device_id);
+		return;
+	}
+
+	if (!board_info->board_id_override) {
+		if (of_property_read_u32(dev->of_node, board_id_str,
+					 &board_info->board_id_override))
+			cnss_pr_info("No board_id in device tree for %s\n",
+					plat_priv->device_name);
+	}
+
+	cnss_pr_dbg("%s: board_id_override 0x%x for device %s\n", __func__,
+		    board_info->board_id_override,
+		    plat_priv->device_name);
+}
+
+static int cnss_set_fw_type_and_name(struct cnss_plat_data *plat_priv)
+{
+	const char *firmware_name = NULL;
+	struct device *dev = &plat_priv->plat_dev->dev;
+	u32 firmware_name_len;
+	u32 board_id = plat_priv->board_info.board_id_override;
+
+	/* AHB devices use PIL binaries, firmware_name is applicable
+	 * only for PCI devices.
+	 */
+	if (plat_priv->bus_type == CNSS_BUS_AHB)
+		return 0;
+
+	plat_priv->firmware_type =
+		(board_id & CNSS_FW_TYPE_MASK) >> CNSS_FW_TYPE_SHIFT;
+
+	firmware_name_len = strlen(cnss_get_fw_path(plat_priv));
+	firmware_name = of_get_property(dev->of_node, "firmware_name", NULL);
+
+	/* If firmware_name not defined in DTS, use default FW name */
+	if (!firmware_name) {
+		switch (plat_priv->firmware_type) {
+		case CNSS_FW_DUAL_MAC:
+			firmware_name = DUALMAC_FW_FILE_NAME;
+			break;
+		case CNSS_FW_DEFAULT:
+			/* Fall Through */
+		default:
+			firmware_name = DEFAULT_FW_FILE_NAME;
+		}
+	}
+
+	firmware_name_len += strlen(firmware_name);
+	if (firmware_name_len > PATH_MAX) {
+		cnss_pr_err("firmware_name_len too long %d",
+			    firmware_name_len);
+		return -EINVAL;
+	}
+
+	plat_priv->firmware_name = kzalloc(firmware_name_len + 1, GFP_KERNEL);
+	if (!plat_priv->firmware_name)
+		return -ENOMEM;
+
+	snprintf(plat_priv->firmware_name, firmware_name_len + 1,
+		 "%s%s", cnss_get_fw_path(plat_priv), firmware_name);
+
+	return 0;
+}
+
 static int cnss_probe(struct platform_device *plat_dev)
 {
 	int ret = 0;
@@ -4800,10 +4931,6 @@ static int cnss_probe(struct platform_device *plat_dev)
 	const struct of_device_id *of_id;
 	const struct platform_device_id *device_id;
 	u32 node_id = 0, userpd_id = 0, node_id_base;
-	const char *firmware_name = NULL;
-	u32 firmware_name_len;
-	unsigned int id = 0;
-	const char *board_id_str;
 	unsigned long flags;
 #ifdef CONFIG_CNSS2_KERNEL_IPQ
 	const int *soc_version;
@@ -4937,59 +5064,6 @@ static int cnss_probe(struct platform_device *plat_dev)
 
 		plat_priv->pci_slot_id = plat_priv->wlfw_service_instance_id -
 						node_id_base;
-
-		switch (plat_priv->pci_slot_id) {
-		case 0:
-			plat_priv->board_info.board_id_override = bdf_pci0;
-			break;
-		case 1:
-			plat_priv->board_info.board_id_override = bdf_pci1;
-			break;
-		case 2:
-			plat_priv->board_info.board_id_override = bdf_pci2;
-			break;
-		case 3:
-			plat_priv->board_info.board_id_override = bdf_pci3;
-			break;
-		default:
-			break;
-		}
-
-		firmware_name_len = strlen(cnss_get_fw_path(plat_priv));
-		firmware_name = of_get_property(plat_dev->dev.of_node,
-						"firmware_name", NULL);
-
-		/* Temporarily set this here because MLO config uses this to
-		 * decide the number of links in the MLO chip info.
-		 * This will be removed once new BDFs with firmware_type
-		 * encoded in the most significant nibble is available
-		 */
-		if (firmware_name && plat_priv->device_id == QCN9224_DEVICE_ID)
-			plat_priv->firmware_type = CNSS_FW_DUAL_MAC;
-
-		/* If firmware_name not defined in DTS, use default FW name */
-		if (!firmware_name)
-			firmware_name = DEFAULT_FW_FILE_NAME;
-
-		firmware_name_len += strlen(firmware_name);
-		if (firmware_name_len > PATH_MAX) {
-			cnss_pr_err("firmware_name_len too long %d",
-				    firmware_name_len);
-			ret = -EINVAL;
-			goto out;
-		}
-
-		plat_priv->firmware_name = kzalloc(firmware_name_len + 1,
-						   GFP_KERNEL);
-		if (!plat_priv->firmware_name) {
-			cnss_pr_err("Failed to allocate memory for fw_name");
-			ret = -ENOMEM;
-			goto out;
-		}
-
-		snprintf(plat_priv->firmware_name, firmware_name_len + 1,
-			 "%s%s", cnss_get_fw_path(plat_priv), firmware_name);
-
 		break;
 	case QCA8074_DEVICE_ID:
 	case QCA8074V2_DEVICE_ID:
@@ -5000,7 +5074,6 @@ static int cnss_probe(struct platform_device *plat_dev)
 		plat_priv->bdf_dnld_method = WLFW_DIRECT_BDF_COPY_V01;
 		plat_priv->wlfw_service_instance_id =
 			WLFW_SERVICE_INS_ID_V01_QCA8074;
-		plat_priv->board_info.board_id_override = bdf_integrated;
 		break;
 	case QCN6122_DEVICE_ID:
 		plat_priv->bus_type = CNSS_BUS_AHB;
@@ -5008,13 +5081,6 @@ static int cnss_probe(struct platform_device *plat_dev)
 		plat_priv->userpd_id = userpd_id;
 		plat_priv->wlfw_service_instance_id =
 			WLFW_SERVICE_INS_ID_V01_QCN6122 + userpd_id;
-		if (plat_priv->wlfw_service_instance_id ==
-			WLFW_SERVICE_INS_ID_V01_QCN6122 + QCN6122_0)
-			plat_priv->board_info.board_id_override = bdf_pci0;
-		else if (plat_priv->wlfw_service_instance_id ==
-			WLFW_SERVICE_INS_ID_V01_QCN6122 + QCN6122_1)
-			plat_priv->board_info.board_id_override = bdf_pci1;
-
 #ifdef CONFIG_CNSS2_QGIC2M
 		plat_priv->qcn6122.qgic2_msi = cnss_qgic2_enable_msi(plat_priv);
 		if (!plat_priv->qcn6122.qgic2_msi) {
@@ -5030,30 +5096,15 @@ static int cnss_probe(struct platform_device *plat_dev)
 		return -ENODEV;
 	}
 
-	/* Update board_id_override with DTS board_id in case
-	 * bootargs didn't specify any.
-	 */
-
-	if (plat_priv->bus_type == CNSS_BUS_AHB)
-		board_id_str = "qcom,board_id";
-	else
-		board_id_str = "board_id";
-
-	if (!plat_priv->board_info.board_id_override) {
-		if (!of_property_read_u32(plat_dev->dev.of_node, board_id_str,
-					  &id))
-			plat_priv->board_info.board_id_override = id;
-		else
-			cnss_pr_info("No board_id entry in device tree\n");
-	}
-
 	ret = cnss_set_device_name(plat_priv);
 	if (ret)
 		return -ENODEV;
 
-	cnss_pr_dbg("%s: board_id_override 0x%x for device %s\n", __func__,
-		    plat_priv->board_info.board_id_override,
-		    plat_priv->device_name);
+	cnss_set_board_id(plat_priv);
+
+	ret = cnss_set_fw_type_and_name(plat_priv);
+	if (ret)
+		return -ENODEV;
 
 #ifdef CONFIG_CNSS2_KERNEL_RPROC_FRAMEWORK
 	ret = cnss_rproc_register(plat_priv);
