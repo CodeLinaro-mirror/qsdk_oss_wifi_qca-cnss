@@ -177,6 +177,10 @@ static DEFINE_SPINLOCK(pci_reg_window_lock);
 #define QCN6122_CE_DST_RING_REG_BASE		0x3B81000
 #define QCN6122_CE_COMMON_REG_BASE		0x3B98000
 
+#define QCA5332_CE_SRC_RING_REG_BASE            0x740000
+#define QCA5332_CE_DST_RING_REG_BASE            0x741000
+#define QCA5332_CE_COMMON_REG_BASE              0x758000
+
 #define CE_SRC_RING_BASE_LSB_OFFSET		0x0
 #define CE_SRC_RING_BASE_MSB_OFFSET		0x4
 #define CE_SRC_RING_ID_OFFSET			0x8
@@ -4269,6 +4273,7 @@ void cnss_free_soc_info(struct cnss_plat_data *plat_priv)
 	case QCA8074V2_DEVICE_ID:
 	case QCA6018_DEVICE_ID:
 	case QCA5018_DEVICE_ID:
+	case QCA5332_DEVICE_ID:
 	case QCA9574_DEVICE_ID:
 		/* PCI BAR not applicable for other AHB targets */
 		break;
@@ -4333,6 +4338,13 @@ static struct cnss_ce_base_addr ce_base_addr_qcn9224 = {
 	.dst_base = QCN9000_CE_DST_RING_REG_BASE,
 	.common_base = QCN9224_CE_COMMON_REG_BASE,
 	.max_ce_count = QCN9224_CE_COUNT,
+};
+
+static struct cnss_ce_base_addr ce_base_addr_qca5332 = {
+	.src_base = QCA5332_CE_SRC_RING_REG_BASE,
+	.dst_base = QCA5332_CE_DST_RING_REG_BASE,
+	.common_base = QCA5332_CE_COMMON_REG_BASE,
+	.max_ce_count = DEFAULT_CE_COUNT,
 };
 
 static struct cnss_ce_base_addr ce_base_addr_qcn6122 = {
@@ -5214,6 +5226,9 @@ struct cnss_ce_base_addr *register_ce_object(struct cnss_plat_data *plat_priv)
 		break;
 	case QCN9224_DEVICE_ID:
 		ce_object = &ce_base_addr_qcn9224;
+		break;
+	case QCA5332_DEVICE_ID:
+		ce_object = &ce_base_addr_qca5332;
 		break;
 	case QCN6122_DEVICE_ID:
 		ce_object = &ce_base_addr_qcn6122;
