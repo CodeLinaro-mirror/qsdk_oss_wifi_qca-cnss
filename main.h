@@ -48,6 +48,11 @@
 #define CNSS_CAL_DB_FILE_PREFIX "wlfw_cal_01"
 #define CNSS_CAL_DB_FILE_SUFFIX ".bin"
 
+/* FW type value is encoded in the most significant nibble of board_id
+ * in DTS or in OTP register
+ */
+#define CNSS_FW_TYPE_MASK		0xF000
+#define CNSS_FW_TYPE_SHIFT		12
 
 enum cnss_cal_db_op {
 	CNSS_CAL_DB_UPLOAD,
@@ -304,6 +309,8 @@ struct wlfw_rf_chip_info {
 struct wlfw_rf_board_info {
 	u32 board_id;
 	u32 board_id_override;
+	/* Board ID is u32 but actual used size varies based on target type */
+	u16 num_bytes;
 };
 
 struct wlfw_soc_info {
@@ -538,9 +545,6 @@ struct target_qcn6122 {
 	struct qgic2_msi *qgic2_msi;
 };
 
-/* FW type value is encoded in the most significant nibble of board_id
- * in DTS or in OTP register
- */
 enum cnss_fw_type {
 	CNSS_FW_DEFAULT, /* 0 - amss.bin */
 	CNSS_FW_DUAL_MAC, /* 1 - amss_dualmac.bin */
