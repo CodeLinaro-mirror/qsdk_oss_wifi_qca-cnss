@@ -4185,9 +4185,71 @@ static void cnss_unregister_bus_scale(struct cnss_plat_data *plat_priv)
 }
 #endif
 
+void cnss_config_param_update_cb(uint32_t instance_id,
+			     enum cnss_plat_ipc_qmi_config_param_type_v01 param,
+			     uint64_t value)
+{
+	struct cnss_plat_data *plat_priv = NULL;
+
+	cnss_pr_info("%s: Instance ID: 0x%x Param %d Value: %llu\n", __func__,
+		     instance_id, param, value);
+
+	plat_priv = cnss_get_plat_priv_by_instance_id(instance_id);
+
+	if (!plat_priv) {
+		cnss_pr_err("Failed to get plat_priv for instance_id 0x%x\n",
+			    instance_id);
+		return;
+	}
+
+	switch (param) {
+	case CNSS_PLAT_IPC_PARAM_TYPE_DAEMON_SUPPORT_V01:
+		plat_priv->daemon_support = value;
+		cnss_pr_info("Setting daemon_support=%llu for instance_id 0x%x\n",
+			     value, instance_id);
+		break;
+	case CNSS_PLAT_IPC_PARAM_TYPE_COLD_BOOT_SUPPORT_V01:
+		plat_priv->cold_boot_support = value;
+		cnss_pr_info("Setting cold_boot_support=%llu for instance_id 0x%x\n",
+			     value, instance_id);
+		break;
+	case CNSS_PLAT_IPC_PARAM_TYPE_HDS_SUPPORT_V01:
+		plat_priv->hds_support = value;
+		cnss_pr_info("Setting hds_support=%llu for instance_id 0x%x\n",
+			     value, instance_id);
+		break;
+	case CNSS_PLAT_IPC_PARAM_TYPE_REGDB_SUPPORT_V01:
+		plat_priv->regdb_support = value;
+		cnss_pr_info("Setting regdb_support=%llu for instance_id 0x%x\n",
+			     value, instance_id);
+		break;
+	case CNSS_PLAT_IPC_PARAM_TYPE_QDSS_SUPPORT_V01:
+		plat_priv->qdss_support = value;
+		cnss_pr_info("Setting qdss_support=%llu for instance_id 0x%x\n",
+			     value, instance_id);
+		break;
+	case CNSS_PLAT_IPC_PARAM_TYPE_QDSS_START_V01:
+		cnss_pr_info("Starting QDSS for %s", plat_priv->device_name);
+		cnss_wlfw_qdss_dnld_send_sync(plat_priv);
+		break;
+	case CNSS_PLAT_IPC_PARAM_TYPE_QDSS_STOP_V01:
+		cnss_pr_info("Stopping QDSS for %s", plat_priv->device_name);
+		cnss_wlfw_send_qdss_trace_mode_req(plat_priv,
+						   QMI_WLFW_QDSS_TRACE_OFF_V01,
+						   value);
+		break;
+	default:
+		cnss_pr_err("Unknown config param type %d\n", param);
+		break;
+	}
+}
+
 void cnss_daemon_connection_update_cb(void *cb_ctx, bool status)
 {
 	int i;
+	struct cnss_plat_data *plat_priv = NULL;
+
+	cnss_pr_dbg("%s: Connection status %u\n", __func__, status);
 
 	for (i = 0; i < plat_env_index; i++) {
 		if (status)
@@ -5239,9 +5301,16 @@ static struct platform_driver cnss_platform_driver = {
 	},
 };
 
+static void cnss_init_ipc_qmi_cb(struct cnss_plat_ipc_qmi_cb *ipc_qmi_cb)
+{
+	ipc_qmi_cb->connection_update_cb = cnss_daemon_connection_update_cb;
+	ipc_qmi_cb->config_param_cb = cnss_config_param_update_cb;
+}
+
 static int __init cnss_initialize(void)
 {
 	int ret = 0;
+	struct cnss_plat_ipc_qmi_cb ipc_qmi_callbacks;
 
 	cnss_debug_init();
 	ret = platform_driver_register(&cnss_platform_driver);
@@ -5257,8 +5326,9 @@ static int __init cnss_initialize(void)
 	}
 	cnss_bus_init_by_type(CNSS_BUS_PCI);
 	cnss_plat_ipc_qmi_svc_init();
+	cnss_init_ipc_qmi_cb(&ipc_qmi_callbacks);
 	cnss_plat_ipc_register(CNSS_PLAT_IPC_DAEMON_QMI_CLIENT_V01,
-			       cnss_daemon_connection_update_cb, NULL);
+			       &ipc_qmi_callbacks, NULL);
 	if (enable_mlo_support)
 		cnss_set_default_mlo_config();
 

@@ -30,10 +30,18 @@ struct cnss_plat_ipc_daemon_config {
 
 typedef void (*cnss_plat_ipc_connection_update)(void *cb_ctx,
 						bool connection_status);
+typedef void (*cnss_plat_ipc_config_param_req)(uint32_t instance_id,
+			     enum cnss_plat_ipc_qmi_config_param_type_v01 param,
+			     uint64_t value);
+
+struct cnss_plat_ipc_qmi_cb {
+	cnss_plat_ipc_connection_update connection_update_cb;
+	cnss_plat_ipc_config_param_req config_param_cb;
+};
 
 int cnss_plat_ipc_register(enum cnss_plat_ipc_qmi_client_id_v01 client_id,
-			   cnss_plat_ipc_connection_update
-			   connection_update_cb, void *cb_ctx);
+			   struct cnss_plat_ipc_qmi_cb *ipc_qmi_callbacks,
+			   void *cb_ctx);
 
 void cnss_plat_ipc_unregister(enum cnss_plat_ipc_qmi_client_id_v01 client_id,
 			      void *cb_ctx);

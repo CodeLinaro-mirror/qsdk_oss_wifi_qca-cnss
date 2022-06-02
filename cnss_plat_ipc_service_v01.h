@@ -12,6 +12,8 @@
 #define CNSS_PLAT_IPC_QMI_REG_CLIENT_RESP_V01 0x0006
 #define CNSS_PLAT_IPC_QMI_FILE_DOWNLOAD_REQ_V01 0x0003
 #define CNSS_PLAT_IPC_QMI_FILE_UPLOAD_IND_V01 0x0004
+#define CNSS_PLAT_IPC_QMI_SEND_CONFIG_PARAM_RESP_V01 0x0007
+#define CNSS_PLAT_IPC_QMI_SEND_CONFIG_PARAM_REQ_V01 0x0007
 #define CNSS_PLAT_IPC_QMI_FILE_DOWNLOAD_IND_V01 0x0002
 #define CNSS_PLAT_IPC_QMI_REG_CLIENT_REQ_V01 0x0006
 #define CNSS_PLAT_IPC_QMI_INIT_SETUP_REQ_V01 0x0001
@@ -32,6 +34,20 @@ enum cnss_plat_ipc_qmi_client_id_v01 {
 	CNSS_PLAT_IPC_BT_QMI_CLIENT_V01 = 0,
 	CNSS_PLAT_IPC_DAEMON_QMI_CLIENT_V01 = 1,
 	CNSS_PLAT_IPC_QMI_CLIENT_ID_MAX_VAL_V01 = INT_MAX,
+};
+
+enum cnss_plat_ipc_qmi_config_param_type_v01 {
+	CNSS_PLAT_IPC_QMI_CONFIG_PARAM_TYPE_MIN_VAL_V01 = INT_MIN,
+	CNSS_PLAT_IPC_PARAM_TYPE_UNSPEC_V01 = 0,
+	CNSS_PLAT_IPC_PARAM_TYPE_QDSS_V01 = 1,
+	CNSS_PLAT_IPC_PARAM_TYPE_DAEMON_SUPPORT_V01 = 2,
+	CNSS_PLAT_IPC_PARAM_TYPE_COLD_BOOT_SUPPORT_V01 = 3,
+	CNSS_PLAT_IPC_PARAM_TYPE_HDS_SUPPORT_V01 = 4,
+	CNSS_PLAT_IPC_PARAM_TYPE_REGDB_SUPPORT_V01 = 5,
+	CNSS_PLAT_IPC_PARAM_TYPE_QDSS_SUPPORT_V01 = 6,
+	CNSS_PLAT_IPC_PARAM_TYPE_QDSS_START_V01 = 7,
+	CNSS_PLAT_IPC_PARAM_TYPE_QDSS_STOP_V01 = 8,
+	CNSS_PLAT_IPC_QMI_CONFIG_PARAM_TYPE_MAX_VAL_V01 = INT_MAX,
 };
 
 struct cnss_plat_ipc_qmi_init_setup_req_msg_v01 {
@@ -113,5 +129,20 @@ struct cnss_plat_ipc_qmi_reg_client_resp_msg_v01 {
 };
 #define CNSS_PLAT_IPC_QMI_REG_CLIENT_RESP_MSG_V01_MAX_MSG_LEN 7
 extern struct qmi_elem_info cnss_plat_ipc_qmi_reg_client_resp_msg_v01_ei[];
+
+struct cnss_plat_ipc_qmi_send_config_param_req_msg_v01 {
+	enum cnss_plat_ipc_qmi_client_id_v01 client_id;
+	u32 instance_id;
+	enum cnss_plat_ipc_qmi_config_param_type_v01 param;
+	u64 value;
+};
+#define CNSS_PLAT_IPC_QMI_SEND_CONFIG_PARAM_REQ_MSG_V01_MAX_MSG_LEN 32
+extern struct qmi_elem_info cnss_plat_ipc_qmi_send_config_param_req_msg_v01_ei[];
+
+struct cnss_plat_ipc_qmi_send_config_param_resp_msg_v01 {
+	struct qmi_response_type_v01 resp;
+};
+#define CNSS_PLAT_IPC_QMI_SEND_CONFIG_PARAM_RESP_MSG_V01_MAX_MSG_LEN 7
+extern struct qmi_elem_info cnss_plat_ipc_qmi_send_config_param_resp_msg_v01_ei[];
 
 #endif
