@@ -183,7 +183,7 @@ module_param(enable_mlo_support, uint, 0600);
 MODULE_PARM_DESC(enable_mlo_support, "enable_mlo_support");
 
 /* Temporary bootarg till driver ini changes are ready */
-static unsigned int mlo_chip_bitmask = 0x7;
+static unsigned int mlo_chip_bitmask = 0xFF;
 module_param(mlo_chip_bitmask, uint, 0600);
 MODULE_PARM_DESC(mlo_chip_bitmask, "mlo_chip_bitmask");
 
@@ -1067,10 +1067,10 @@ void cnss_print_mlo_config(void)
 		for (j = 0; j < mlo_group_info->num_chips; j++) {
 			chip_info = &mlo_group_info->chip_info[j];
 
-			pr_err("\nchip_id: %u\n\t\tgroup_id: %u\n\t\tsoc_id: %u\n\t\tnum_local_links: %u\n",
-			       chip_info->group_id,
+			pr_err("\nchip_id: %u\n\t\tsoc_id: %u\n\t\tgroup_id: %u\n\t\tnum_local_links: %u\n",
 			       chip_info->chip_id,
 			       chip_info->soc_id,
+			       chip_info->group_id,
 			       chip_info->num_local_links);
 
 			for (k = 0; k < CNSS_MAX_LINKS_PER_CHIP; k++)
@@ -1235,6 +1235,11 @@ static void cnss_set_default_mlo_config(void)
 			return;
 		}
 
+		if (!plat_priv->mlo_support ||
+		    ((plat_priv->bus_type == CNSS_BUS_PCI) &&
+		     !plat_priv->pci_dev))
+			continue;
+
 		if (mlo_chip_bitmask & (1 << i)) {
 			/*Temporarily Hard coding group id as 0 */
 			mlo_group_info.chip_info[num_chip].group_id = 0;
@@ -1259,7 +1264,7 @@ static void cnss_set_default_mlo_config(void)
 			num_chip++;
 		}
 
-		if (num_chip == CNSS_MAX_MLO_CHIPS)
+		if (num_chip >= CNSS_MAX_MLO_CHIPS)
 			break;
 	}
 
@@ -5248,7 +5253,7 @@ static int cnss_probe(struct platform_device *plat_dev)
 	spin_lock_irqsave(&plat_env_spinlock, flags);
 	plat_env[plat_env_index++] = plat_priv;
 	spin_unlock_irqrestore(&plat_env_spinlock, flags);
-	cnss_pr_info("Platform driver probed successfully. plat %pK tgt 0x%lx\n",
+	cnss_pr_info("Platform driver probed successfully. plat 0x%pK tgt 0x%lx\n",
 		     plat_priv, plat_priv->device_id);
 
 	return 0;
