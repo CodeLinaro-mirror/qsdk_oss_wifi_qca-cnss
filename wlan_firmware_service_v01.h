@@ -1,4 +1,5 @@
 /* Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -293,6 +294,7 @@ enum wlfw_gpio_info_type_v01 {
 enum wlfw_ini_file_type_v01 {
 	WLFW_INI_FILE_TYPE_MIN_VAL_V01 = INT_MIN,
 	WLFW_INI_CFG_FILE_V01 = 0,
+	WLFW_CONN_ROAM_INI_V01 = 1,
 	WLFW_INI_FILE_TYPE_MAX_VAL_V01 = INT_MAX,
 };
 
@@ -611,8 +613,10 @@ struct wlfw_cap_resp_msg_v01 {
 	struct wlfw_pmu_cfg_v01 ol_cpr_cfg;
 	u8 regdb_mandatory_valid;
 	u8 regdb_mandatory;
+	u8 regdb_support_valid;
+	u8 regdb_support;
 };
-#define WLFW_CAP_RESP_MSG_V01_MAX_MSG_LEN 1138
+#define WLFW_CAP_RESP_MSG_V01_MAX_MSG_LEN 1142
 extern struct qmi_elem_info wlfw_cap_resp_msg_v01_ei[];
 
 struct wlfw_bdf_download_req_msg_v01 {

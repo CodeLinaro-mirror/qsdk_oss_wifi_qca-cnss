@@ -1,4 +1,5 @@
 /* Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -2060,6 +2061,26 @@ struct qmi_elem_info wlfw_cap_resp_msg_v01_ei[] = {
 		.offset         = offsetof(struct
 					   wlfw_cap_resp_msg_v01,
 					   regdb_mandatory),
+	},
+	{
+		.data_type      = QMI_OPT_FLAG,
+		.elem_len       = 1,
+		.elem_size      = sizeof(u8),
+		.array_type       = NO_ARRAY,
+		.tlv_type       = 0x24,
+		.offset         = offsetof(struct
+					   wlfw_cap_resp_msg_v01,
+					   regdb_support_valid),
+	},
+	{
+		.data_type      = QMI_UNSIGNED_1_BYTE,
+		.elem_len       = 1,
+		.elem_size      = sizeof(u8),
+		.array_type       = NO_ARRAY,
+		.tlv_type       = 0x24,
+		.offset         = offsetof(struct
+					   wlfw_cap_resp_msg_v01,
+					   regdb_support),
 	},
 	{
 		.data_type      = QMI_EOTI,
