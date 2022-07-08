@@ -1020,8 +1020,10 @@ extern struct qmi_elem_info wlfw_qdss_trace_req_mem_ind_msg_v01_ei[];
 struct wlfw_qdss_trace_mem_info_req_msg_v01 {
 	u32 mem_seg_len;
 	struct wlfw_mem_seg_resp_s_v01 mem_seg[QMI_WLFW_MAX_NUM_MEM_SEG_V01];
+	u8 end_valid;
+	u8 end;
 };
-#define WLFW_QDSS_TRACE_MEM_INFO_REQ_MSG_V01_MAX_MSG_LEN 888
+#define WLFW_QDSS_TRACE_MEM_INFO_REQ_MSG_V01_MAX_MSG_LEN 892
 extern struct qmi_elem_info wlfw_qdss_trace_mem_info_req_msg_v01_ei[];
 
 struct wlfw_qdss_trace_mem_info_resp_msg_v01 {

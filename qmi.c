@@ -2096,10 +2096,16 @@ int cnss_wlfw_qdss_trace_mem_info_send_sync(struct cnss_plat_data *plat_priv)
 	struct wlfw_qdss_trace_mem_info_resp_msg_v01 *resp;
 	struct qmi_txn txn;
 	struct cnss_fw_mem *qdss_mem = plat_priv->qdss_mem;
-	int ret = 0;
+	struct qdss_stream_data *qdss_stream = &plat_priv->qdss_stream;
 	int i;
+	int total_ents = 1;
+	int ret = 0;
 	int resp_error_msg = 0;
+	uint32_t pte_n = 0;
+	uint32_t *virt_st_tbl, *virt_pte;
+	phys_addr_t phys_pte;
 
+	virt_st_tbl = qdss_stream->qdss_vaddr;
 	cnss_pr_dbg("Sending QDSS trace mem info, state: 0x%lx\n",
 		    plat_priv->driver_state);
 
@@ -2114,50 +2120,75 @@ int cnss_wlfw_qdss_trace_mem_info_send_sync(struct cnss_plat_data *plat_priv)
 	}
 
 	req->mem_seg_len = plat_priv->qdss_mem_seg_len;
-	for (i = 0; i < req->mem_seg_len; i++) {
-		cnss_pr_dbg("Memory for FW, pa: 0x%x, size: 0x%x, type: %u\n",
-			    (unsigned int)qdss_mem[i].pa,
-			    (unsigned int)qdss_mem[i].size,
-			    qdss_mem[i].type);
-		req->mem_seg[i].addr = qdss_mem[i].pa;
-		req->mem_seg[i].size = qdss_mem[i].size;
-		req->mem_seg[i].type = qdss_mem[i].type;
-	}
+	if (plat_priv->qdss_etr_sg_mode)
+		total_ents = DIV_ROUND_UP(qdss_mem[0].size, PAGE_SIZE);
 
-	qmi_record(plat_priv->wlfw_service_instance_id,
-		   QMI_WLFW_QDSS_TRACE_MEM_INFO_REQ_V01, ret, resp_error_msg);
-	ret = qmi_txn_init(&plat_priv->qmi_wlfw, &txn,
-			   wlfw_qdss_trace_mem_info_resp_msg_v01_ei, resp);
-	if (ret < 0) {
-		cnss_pr_err("Fail to initialize txn for QDSS trace mem request: err %d\n",
-			    ret);
-		goto out;
-	}
+	while (pte_n < total_ents) {
+		if (plat_priv->qdss_etr_sg_mode) {
+			req->mem_seg_len = ((total_ents - pte_n) >
+				QMI_WLFW_MAX_NUM_MEM_SEG_V01) ?
+				QMI_WLFW_MAX_NUM_MEM_SEG_V01 :
+				(total_ents - pte_n);
+			req->end_valid = 1;
+			if (req->mem_seg_len != QMI_WLFW_MAX_NUM_MEM_SEG_V01)
+				req->end = 1;
+			for (i = 0; i < req->mem_seg_len; i++) {
+				virt_pte = virt_st_tbl + pte_n;
+				phys_pte = CNSS_ETR_SG_ENT_TO_BLK(*virt_pte);
+				req->mem_seg[i].addr = phys_pte;
+				req->mem_seg[i].size = PAGE_SIZE;
+				req->mem_seg[i].type = qdss_mem[0].type;
+				pte_n++;
+			}
+		} else {
+			for (i = 0; i < req->mem_seg_len; i++) {
+				cnss_pr_dbg("Memory for FW, pa: 0x%x, size: 0x%x, type: %u\n",
+						(unsigned int)qdss_mem[i].pa,
+						(unsigned int)qdss_mem[i].size,
+						qdss_mem[i].type);
+				req->mem_seg[i].addr = qdss_mem[i].pa;
+				req->mem_seg[i].size = qdss_mem[i].size;
+				req->mem_seg[i].type = qdss_mem[i].type;
+				pte_n++;
+			}
+		}
 
-	ret = qmi_send_request(&plat_priv->qmi_wlfw, NULL, &txn,
-			       QMI_WLFW_QDSS_TRACE_MEM_INFO_REQ_V01,
-			       WLFW_QDSS_TRACE_MEM_INFO_REQ_MSG_V01_MAX_MSG_LEN,
-			       wlfw_qdss_trace_mem_info_req_msg_v01_ei, req);
-	if (ret < 0) {
-		qmi_txn_cancel(&txn);
-		cnss_pr_err("Fail to send QDSS trace mem info request: err %d\n",
-			    ret);
-		goto out;
-	}
+		qmi_record(plat_priv->wlfw_service_instance_id,
+				QMI_WLFW_QDSS_TRACE_MEM_INFO_REQ_V01, ret,
+				resp_error_msg);
+		ret = qmi_txn_init(&plat_priv->qmi_wlfw, &txn,
+				wlfw_qdss_trace_mem_info_resp_msg_v01_ei, resp);
+		if (ret < 0) {
+			cnss_pr_err("Fail to initialize txn for QDSS trace mem request: err %d\n",
+					ret);
+			goto out;
+		}
 
-	ret = qmi_txn_wait(&txn, QMI_WLFW_TIMEOUT_JF);
-	if (ret < 0) {
-		cnss_pr_err("Fail to wait for response of QDSS trace mem info request, err %d\n",
-			    ret);
-		goto out;
-	}
+		ret = qmi_send_request(&plat_priv->qmi_wlfw, NULL, &txn,
+			QMI_WLFW_QDSS_TRACE_MEM_INFO_REQ_V01,
+			WLFW_QDSS_TRACE_MEM_INFO_REQ_MSG_V01_MAX_MSG_LEN,
+			wlfw_qdss_trace_mem_info_req_msg_v01_ei, req);
+		if (ret < 0) {
+			qmi_txn_cancel(&txn);
+			cnss_pr_err("Fail to send QDSS trace mem info request: err %d\n",
+					ret);
+			goto out;
+		}
 
-	if (resp->resp.result != QMI_RESULT_SUCCESS_V01) {
-		cnss_pr_err("QDSS trace mem info request failed, result: %d, err: %d\n",
-			    resp->resp.result, resp->resp.error);
-		ret = -resp->resp.result;
-		resp_error_msg = resp->resp.error;
-		goto out;
+		ret = qmi_txn_wait(&txn, QMI_WLFW_TIMEOUT_JF);
+		if (ret < 0) {
+			cnss_pr_err("Fail to wait for response of QDSS trace mem info request, err %d\n",
+					ret);
+			goto out;
+		}
+
+		if (resp->resp.result != QMI_RESULT_SUCCESS_V01) {
+			cnss_pr_err("QDSS trace mem info request failed, result: %d, err: %d\n",
+					resp->resp.result, resp->resp.error);
+			ret = -resp->resp.result;
+			resp_error_msg = resp->resp.error;
+			goto out;
+		}
 	}
 
 	qmi_record(plat_priv->wlfw_service_instance_id,
@@ -2364,7 +2395,10 @@ int cnss_wlfw_send_qdss_trace_mode_req(struct cnss_plat_data *plat_priv,
 	req->mode_valid = 1;
 	req->mode = mode;
 	req->option_valid = 1;
-	req->option = option;
+	if (plat_priv->qdss_etr_sg_mode)
+		req->option = plat_priv->qdss_etr_sg_mode;
+	else
+		req->option = option;
 	req->hw_trc_disable_override_valid = 0;
 
 	cnss_pr_info("Sending QDSS Mode %u, option %llu", mode, option);

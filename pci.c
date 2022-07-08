@@ -25,7 +25,9 @@
 #ifdef CONFIG_CNSS2_DMA_ALLOC
 #include <linux/cma.h>
 #endif
-
+#ifdef CONFIG_CNSS2_KERNEL_IPQ
+#include <asm/cacheflush.h>
+#endif
 #ifdef KERNEL_SUPPORTS_QGIC2M
 #include <soc/qcom/qgic2m.h>
 #endif
@@ -36,10 +38,11 @@
 #include "bus.h"
 #include "legacyirq/legacyirq.h"
 
-/* pciX_num_msi_bmap needs to be defined in format of 0xDPCEMH
+/* pciX_num_msi_bmap needs to be defined in format of 0xDPCEQM
  * where 0xDP denotes the number of MSIs available for DP, 0xCE denotes
- * the number of MSIs available for CE and 0xMH denotes the number of
- * MSIs available for MHI. Total number of MSIs will be DP + CE + MH
+ * the number of MSIs available for CE , 0xQ denotes the number of MSIs
+ * available for QDSS streaming and 0xM denotes the number of MSIs
+ * available for MHI. Total number of MSIs will be DP + CE + Q + M
  */
 static unsigned int pci0_num_msi_bmap;
 module_param(pci0_num_msi_bmap, uint, 0644);
@@ -61,8 +64,9 @@ module_param(pci3_num_msi_bmap, uint, 0644);
 MODULE_PARM_DESC(pci3_num_msi_bmap,
 		 "Bitmap to indicate number of available MSIs for PCI 3");
 
-#define PCI_BAR_WINDOW0_BASE	0x1E00000
-#define PCI_BAR_WINDOW0_END	0x1E0EC8C
+/* WINDOW0 address ranges are PCIE_PCIE_LOCAL_REG amd PCIE_MHI_REG */
+#define PCIE_LOCAL_REG_BASE     0x1E00000
+#define PCIE_LOCAL_REG_END	     0x1E03FFF
 
 bool cnss_get_enable_intx(struct device *dev)
 {
@@ -75,8 +79,11 @@ bool cnss_get_enable_intx(struct device *dev)
 }
 EXPORT_SYMBOL(cnss_get_enable_intx);
 
-#define MSI_MHI_VECTOR_MASK 0xFF
+#define MSI_MHI_VECTOR_MASK 0xF
 #define MSI_MHI_VECTOR_SHIFT 0
+
+#define MSI_QDSS_VECTOR_MASK 0xF0
+#define MSI_QDSS_VECTOR_SHIFT 4
 
 #define MSI_CE_VECTOR_MASK 0xFF00
 #define MSI_CE_VECTOR_SHIFT 8
@@ -86,8 +93,8 @@ EXPORT_SYMBOL(cnss_get_enable_intx);
 
 /* Currently there is only support for MHI to operate with 3 MSIs. */
 #define MAX_MHI_VECTORS 3
-#define MIN_MHI_VECTORS 3
-#define DEFAULT_MHI_VECTORS 3
+#define MIN_MHI_VECTORS 2
+#define DEFAULT_MHI_VECTORS MAX_MHI_VECTORS
 
 #define MAX_CE_VECTORS 8
 #define MIN_CE_VECTORS 1
@@ -96,6 +103,11 @@ EXPORT_SYMBOL(cnss_get_enable_intx);
 #define MAX_DP_VECTORS 16
 #define MIN_DP_VECTORS 1
 #define DEFAULT_DP_VECTORS MIN_DP_VECTORS
+
+#define MAX_QDSS_VECTORS 1
+#define MIN_QDSS_VECTORS 0
+#define DEFAULT_QDSS_VECTORS MIN_QDSS_VECTORS
+
 static void *mlo_global_mem;
 
 #define PCI_LINK_UP			1
@@ -116,6 +128,7 @@ static void *mlo_global_mem;
 
 #define MHI_NODE_NAME			"qcom,mhi"
 #define MHI_MSI_NAME			"MHI"
+#define QDSS_MSI_NAME			"QDSS"
 
 #define MAX_M3_FILE_NAME_LENGTH		15
 #define DEFAULT_M3_FILE_NAME		"m3.bin"
@@ -148,6 +161,7 @@ extern void qcom_pcie_remove_bus(void);
 
 extern int timeout_factor;
 static DEFINE_SPINLOCK(pci_reg_window_lock);
+static DEFINE_SPINLOCK(qdss_lock);
 
 #define MHI_TIMEOUT_OVERWRITE_MS	(plat_priv->ctrl_params.mhi_timeout)
 
@@ -232,6 +246,7 @@ static DEFINE_SPINLOCK(pci_reg_window_lock);
 #define QCN9000_WLAON_GLOBAL_COUNTER_CTRL3	0x1F80118
 #define QCN9000_WLAON_GLOBAL_COUNTER_CTRL4	0x1F8011C
 #define QCN9000_WLAON_GLOBAL_COUNTER_CTRL5	0x1F80120
+#define PCIE_SOC_PCIE_REG_PCIE_SCRATCH_0	0x1E04040
 
 #define QCN9224_PCI_MHIREGLEN_REG		0x1E0E100
 #define QCN9224_PCI_MHI_REGION_END		0x1E0EFFC
@@ -484,7 +499,7 @@ static struct mhi_event_config cnss_pci_mhi_events[] = {
 	{
 		.num_elements = 256,
 		.irq_moderation_ms = 1,
-		.irq = 2,
+		.irq = 1,
 		.mode = MHI_DB_BRST_DISABLE,
 		.priority = 1,
 		.hardware_event = false,
@@ -641,7 +656,8 @@ static int cnss_pci_reg_read(struct cnss_pci_data *pci_priv,
 	spin_lock_irqsave(&pci_reg_window_lock, flags);
 	cnss_pci_select_window(pci_priv, addr);
 
-	if (addr >= PCI_BAR_WINDOW0_BASE && addr <= PCI_BAR_WINDOW0_END) {
+	if (addr >= PCIE_LOCAL_REG_BASE && addr <= PCIE_LOCAL_REG_END &&
+		addr >= mhi_region_start_reg && addr <= mhi_region_end_reg) {
 		if (addr >= mhi_region_start_reg && addr <= mhi_region_end_reg)
 			addr = addr - mhi_region_start_reg;
 
@@ -690,7 +706,8 @@ static int cnss_pci_reg_write(struct cnss_pci_data *pci_priv, u32 addr,
 	spin_lock_irqsave(&pci_reg_window_lock, flags);
 	cnss_pci_select_window(pci_priv, addr);
 
-	if (addr >= PCI_BAR_WINDOW0_BASE && addr <= PCI_BAR_WINDOW0_END) {
+	if (addr >= PCIE_LOCAL_REG_BASE && addr <= PCIE_LOCAL_REG_END &&
+		addr >= mhi_region_start_reg && addr <= mhi_region_end_reg) {
 		if (addr >= mhi_region_start_reg && addr <= mhi_region_end_reg)
 			addr = addr - mhi_region_start_reg;
 
@@ -3769,6 +3786,167 @@ int cnss_pci_alloc_fw_mem(struct cnss_plat_data *plat_priv)
 	return 0;
 }
 
+#ifdef CONFIG_CNSS2_KERNEL_IPQ
+static void cnss_etr_sg_tbl_free(uint32_t *vaddr,
+				 struct cnss_plat_data *plat_priv,
+				 uint32_t ents)
+{
+	uint32_t i = 0, pte_n = 0, last_pte;
+	uint32_t *virt_st_tbl, *virt_pte;
+	void *virt_blk;
+	phys_addr_t phys_pte;
+	struct cnss_fw_mem *qdss_mem = plat_priv->qdss_mem;
+	int total_ents = DIV_ROUND_UP(qdss_mem[0].size, PAGE_SIZE);
+	int ents_per_blk = PAGE_SIZE/sizeof(uint32_t);
+
+	if(vaddr == NULL)
+		return;
+	virt_st_tbl = vaddr;
+
+	while (i < total_ents) {
+		last_pte = ((i + ents_per_blk) > total_ents) ?
+			   total_ents : (i + ents_per_blk);
+		while (i < last_pte) {
+			virt_pte = virt_st_tbl + pte_n;
+
+			/* Do not go beyond number of entries allocated */
+			if (i == ents) {
+				free_page((unsigned long)virt_st_tbl);
+				return;
+			}
+
+			phys_pte = CNSS_ETR_SG_ENT_TO_BLK(*virt_pte);
+			virt_blk = phys_to_virt(phys_pte);
+
+			if ((last_pte - i) > 1) {
+					free_pages((unsigned long)virt_blk, 1);
+				pte_n++;
+			} else if (last_pte == total_ents) {
+					free_pages((unsigned long)virt_blk, 1);
+				free_page((unsigned long)virt_st_tbl);
+			} else {
+				free_page((unsigned long)virt_st_tbl);
+				virt_st_tbl = (uint32_t *)virt_blk;
+				pte_n = 0;
+				break;
+			}
+			i++;
+		}
+	}
+}
+#else
+static void cnss_etr_sg_tbl_free(uint32_t *vaddr,
+				 struct cnss_plat_data *plat_priv,
+				 uint32_t ents)
+{
+	return;
+}
+#endif
+
+#ifdef CONFIG_CNSS2_KERNEL_IPQ
+static void cnss_etr_sg_tbl_flush(uint32_t *vaddr,
+				  struct cnss_plat_data *plat_priv)
+{
+	uint32_t i = 0, pte_n = 0, last_pte;
+	uint32_t *virt_st_tbl, *virt_pte;
+	void *virt_blk;
+	phys_addr_t phys_pte;
+	struct cnss_fw_mem *qdss_mem = plat_priv->qdss_mem;
+	int total_ents = DIV_ROUND_UP(qdss_mem[0].size, PAGE_SIZE);
+	int ents_per_blk = PAGE_SIZE/sizeof(uint32_t);
+
+	virt_st_tbl = vaddr;
+	dmac_flush_range((void *)virt_st_tbl, (void *)virt_st_tbl + PAGE_SIZE);
+
+	while (i < total_ents) {
+		last_pte = ((i + ents_per_blk) > total_ents) ?
+			   total_ents : (i + ents_per_blk);
+		while (i < last_pte) {
+			virt_pte = virt_st_tbl + pte_n;
+			phys_pte = CNSS_ETR_SG_ENT_TO_BLK(*virt_pte);
+			virt_blk = phys_to_virt(phys_pte);
+
+				dmac_flush_range(virt_blk, virt_blk +
+					(2 * PAGE_SIZE));
+			if ((last_pte - i) > 1) {
+				pte_n++;
+			} else if (last_pte != total_ents) {
+				virt_st_tbl = (uint32_t *)virt_blk;
+				pte_n = 0;
+				break;
+			}
+			i++;
+		}
+	}
+}
+
+static int cnss_etr_sg_tbl_alloc(struct cnss_plat_data *plat_priv)
+{
+	int ret;
+	uint32_t i = 0, last_pte;
+	uint32_t *virt_pgdir, *virt_st_tbl;
+	void *virt_pte;
+	struct cnss_fw_mem *qdss_mem = plat_priv->qdss_mem;
+	struct qdss_stream_data *qdss_stream = &plat_priv->qdss_stream;
+	int total_ents = DIV_ROUND_UP(qdss_mem[0].size, PAGE_SIZE);
+	int ents_per_blk = PAGE_SIZE/sizeof(uint32_t);
+
+	virt_pgdir = (uint32_t *)__get_free_pages(GFP_KERNEL | __GFP_ZERO, 0);
+
+	if (!virt_pgdir)
+		return -ENOMEM;
+
+	virt_st_tbl = virt_pgdir;
+
+	while (i < total_ents) {
+		last_pte = ((i + ents_per_blk) > total_ents) ?
+			   total_ents : (i + ents_per_blk);
+		while (i < last_pte) {
+				virt_pte = (void *)__get_free_pages(GFP_KERNEL |
+					     __GFP_ZERO, 1);
+			if (!virt_pte) {
+				ret = -ENOMEM;
+				goto err;
+			}
+
+			if ((last_pte - i) > 1) {
+				*virt_st_tbl =
+				    CNSS_ETR_SG_ENT(virt_to_phys(virt_pte));
+				virt_st_tbl++;
+			} else if (last_pte == total_ents) {
+				*virt_st_tbl =
+				    CNSS_ETR_SG_LST_ENT(virt_to_phys(virt_pte));
+			} else {
+				*virt_st_tbl =
+				    CNSS_ETR_SG_NXT_TBL(virt_to_phys(virt_pte));
+				virt_st_tbl = (uint32_t *)virt_pte;
+				break;
+			}
+			i++;
+		}
+	}
+
+	qdss_stream->qdss_vaddr = virt_pgdir;
+	qdss_stream->qdss_paddr = virt_to_phys(virt_pgdir);
+
+	/* Flush the dcache before proceeding */
+	cnss_etr_sg_tbl_flush((uint32_t *)qdss_stream->qdss_vaddr, plat_priv);
+
+	cnss_pr_dbg("%s: table starts at %#lx, total entries %d\n",
+		__func__, (unsigned long)qdss_stream->qdss_paddr, total_ents);
+
+	return 0;
+err:
+	cnss_etr_sg_tbl_free(virt_pgdir, plat_priv, i);
+	return ret;
+}
+#else
+static int cnss_etr_sg_tbl_alloc(struct cnss_plat_data *plat_priv)
+{
+	return 0;
+}
+#endif
+
 int cnss_pci_alloc_qdss_mem(struct cnss_pci_data *pci_priv)
 {
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
@@ -3816,32 +3994,38 @@ int cnss_pci_alloc_qdss_mem(struct cnss_pci_data *pci_priv)
 	 * this can be extended to support multiple QDSS memory segments
 	 */
 	for (i = 0; i < plat_priv->qdss_mem_seg_len; i++) {
-		switch (qdss_mem[i].type) {
-		case QDSS_ETR_MEM_REGION_TYPE:
-			if (qdss_mem[i].size > Q6_QDSS_ETR_SIZE_QCN9000) {
-				cnss_pr_err("%s: FW requests more memory 0x%zx\n",
-					    __func__, qdss_mem[i].size);
-				return -ENOMEM;
-			}
-			if (of_property_read_u32(dev->of_node, "etr-addr",
-						 &addr)) {
-				cnss_pr_err("Error: No etr-addr in dts\n");
-				CNSS_ASSERT(0);
-				return -ENOMEM;
-			}
+		if (plat_priv->qdss_etr_sg_mode)
+			cnss_etr_sg_tbl_alloc(plat_priv);
+		else {
+			switch (qdss_mem[i].type) {
+			case QDSS_ETR_MEM_REGION_TYPE:
+				if (qdss_mem[i].size >
+					Q6_QDSS_ETR_SIZE_QCN9000) {
+					cnss_pr_err("%s: FW requests more memory 0x%zx\n",
+						__func__, qdss_mem[i].size);
+					return -ENOMEM;
+				}
+				if (of_property_read_u32(dev->of_node,
+							"etr-addr",
+							&addr)) {
+					cnss_pr_err("Error: No etr-addr: in dts\n");
+					CNSS_ASSERT(0);
+					return -ENOMEM;
+				}
 
-			qdss_mem[i].pa = (phys_addr_t)addr;
-			qdss_mem[i].va = ioremap(qdss_mem[i].pa,
-						 qdss_mem[i].size);
-			if (!qdss_mem[i].va) {
-				cnss_pr_err("WARNING etr-addr remap failed\n");
-				return -ENOMEM;
+				qdss_mem[i].pa = (phys_addr_t)addr;
+				qdss_mem[i].va = ioremap(qdss_mem[i].pa,
+						qdss_mem[i].size);
+				if (!qdss_mem[i].va) {
+					cnss_pr_err("WARNING etr-addr remap failed\n");
+					return -ENOMEM;
+				}
+				break;
+			default:
+				cnss_pr_err("%s: Unknown type %d\n",
+						__func__, qdss_mem[i].type);
+				break;
 			}
-			break;
-		default:
-			cnss_pr_err("%s: Unknown type %d\n",
-				    __func__, qdss_mem[i].type);
-			break;
 		}
 	}
 
@@ -3855,6 +4039,7 @@ int cnss_pci_alloc_qdss_mem(struct cnss_pci_data *pci_priv)
 void cnss_pci_free_qdss_mem(struct cnss_plat_data *plat_priv)
 {
 	struct cnss_fw_mem *qdss_mem = plat_priv->qdss_mem;
+	struct qdss_stream_data *qdss_stream = &plat_priv->qdss_stream;
 	struct cnss_pci_data *pci_priv = plat_priv->bus_priv;
 	struct device *dev = &pci_priv->pci_dev->dev;
 	int i;
@@ -3877,11 +4062,18 @@ void cnss_pci_free_qdss_mem(struct cnss_plat_data *plat_priv)
 	}
 
 	for (i = 0; i < plat_priv->qdss_mem_seg_len; i++) {
-		if (qdss_mem[i].va) {
-			cnss_pr_dbg("Freeing QDSS Memory\n");
-			iounmap(qdss_mem[i].va);
-			qdss_mem[i].va = NULL;
-			qdss_mem[i].size = 0;
+		if (plat_priv->qdss_etr_sg_mode) {
+			cnss_etr_sg_tbl_free(
+				(uint32_t *)qdss_stream->qdss_vaddr,
+				plat_priv,
+				DIV_ROUND_UP(qdss_mem[i].size, PAGE_SIZE));
+		} else {
+			if (qdss_mem[i].va) {
+				cnss_pr_dbg("Freeing QDSS Memory\n");
+				iounmap(qdss_mem[i].va);
+				qdss_mem[i].va = NULL;
+				qdss_mem[i].size = 0;
+			}
 		}
 	}
 
@@ -4384,9 +4576,10 @@ static struct cnss_msi_config msi_config_qcn9000_pci3 = {
 
 static struct cnss_msi_config msi_config_qcn9224_pci0 = {
 	.total_vectors = 16,
-	.total_users = 3,
+	.total_users = 4,
 	.users = (struct cnss_msi_user[]) {
-		{ .name = "MHI", .num_vectors = 3, .base_vector = 0 },
+		{ .name = "MHI", .num_vectors = 2, .base_vector = 0 },
+		{ .name = "QDSS", .num_vectors = 1, .base_vector = 2 },
 		{ .name = "CE", .num_vectors = 5, .base_vector = 3 },
 		{ .name = "DP", .num_vectors = 8, .base_vector = 8 },
 	},
@@ -4394,9 +4587,10 @@ static struct cnss_msi_config msi_config_qcn9224_pci0 = {
 
 static struct cnss_msi_config msi_config_qcn9224_pci1 = {
 	.total_vectors = 16,
-	.total_users = 3,
+	.total_users = 4,
 	.users = (struct cnss_msi_user[]) {
-		{ .name = "MHI", .num_vectors = 3, .base_vector = 0 },
+		{ .name = "MHI", .num_vectors = 2, .base_vector = 0 },
+		{ .name = "QDSS", .num_vectors = 1, .base_vector = 2 },
 		{ .name = "CE", .num_vectors = 5, .base_vector = 3 },
 		{ .name = "DP", .num_vectors = 8, .base_vector = 8 },
 	},
@@ -4404,9 +4598,10 @@ static struct cnss_msi_config msi_config_qcn9224_pci1 = {
 
 static struct cnss_msi_config msi_config_qcn9224_pci2 = {
 	.total_vectors = 16,
-	.total_users = 3,
+	.total_users = 4,
 	.users = (struct cnss_msi_user[]) {
-		{ .name = "MHI", .num_vectors = 3, .base_vector = 0 },
+		{ .name = "MHI", .num_vectors = 2, .base_vector = 0 },
+		{ .name = "QDSS", .num_vectors = 1, .base_vector = 2 },
 		{ .name = "CE", .num_vectors = 5, .base_vector = 3 },
 		{ .name = "DP", .num_vectors = 8, .base_vector = 8 },
 	},
@@ -4414,9 +4609,10 @@ static struct cnss_msi_config msi_config_qcn9224_pci2 = {
 
 static struct cnss_msi_config msi_config_qcn9224_pci3 = {
 	.total_vectors = 16,
-	.total_users = 3,
+	.total_users = 4,
 	.users = (struct cnss_msi_user[]) {
-		{ .name = "MHI", .num_vectors = 3, .base_vector = 0 },
+		{ .name = "MHI", .num_vectors = 2, .base_vector = 0 },
+		{ .name = "QDSS", .num_vectors = 1, .base_vector = 2 },
 		{ .name = "CE", .num_vectors = 5, .base_vector = 3 },
 		{ .name = "DP", .num_vectors = 8, .base_vector = 8 },
 	},
@@ -4464,6 +4660,7 @@ static void pci_override_msi_assignment(struct cnss_plat_data *plat_priv,
 	u32 num_mhi_vectors;
 	u32 num_ce_vectors;
 	u32 num_dp_vectors;
+	u32 num_qdss_vectors = 0;
 	u32 interrupt_bmap = 0;
 	u32 bmap = 0;
 	int vector_idx = 0;
@@ -4498,6 +4695,8 @@ static void pci_override_msi_assignment(struct cnss_plat_data *plat_priv,
 
 	num_mhi_vectors = (interrupt_bmap & MSI_MHI_VECTOR_MASK) >>
 			   MSI_MHI_VECTOR_SHIFT;
+	num_qdss_vectors = (interrupt_bmap & MSI_QDSS_VECTOR_MASK) >>
+			   MSI_QDSS_VECTOR_SHIFT;
 	num_ce_vectors = (interrupt_bmap & MSI_CE_VECTOR_MASK) >>
 			  MSI_CE_VECTOR_SHIFT;
 	num_dp_vectors = (interrupt_bmap & MSI_DP_VECTOR_MASK) >>
@@ -4515,11 +4714,17 @@ static void pci_override_msi_assignment(struct cnss_plat_data *plat_priv,
 	    num_dp_vectors > MAX_DP_VECTORS)
 		num_dp_vectors = DEFAULT_DP_VECTORS;
 
+	if (num_qdss_vectors < MIN_QDSS_VECTORS ||
+	    num_qdss_vectors > MAX_QDSS_VECTORS)
+		num_qdss_vectors = DEFAULT_QDSS_VECTORS;
+
 	pci_update_msi_vectors(msi_config, "MHI", num_mhi_vectors, &vector_idx);
+	pci_update_msi_vectors(msi_config, "QDSS", num_qdss_vectors,
+				&vector_idx);
 	pci_update_msi_vectors(msi_config, "CE", num_ce_vectors, &vector_idx);
 	pci_update_msi_vectors(msi_config, "DP", num_dp_vectors, &vector_idx);
 	msi_config->total_vectors = num_mhi_vectors + num_ce_vectors +
-					num_dp_vectors;
+					num_dp_vectors + num_qdss_vectors;
 	/* Linux only allows number of interrupts to be a power of 2 */
 	msi_config->total_vectors =
 			1U << get_count_order(msi_config->total_vectors);
@@ -5777,6 +5982,47 @@ static void cnss_mhi_write_reg(struct mhi_controller *mhi_cntrl,
 }
 #endif
 
+static int cnss_pci_get_qdss_msi(struct cnss_pci_data *pci_priv)
+{
+	int ret = 0, num_vectors, i;
+	u32 user_base_data, base_vector;
+	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
+	int qdss_irq = 0;
+
+	num_vectors = 1;
+	if (!plat_priv->enable_intx) {
+		ret = cnss_get_user_msi_assignment(&pci_priv->pci_dev->dev,
+						   QDSS_MSI_NAME,
+						   &num_vectors,
+						   &user_base_data,
+						   &base_vector);
+		if (ret)
+			return ret;
+
+		cnss_pr_dbg("Number of assigned MSI for QDSS is %d, base vector is %d\n",
+				num_vectors, base_vector);
+	}
+
+	for (i = 0; i < num_vectors; i++) {
+		if (!plat_priv->enable_intx) {
+			qdss_irq = cnss_get_msi_irq(&pci_priv->pci_dev->dev,
+						  base_vector + i);
+		} else {
+			cnss_pr_err("QDSS msi irq failed\n");
+		}
+	}
+	pci_priv->qdss_irq = qdss_irq;
+
+	return 0;
+}
+
+static int cnss_pci_disable_qdss_msi(struct cnss_pci_data *pci_priv)
+{
+	if (pci_priv->qdss_irq)
+		free_irq(pci_priv->qdss_irq, pci_priv);
+
+	return 0;
+}
 static int cnss_pci_get_mhi_msi(struct cnss_pci_data *pci_priv)
 {
 	int ret = 0, num_vectors, i;
@@ -5784,7 +6030,7 @@ static int cnss_pci_get_mhi_msi(struct cnss_pci_data *pci_priv)
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 	int *irq;
 
-	num_vectors = 3;
+	num_vectors = 2;
 	if (!plat_priv->enable_intx) {
 		ret = cnss_get_user_msi_assignment(&pci_priv->pci_dev->dev,
 						   MHI_MSI_NAME,
@@ -5826,7 +6072,6 @@ static int cnss_pci_get_mhi_msi(struct cnss_pci_data *pci_priv)
 	return 0;
 }
 
-
 static void cnss_update_soc_version(struct cnss_pci_data *pci_priv)
 {
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
@@ -5842,6 +6087,23 @@ static void cnss_update_soc_version(struct cnss_pci_data *pci_priv)
 		     plat_priv->device_version.device_number,
 		     plat_priv->device_version.major_version,
 		     plat_priv->device_version.minor_version);
+}
+
+static irqreturn_t qdss_irq_handler(int irq, void *context)
+{
+	struct cnss_pci_data *pci_priv = (struct cnss_pci_data *)context;
+	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
+	struct qdss_stream_data *qdss_stream = &plat_priv->qdss_stream;
+	u32 val;
+	unsigned long flags;
+
+	cnss_pci_reg_read(pci_priv, PCIE_SOC_PCIE_REG_PCIE_SCRATCH_0, &val);
+	spin_lock_irqsave(&qdss_lock, flags);
+	atomic_add(val, &qdss_stream->seq_no);
+	schedule_work(&qdss_stream->qld_stream_work);
+	spin_unlock_irqrestore(&qdss_lock, flags);
+
+	return IRQ_HANDLED;
 }
 
 static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
@@ -5902,6 +6164,23 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 		goto free_mhi_ctrl;
 	}
 
+	if (pci_dev->device == QCN9224_DEVICE_ID) {
+		ret = cnss_pci_get_qdss_msi(pci_priv);
+		if (ret) {
+			cnss_pr_err("Failed to get MSI for QDSS\n");
+			goto free_mhi_ctrl;
+		}
+
+		if (pci_priv->qdss_irq) {
+			ret = request_irq(pci_priv->qdss_irq, qdss_irq_handler,
+					IRQF_SHARED, "qdss", pci_priv);
+			if (ret) {
+				cnss_pr_err("dummy request_irq fails %d\n",
+						ret);
+				goto free_mhi_ctrl;
+			}
+		}
+	}
 #ifdef CONFIG_CNSS2_SMMU
 	if (pci_priv->smmu_s1_enable) {
 		mhi_ctrl->iova_start = pci_priv->smmu_iova_start;
@@ -5917,7 +6196,7 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 		if (of_address_to_resource(dev_node, 0, &memory)) {
 			cnss_pr_err("%s: Unable to get resource: memory",
 				    __func__);
-			goto free_mhi_ctrl;
+			goto free_qdss_irq;
 		}
 
 		mhi_ctrl->iova_start = (dma_addr_t)memory.start;
@@ -5956,13 +6235,16 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 	if (ret) {
 		cnss_pr_err("Failed to register to MHI bus, err = %d\n", ret);
 		CNSS_ASSERT(0);
-		goto free_mhi_ctrl;
+		goto free_qdss_irq;
 	}
 
 	cnss_update_soc_version(pci_priv);
 
 	return 0;
 
+free_qdss_irq:
+	if (pci_dev->device == QCN9224_DEVICE_ID)
+		cnss_pci_disable_qdss_msi(pci_priv);
 free_mhi_ctrl:
 	mhi_free_controller(mhi_ctrl);
 	pci_priv->mhi_ctrl = NULL;
@@ -6233,6 +6515,7 @@ void cnss_pci_remove(struct pci_dev *pci_dev)
 	case QCA6390_DEVICE_ID:
 	case QCA6490_DEVICE_ID:
 		cnss_pci_unregister_mhi(pci_priv);
+		cnss_pci_disable_qdss_msi(pci_priv);
 		cnss_pci_disable_msi(pci_priv);
 		del_timer(&pci_priv->boot_debug_timer);
 		del_timer(&pci_priv->dev_rddm_timer);

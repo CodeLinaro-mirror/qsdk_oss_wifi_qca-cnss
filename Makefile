@@ -3,6 +3,10 @@ KERNEL_SRC ?= /lib/modules/$(shell uname -r)/build
 
 obj-m += ipq_cnss2.o
 
+ifneq ($(QCA_CNSS_STREAM_MOD),)
+obj-m += ipq_cnss2_stream.o
+endif
+
 ipq_cnss2-objs := main.o
 ipq_cnss2-objs += debug.o
 ipq_cnss2-objs += pci.o
@@ -14,6 +18,7 @@ ipq_cnss2-objs += genl.o
 ipq_cnss2-objs += cnss_plat_ipc_qmi.o
 ipq_cnss2-objs += cnss_plat_ipc_service_v01.o
 ipq_cnss2-objs += legacyirq/legacyirq.o
+ipq_cnss2_stream-objs := stream.o
 
 CNSS2_INCLUDE = -I$(obj)
 CNSS2_INCLUDE += -I$(obj)/include
