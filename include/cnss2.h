@@ -1,4 +1,5 @@
 /* Copyright (c) 2016-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -17,7 +18,6 @@
 
 #define CNSS_MAX_FILE_NAME		20
 #define CNSS_MAX_TIMESTAMP_LEN		32
-#define CNSS_MAX_DEV_MEM_NUM		4
 
 /*
  * Temporary change for compilation, will be removed
@@ -60,11 +60,6 @@ struct cnss_device_version {
 	u32 minor_version;
 };
 
-struct cnss_dev_mem_info {
-	u64 start;
-	u64 size;
-};
-
 struct cnss_soc_info {
 	void __iomem *va;
 	phys_addr_t pa;
@@ -75,7 +70,6 @@ struct cnss_soc_info {
 	uint32_t fw_version;
 	char fw_build_timestamp[CNSS_MAX_TIMESTAMP_LEN + 1];
 	struct cnss_device_version device_version;
-	struct cnss_dev_mem_info dev_mem_info[CNSS_MAX_DEV_MEM_NUM];
 };
 
 struct cnss_wlan_runtime_ops {
@@ -173,234 +167,6 @@ enum cnss_recovery_reason {
 	CNSS_REASON_TIMEOUT,
 };
 
-struct cnss_plat_data;
-
-/* Function prototypes for CNSS2 APIs used from wifi driver
- * are defined here.
- * Please add Stubs also for any API added here to handle case
- * for targets that don't support CNSS2
- */
-#if defined(CONFIG_ARCH_IPQ40XX) || defined(CONFIG_ARCH_IPQ806x)
-static inline int cnss_wlan_register_driver(struct cnss_wlan_driver *driver)
-{
-	return 0;
-}
-
-static inline void cnss_wlan_unregister_driver(struct cnss_wlan_driver *driver)
-{
-}
-
-static inline void cnss_device_crashed(struct device *dev)
-{
-}
-
-static inline int cnss_pci_link_down(struct device *dev)
-{
-	return -EINVAL;
-}
-
-static inline void cnss_schedule_recovery(struct device *dev,
-					  enum cnss_recovery_reason reason)
-{
-}
-
-static inline int cnss_self_recovery(struct device *dev,
-				     enum cnss_recovery_reason reason)
-{
-	return -EINVAL;
-}
-
-static inline int cnss_get_fw_files_for_target(struct device *dev,
-					       struct cnss_fw_files *pfw_files,
-					       u32 target_type,
-					       u32 target_version)
-{
-	return -EINVAL;
-}
-
-static inline int cnss_get_platform_cap(struct device *dev,
-					struct cnss_platform_cap *cap)
-{
-	return -EINVAL;
-}
-
-static inline int cnss_get_soc_info(struct device *dev,
-				    struct cnss_soc_info *info)
-{
-	return -EINVAL;
-}
-
-static inline int cnss_power_on_device(struct cnss_plat_data *plat_priv,
-				       int device_id)
-{
-	return -EINVAL;
-}
-
-static inline int cnss_power_off_device(struct cnss_plat_data *plat_priv,
-					int device_id)
-{
-	return -EINVAL;
-}
-
-static inline int cnss_wlan_pm_control(struct device *dev, bool vote)
-{
-	return -EINVAL;
-}
-
-static inline struct qgic2_msi *cnss_qgic2_enable_msi(
-			struct cnss_plat_data *plat_priv, int qgicm_id)
-{
-	return ERR_PTR(-EINVAL);
-}
-
-static inline int cnss_get_user_msi_assignment(struct device *dev,
-					       char *user_name,
-					       int *num_vectors,
-					       uint32_t *user_base_data,
-					       uint32_t *base_vector)
-{
-	return -EINVAL;
-}
-
-static inline int cnss_get_msi_irq(struct device *dev, unsigned int vector)
-{
-	return -EINVAL;
-}
-
-static inline int cnss_get_pci_slot(struct device *dev)
-{
-	return 0;
-}
-
-static inline void cnss_get_msi_address(struct device *dev,
-					uint32_t *msi_addr_low,
-					uint32_t *msi_addr_high)
-{
-}
-
-static inline int cnss_wlan_enable(struct device *dev,
-				   struct cnss_wlan_enable_cfg *config,
-				   enum cnss_driver_mode mode,
-				   const char *host_version)
-{
-	return 0;
-}
-
-static inline int cnss_wlan_disable(struct device *dev,
-				    enum cnss_driver_mode mode)
-{
-	return 0;
-}
-
-static inline void cnss_wait_for_fw_ready(struct device *dev)
-{
-}
-
-static inline void cnss_wait_for_cold_boot_cal_done(struct device *dev)
-{
-}
-
-static inline void cnss_set_ramdump_enabled(struct device *dev, bool enabled)
-{
-}
-
-static inline void cnss_set_recovery_enabled(struct device *dev, bool enabled)
-{
-}
-
-static inline void *cnss_subsystem_get(struct device *dev, int device_id)
-{
-	return NULL;
-}
-
-static inline void cnss_subsystem_put(struct device *dev)
-{
-}
-
-static inline int cnss_pcie_rescan(void)
-{
-	return -EINVAL;
-}
-
-static inline void cnss_pcie_remove_bus(void)
-{
-}
-
-static inline void *cnss_get_pci_dev_by_device_id(int device_id)
-{
-	return NULL;
-}
-
-static inline void *cnss_get_pci_dev_from_plat_dev(void *pdev)
-{
-	return NULL;
-}
-
-static inline void *cnss_get_pci_dev_id_from_plat_dev(void *pdev)
-{
-	return NULL;
-}
-
-static inline int cnss_athdiag_read(struct device *dev, uint32_t offset,
-				    uint32_t mem_type, uint32_t data_len,
-				    uint8_t *output)
-{
-	return -EINVAL;
-}
-
-static inline int cnss_athdiag_write(struct device *dev, uint32_t offset,
-				     uint32_t mem_type, uint32_t data_len,
-				     uint8_t *input)
-{
-	return -EINVAL;
-}
-
-static inline bool cnss_is_dev_initialized(struct device *dev)
-{
-	return false;
-}
-
-static inline u64 cnss_get_q6_time(struct device *dev)
-{
-	return 0;
-}
-
-static inline void cnss_dump_qmi_history(void)
-{
-}
-
-static inline void cnss_get_ramdump_device_name(struct device *dev,
-						char *ramdump_dev_name,
-						size_t ramdump_dev_name_len)
-{
-}
-static inline unsigned int cnss_get_driver_mode(void)
-{
-	return CNSS_MISSION;
-}
-static inline int cnss_set_driver_mode(unsigned int mode)
-{
-	return -EINVAL;
-}
-static inline
-int cnss_send_buffer_to_afcmem(struct device *dev, char *afcdb, uint32_t len,
-			    uint8_t slotid)
-{
-	return -EINVAL;
-}
-static inline int cnss_reset_afcmem(struct device *dev, uint8_t slotid)
-{
-	return -EINVAL;
-}
-static inline int cnss_reg_read(struct device *dev, u32 addr, u32 *val)
-{
-	return -EINVAL;
-}
-static inline int cnss_reg_write(struct device *dev, u32 addr, u32 val)
-{
-	return -EINVAL;
-}
-#else
 extern int cnss_wlan_register_driver(struct cnss_wlan_driver *driver);
 extern void cnss_wlan_unregister_driver(struct cnss_wlan_driver *driver);
 extern void cnss_device_crashed(struct device *dev);
@@ -443,14 +209,11 @@ extern int cnss_pci_is_drv_connected(struct device *dev);
 extern int cnss_pci_force_wake_request(struct device *dev);
 extern int cnss_pci_is_device_awake(struct device *dev);
 extern int cnss_pci_force_wake_release(struct device *dev);
-extern struct qgic2_msi *cnss_qgic2_enable_msi(struct cnss_plat_data *plat_priv,
-					       int qgicm_id);
 extern int cnss_get_user_msi_assignment(struct device *dev, char *user_name,
 					int *num_vectors,
 					uint32_t *user_base_data,
 					uint32_t *base_vector);
 extern int cnss_get_msi_irq(struct device *dev, unsigned int vector);
-extern int cnss_get_pci_slot(struct device *dev);
 extern void cnss_get_msi_address(struct device *dev, uint32_t *msi_addr_low,
 				 uint32_t *msi_addr_high);
 extern int cnss_wlan_enable(struct device *dev,
@@ -486,10 +249,4 @@ void cnss_get_ramdump_device_name(struct device *dev,
 				  size_t ramdump_dev_name_len);
 unsigned int cnss_get_driver_mode(void);
 int cnss_set_driver_mode(unsigned int mode);
-int cnss_send_buffer_to_afcmem(struct device *dev, char *afcdb, uint32_t len,
-			    uint8_t slotid);
-int cnss_reset_afcmem(struct device *dev, uint8_t slotid);
-int cnss_reg_read(struct device *dev, u32 addr, u32 *val);
-int cnss_reg_write(struct device *dev, u32 addr, u32 val);
-#endif
 #endif /* _NET_CNSS2_H */

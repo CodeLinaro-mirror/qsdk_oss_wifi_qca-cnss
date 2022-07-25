@@ -1,4 +1,5 @@
 /* Copyright (c) 2018-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -44,8 +45,7 @@ enum cnss_dev_bus_type cnss_get_bus_type(unsigned long device_id)
 	case QCA8074V2_DEVICE_ID:
 	case QCA6018_DEVICE_ID:
 	case QCA5018_DEVICE_ID:
-	case QCN6122_DEVICE_ID:
-	case QCA9574_DEVICE_ID:
+	case QCN9100_DEVICE_ID:
 		return CNSS_BUS_AHB;
 	default:
 		pr_err("Unknown device_id: 0x%lx\n", device_id);
@@ -79,8 +79,8 @@ struct cnss_plat_data *cnss_bus_dev_to_plat_priv(struct device *dev)
 	switch (cnss_get_dev_bus_type(dev)) {
 	case CNSS_BUS_PCI:
 		pdev = to_pci_dev(dev);
-		if (pdev->device != QCN9000_DEVICE_ID)
-			return NULL;
+//		if (pdev->device != QCN9000_DEVICE_ID)
+//			return NULL;
 
 		bus_priv = cnss_bus_dev_to_bus_priv(dev);
 		if (bus_priv)
@@ -166,9 +166,8 @@ int cnss_bus_alloc_fw_mem(struct cnss_plat_data *plat_priv)
 
 	switch (plat_priv->bus_type) {
 	case CNSS_BUS_PCI:
-		return cnss_pci_alloc_fw_mem(plat_priv);
 	case CNSS_BUS_AHB:
-		return cnss_ahb_alloc_fw_mem(plat_priv);
+		return cnss_pci_alloc_fw_mem(plat_priv);
 	default:
 		cnss_pr_err("Unsupported bus type: %d\n",
 			    plat_priv->bus_type);
@@ -197,13 +196,13 @@ struct device_node *cnss_get_etr_dev_node(struct cnss_plat_data *plat_priv)
 {
 	struct device_node *dev_node = NULL;
 
-	if (plat_priv->device_id == QCN6122_DEVICE_ID) {
-		if (plat_priv->userpd_id == QCN6122_0)
+	if (plat_priv->device_id == QCN9100_DEVICE_ID) {
+		if (plat_priv->userpd_id == QCN9100_0)
 			dev_node = of_find_node_by_name(NULL,
-							"q6_qcn6122_etr_1");
-		else if (plat_priv->userpd_id == QCN6122_1)
+							"q6_qcn9100_etr_1");
+		else if (plat_priv->userpd_id == QCN9100_1)
 			dev_node = of_find_node_by_name(NULL,
-							"q6_qcn6122_etr_2");
+							"q6_qcn9100_etr_2");
 	} else {
 		dev_node = of_find_node_by_name(NULL, "q6_etr_dump");
 	}
@@ -246,7 +245,7 @@ int cnss_bus_alloc_qdss_mem(struct cnss_plat_data *plat_priv)
 			plat_priv->qdss_mem[i].size = resource_size(&q6_etr);
 			plat_priv->qdss_mem[i].type = QMI_WLFW_MEM_QDSS_V01;
 
-			if (plat_priv->device_id == QCN6122_DEVICE_ID) {
+			if (plat_priv->device_id == QCN9100_DEVICE_ID) {
 				plat_priv->qdss_mem[i].va =
 					ioremap(plat_priv->qdss_mem[i].pa,
 						plat_priv->qdss_mem[i].size);
@@ -323,10 +322,9 @@ int cnss_bus_force_fw_assert_hdlr(struct cnss_plat_data *plat_priv)
 	}
 }
 
-void cnss_bus_fw_boot_timeout_hdlr(struct timer_list *timer)
+void cnss_bus_fw_boot_timeout_hdlr(struct timer_list *t)
 {
-	struct cnss_plat_data *plat_priv =
-			from_timer(plat_priv, timer, fw_boot_timer);
+	struct cnss_plat_data *plat_priv = from_timer(plat_priv, t, fw_boot_timer);
 	if (!plat_priv)
 		return;
 

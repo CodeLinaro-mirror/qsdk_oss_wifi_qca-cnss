@@ -1,4 +1,5 @@
 /* Copyright (c) 2016-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -43,16 +44,13 @@
 #define QCA8074V2_DEVICE_ID             0xFFFE
 #define QCA6018_DEVICE_ID               0xFFFD
 #define QCA5018_DEVICE_ID               0xFFFC
-#define QCN6122_DEVICE_ID           0xFFFB
-#define QCA9574_DEVICE_ID           0xFFFA
-#define QCN6122_DEVICE_BAR_SIZE		0x200000
+#define QCN9100_DEVICE_ID		0xFFFB
+#define QCN9100_DEVICE_BAR_SIZE		0x200000
 #define HOST_DDR_REGION_TYPE		0x1
 #define BDF_MEM_REGION_TYPE		0x2
 #define M3_DUMP_REGION_TYPE		0x3
 #define CALDB_MEM_REGION_TYPE		0x4
 #define QDSS_ETR_MEM_REGION_TYPE	0x6
-#define QMI_WLFW_PAGEABLE_MEM_V01	0x9
-#define AFC_REGION_TYPE			0xA
 
 enum cnss_mhi_state {
 	CNSS_MHI_INIT,
@@ -101,7 +99,6 @@ struct cnss_pci_data {
 	const struct pci_device_id *pci_device_id;
 	u32 device_id;
 	u16 revision_id;
-	u64 dma_bit_mask;
 	struct cnss_wlan_driver *driver_ops;
 	u8 pci_link_state;
 	u8 pci_link_down_ind;
@@ -130,7 +127,6 @@ struct cnss_pci_data {
 	unsigned long mhi_state;
 	u32 remap_window;
 	struct timer_list dev_rddm_timer;
-	struct timer_list boot_debug_timer;
 	struct delayed_work time_sync_work;
 	u8 disable_pc;
 	struct cnss_pci_debug_reg *debug_reg;
@@ -204,7 +200,6 @@ int cnss_suspend_pci_link(struct cnss_pci_data *pci_priv);
 int cnss_resume_pci_link(struct cnss_pci_data *pci_priv);
 int cnss_pci_init(struct cnss_plat_data *plat_priv);
 void cnss_pci_deinit(struct cnss_plat_data *plat_priv);
-int cnss_ahb_alloc_fw_mem(struct cnss_plat_data *plat_priv);
 int cnss_pci_alloc_fw_mem(struct cnss_plat_data *plat_priv);
 void cnss_pci_free_fw_mem(struct cnss_plat_data *plat_priv);
 int cnss_pci_alloc_qdss_mem(struct cnss_pci_data *pci_priv);
@@ -246,5 +241,7 @@ void cnss_pci_pm_runtime_mark_last_busy(struct cnss_pci_data *pci_priv);
 int cnss_pci_update_status(struct cnss_pci_data *pci_priv,
 			   enum cnss_driver_status status);
 void cnss_pci_global_reset(struct cnss_pci_data *pci_priv);
-void cnss_free_soc_info(struct cnss_plat_data *plat_priv);
+
+void cnss_pci_dump_qca6390_sram_mem(struct cnss_pci_data *pci_priv);
+void cnss_pci_dump_bl_sram_mem(struct cnss_pci_data *pci_priv);
 #endif /* _CNSS_PCI_H */

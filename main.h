@@ -1,4 +1,5 @@
 /* Copyright (c) 2016-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -12,15 +13,14 @@
 
 #ifndef _CNSS_MAIN_H
 #define _CNSS_MAIN_H
-#include <linux/version.h>
 #include <asm/arch_timer.h>
 #include <linux/esoc_client.h>
 #include <linux/etherdevice.h>
 #include <linux/pm_qos.h>
-#include <linux/platform_device.h>
-#include <cnss2.h>
 #include <soc/qcom/memory_dump.h>
 #include <soc/qcom/subsystem_restart.h>
+#include <linux/platform_device.h>
+#include <cnss2.h>
 
 #include "qmi.h"
 #include "bus.h"
@@ -34,6 +34,7 @@
 #define CNSS_NUM_META_INFO_SEGMENTS	1
 #define CNSS_RAMDUMP_MAGIC		0x574C414E /* WLAN in ASCII */
 #define CNSS_RAMDUMP_VERSION		0
+#define MAX_FIRMWARE_NAME_LEN		20
 
 /* Currently these target mem modes are supported for various targets
  *
@@ -265,17 +266,12 @@ enum cnss_mem_type {
 	CNSS_MEM_CAL_V01,
 	CNSS_MEM_DPD_V01,
 	CNSS_MEM_ETR,
-	CNSS_MEM_HANG_DATA,
-	CNSS_MEM_MLO_GLOBAL,
-	CNSS_MEM_PAGEABLE,
-	CNSS_MEM_AFC,
 };
 
 enum cnss_fw_dump_type {
 	CNSS_FW_IMAGE,
 	CNSS_FW_RDDM,
 	CNSS_FW_REMOTE_HEAP,
-	CNSS_FW_PAGEABLE,
 	CNSS_FW_DUMP_TYPE_MAX,
 };
 
@@ -313,7 +309,6 @@ enum cnss_driver_event_type {
 	CNSS_DRIVER_EVENT_QDSS_TRACE_SAVE,
 	CNSS_DRIVER_EVENT_QDSS_TRACE_FREE,
 	CNSS_DRIVER_EVENT_M3_DUMP_UPLOAD_REQ,
-	CNSS_DRIVER_EVENT_QDSS_MEM_READY,
 	CNSS_DRIVER_EVENT_MAX,
 };
 
@@ -334,7 +329,6 @@ enum cnss_driver_state {
 	CNSS_COEX_CONNECTED,
 	CNSS_IMS_CONNECTED,
 	CNSS_IN_SUSPEND_RESUME,
-	CNSS_QDSS_STARTED,
 };
 
 struct cnss_recovery_data {
@@ -379,7 +373,6 @@ enum cnss_bdf_type {
 	CNSS_BDF_REGDB = 4,
 	CNSS_BDF_WIN,
 	CNSS_CALDATA_WIN,
-	CNSS_BDF_HDS,
 	CNSS_BDF_DUMMY = 255,
 };
 
@@ -425,11 +418,6 @@ enum cnss_ce_index {
 	CNSS_CE_COMMON,
 };
 
-enum cnss_module_param_feature {
-	CALDATA,
-	REGDB,
-};
-
 /* M3 SSR Dump related constants and structure */
 #define M3_DUMP_OPEN_TIMEOUT 10000
 #define M3_DUMP_OPEN_COMPLETION_TIMEOUT (2 * M3_DUMP_OPEN_TIMEOUT)
@@ -450,7 +438,7 @@ struct m3_dump {
 	void *dump_addr;
 };
 
-struct target_qcn6122 {
+struct target_qcn9100 {
 	void *bar_addr_va;
 	u64 bar_addr_pa;
 	u32 bar_size;
@@ -497,7 +485,6 @@ struct cnss_plat_data {
 	struct wlfw_rf_board_info board_info;
 	struct wlfw_soc_info soc_info;
 	struct wlfw_fw_version_info fw_version_info;
-	struct cnss_dev_mem_info dev_mem_info[CNSS_MAX_DEV_MEM_NUM];
 	u32 otp_version;
 	u32 fw_mem_seg_len;
 	struct cnss_fw_mem fw_mem[QMI_WLFW_MAX_NUM_MEM_SEG];
@@ -523,7 +510,8 @@ struct cnss_plat_data {
 	u8 *diag_reg_read_buf;
 	u8 cal_done;
 	u8 powered_on;
-	char firmware_name[17];
+	char firmware_name[MAX_FIRMWARE_NAME_LEN];
+	char fw_fallback_name[MAX_FIRMWARE_NAME_LEN];
 	struct completion rddm_complete;
 	struct completion recovery_complete;
 	struct cnss_control_params ctrl_params;
@@ -538,22 +526,19 @@ struct cnss_plat_data {
 	u8 target_asserted;
 	u32 daemon_support;
 	u32 cold_boot_support;
-	bool caldata_support;
+	u32 caldata_support;
 	u32 eeprom_caldata_read_timeout;
-	bool dma_alloc_supported;
 	struct m3_dump m3_dump_data;
 	union {
-		struct target_qcn6122 qcn6122;
+		struct target_qcn9100 qcn9100;
 	};
-	bool hds_support;
-	bool regdb_support;
-	bool qdss_support;
 };
 
-#ifdef CONFIG_ARCH_QCOM
+//#ifdef CONFIG_ARCH_QCOM
+#if 0
 static inline u64 cnss_get_host_timestamp(struct cnss_plat_data *plat_priv)
 {
-	u64 ticks = __arch_counter_get_cntvct();
+	u64 ticks = arch_counter_get_cntvct();
 	u32 freq = arch_timer_get_cntfrq();
 
 	do_div(ticks, freq / 100000);
@@ -591,7 +576,10 @@ int cnss_vreg_unvote_type(struct cnss_plat_data *plat_priv,
 int cnss_get_pinctrl(struct cnss_plat_data *plat_priv);
 int cnss_power_on_device(struct cnss_plat_data *plat_priv, int device_id);
 int cnss_power_off_device(struct cnss_plat_data *plat_priv, int device_id);
-bool cnss_is_device_powered_on(struct cnss_plat_data *plat_priv);
+static inline bool cnss_is_device_powered_on(struct cnss_plat_data *plat_priv)
+{
+	return true;
+}
 int cnss_register_subsys(struct cnss_plat_data *plat_priv);
 void cnss_unregister_subsys(struct cnss_plat_data *plat_priv);
 int cnss_register_ramdump(struct cnss_plat_data *plat_priv);
@@ -607,6 +595,9 @@ int cnss_qca9000_shutdown_part2(struct cnss_plat_data *plat_priv);
 int cnss_get_cpr_info(struct cnss_plat_data *plat_priv);
 int cnss_update_cpr_info(struct cnss_plat_data *plat_priv);
 void cnss_update_platform_feature_support(u8 type, u32 instance_id, u32 value);
-const char *cnss_get_fw_path(struct cnss_plat_data *plat_priv);
-
+int cnss_va_to_pa(struct device *dev, size_t size, void *va, dma_addr_t dma,
+		  phys_addr_t *pa, unsigned long attrs);
+int cnss_minidump_remove_region(struct cnss_plat_data *plat_priv,
+				enum cnss_fw_dump_type type, int seg_no,
+				void *va, phys_addr_t pa, size_t size);
 #endif /* _CNSS_MAIN_H */
