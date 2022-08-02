@@ -3095,6 +3095,7 @@ static void cnss_wlfw_qdss_trace_save_ind_cb(struct qmi_handle *qmi_wlfw,
 	case QCA8074V2_DEVICE_ID:
 	case QCA6018_DEVICE_ID:
 	case QCA5018_DEVICE_ID:
+	case QCA5332_DEVICE_ID:
 	case QCA9574_DEVICE_ID:
 		/* Source 0 is for ETR and not supported for AHB targets */
 		if (ind_msg->source == 1)
@@ -3448,12 +3449,7 @@ int cnss_qmi_init(struct cnss_plat_data *plat_priv)
 
 	dev = &plat_priv->plat_dev->dev;
 
-	if (plat_priv->device_id == QCA8074_DEVICE_ID ||
-	    plat_priv->device_id == QCA8074V2_DEVICE_ID ||
-	    plat_priv->device_id == QCA5018_DEVICE_ID ||
-	    plat_priv->device_id == QCN6122_DEVICE_ID ||
-	    plat_priv->device_id == QCA6018_DEVICE_ID ||
-	    plat_priv->device_id == QCA9574_DEVICE_ID) {
+	if (plat_priv->bus_type == CNSS_BUS_AHB) {
 		if (qca8074_fw_mem_mode != 0xFF) {
 			plat_priv->tgt_mem_cfg_mode = qca8074_fw_mem_mode;
 			pr_info("Using qca8074_fw_mem_mode 0x%x\n",
@@ -3464,8 +3460,7 @@ int cnss_qmi_init(struct cnss_plat_data *plat_priv)
 			pr_info("No qca8074_tgt_mem_mode entry in dev-tree.\n");
 			plat_priv->tgt_mem_cfg_mode = 0;
 		}
-	} else if (plat_priv->device_id == QCN9000_DEVICE_ID ||
-		   plat_priv->device_id == QCN9224_DEVICE_ID) {
+	} else if (plat_priv->bus_type == CNSS_BUS_PCI) {
 		if (of_property_read_u32(dev->of_node,
 					 "tgt-mem-mode",
 					 &plat_priv->tgt_mem_cfg_mode)) {
