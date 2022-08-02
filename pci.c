@@ -3382,32 +3382,36 @@ int cnss_ahb_alloc_fw_mem(struct cnss_plat_data *plat_priv)
 			idx++;
 			break;
 		case CALDB_MEM_REGION_TYPE:
-			if (of_property_read_u32_array(dev->of_node,
+			/* Return caldb address as 0 when FW requests for it
+			 * when cold boot support is disabled.
+			 */
+			if (!plat_priv->cold_boot_support) {
+				fw_mem[idx].pa = 0;
+			} else {
+				if (of_property_read_u32_array(dev->of_node,
 						"qcom,caldb-addr",
 						caldb_location,
 						ARRAY_SIZE(caldb_location))) {
-				cnss_pr_err("Error: Couldn't read caldb_addr from device_tree\n");
-				CNSS_ASSERT(0);
-				return -EINVAL;
-			}
-			if (of_property_read_u32(dev->of_node,
-						 "qcom,caldb-size",
-						 &caldb_size)) {
-				cnss_pr_err("Error: No caldb-size in dts\n");
-				CNSS_ASSERT(0);
-				return -ENOMEM;
-			}
-			if (fw_mem[i].size > caldb_size) {
-				cnss_pr_err("Error: Need more memory for caldb, fw req:0x%x max:0x%x\n",
-					    (unsigned int)fw_mem[i].size,
-					    caldb_size);
-				CNSS_ASSERT(0);
-				return -ENOMEM;
-			}
-			if (!plat_priv->cold_boot_support)
-				fw_mem[idx].pa = 0;
-			else
+					cnss_pr_err("Error: Couldn't read caldb_addr from device_tree\n");
+					CNSS_ASSERT(0);
+					return -EINVAL;
+				}
+				if (of_property_read_u32(dev->of_node,
+							 "qcom,caldb-size",
+							 &caldb_size)) {
+					cnss_pr_err("Error: No caldb-size in dts\n");
+					CNSS_ASSERT(0);
+					return -ENOMEM;
+				}
+				if (fw_mem[i].size > caldb_size) {
+					cnss_pr_err("Error: Need more memory for caldb, fw req:0x%x max:0x%x\n",
+						(unsigned int)fw_mem[i].size,
+						caldb_size);
+					CNSS_ASSERT(0);
+					return -ENOMEM;
+				}
 				fw_mem[idx].pa = caldb_location[mode];
+			}
 			fw_mem[idx].va = ioremap(fw_mem[idx].pa,
 						 fw_mem[idx].size);
 			fw_mem[idx].size = fw_mem[i].size;
