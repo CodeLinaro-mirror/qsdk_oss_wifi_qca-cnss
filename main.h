@@ -551,6 +551,15 @@ enum cnss_fw_type {
 	CNSS_FW_MAX, /* 2 to 15 is reserved */
 };
 
+struct qdss_stream_data {
+	dma_addr_t              qdss_paddr;
+	void __iomem            *qdss_vaddr;
+	struct work_struct	qld_stream_work;
+	struct socket           *qld_stream_sock;
+	atomic_t                seq_no;
+	atomic_t                completed_seq_no;
+};
+
 struct cnss_plat_data {
 	void *wlan_priv;
 	struct platform_device *plat_dev;
@@ -649,6 +658,7 @@ struct cnss_plat_data {
 	bool hds_support;
 	bool regdb_support;
 	u32 qdss_support;
+	u32 qdss_etr_sg_mode;
 	enum wlfw_bdf_dnld_method_v01 bdf_dnld_method;
 	u32 probe_order;
 	bool mlo_support;
@@ -661,6 +671,7 @@ struct cnss_plat_data {
 	bool fw_ini_cfg_support;
 	bool regdb_mandatory;
 	enum cnss_fw_type firmware_type;
+	struct qdss_stream_data qdss_stream;
 };
 
 #ifdef CONFIG_ARCH_QCOM

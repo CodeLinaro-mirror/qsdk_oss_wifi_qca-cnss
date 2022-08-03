@@ -62,6 +62,11 @@
 #define QMI_WLFW_PAGEABLE_MEM_V01	0x9
 #define AFC_REGION_TYPE			0xA
 
+#define CNSS_ETR_SG_ENT(phys_pte)	(((phys_pte >> PAGE_SHIFT) << 4) | 0x2)
+#define CNSS_ETR_SG_NXT_TBL(phys_pte)	(((phys_pte >> PAGE_SHIFT) << 4) | 0x3)
+#define CNSS_ETR_SG_LST_ENT(phys_pte)	(((phys_pte >> PAGE_SHIFT) << 4) | 0x1)
+#define CNSS_ETR_SG_ENT_TO_BLK(phys_pte) (((phys_addr_t)phys_pte >> 4)   \
+					 << PAGE_SHIFT)
 enum cnss_mhi_state {
 	CNSS_MHI_INIT,
 	CNSS_MHI_DEINIT,
@@ -153,6 +158,7 @@ struct cnss_pci_data {
 	struct cnss_pci_debug_reg *debug_reg;
 	int os_legacy_irq;
 	u16 otp_board_id;
+	int qdss_irq;
 };
 
 struct paging_header {

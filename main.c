@@ -314,6 +314,7 @@ struct cnss_plat_data *cnss_get_plat_priv_by_instance_id(int instance_id)
 	}
 	return NULL;
 }
+EXPORT_SYMBOL(cnss_get_plat_priv_by_instance_id);
 
 struct cnss_plat_data *cnss_get_plat_priv_by_device_id(int id)
 {
@@ -4259,6 +4260,7 @@ void cnss_config_param_update_cb(uint32_t instance_id,
 			     value, instance_id);
 		break;
 	case CNSS_PLAT_IPC_PARAM_TYPE_QDSS_START_V01:
+		plat_priv->qdss_etr_sg_mode = value;
 		cnss_pr_info("Starting QDSS for %s", plat_priv->device_name);
 		cnss_wlfw_qdss_dnld_send_sync(plat_priv);
 		break;
@@ -4669,6 +4671,7 @@ void cnss_update_platform_feature_support(u8 type, u32 instance_id, u32 value)
 			     value, instance_id);
 		break;
 	case CNSS_GENL_MSG_TYPE_QDSS_START:
+		plat_priv->qdss_etr_sg_mode = value;
 		cnss_pr_info("Starting QDSS for %s", plat_priv->device_name);
 		cnss_wlfw_qdss_dnld_send_sync(plat_priv);
 		break;
