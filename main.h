@@ -597,6 +597,7 @@ struct cnss_plat_data {
 	spinlock_t event_lock; /* spinlock for driver work event handling */
 	struct work_struct event_work;
 	struct workqueue_struct *event_wq;
+	struct work_struct cal_work;
 	struct qmi_handle qmi_wlfw;
 	struct sockaddr_qrtr sq;
 	struct wlfw_rf_chip_info chip_info;
@@ -672,6 +673,7 @@ struct cnss_plat_data {
 	bool regdb_mandatory;
 	enum cnss_fw_type firmware_type;
 	struct qdss_stream_data qdss_stream;
+	bool cal_in_progress;
 };
 
 #ifdef CONFIG_ARCH_QCOM

@@ -2834,7 +2834,6 @@ static void cnss_wlfw_fw_mem_ready_ind_cb(struct qmi_handle *qmi_wlfw,
 	struct cnss_plat_data *plat_priv =
 		container_of(qmi_wlfw, struct cnss_plat_data, qmi_wlfw);
 	u32 cal_file_size = 0;
-	unsigned int driver_mode;
 
 	cnss_pr_dbg("Received QMI WLFW FW memory ready indication\n");
 
@@ -2845,17 +2844,13 @@ static void cnss_wlfw_fw_mem_ready_ind_cb(struct qmi_handle *qmi_wlfw,
 
 	if (is_ipc_qmi_client_connected(CNSS_PLAT_IPC_DAEMON_QMI_CLIENT_V01,
 					0)) {
-		driver_mode = cnss_get_global_driver_mode();
-
 		if (plat_priv->cold_boot_support &&
-		    (driver_mode == CNSS_CALIBRATION ||
-		    driver_mode == CNSS_FTM_CALIBRATION)) {
+		    plat_priv->cal_in_progress) {
 			cnss_cal_file_download_to_mem(plat_priv,
 						      &cal_file_size);
 			plat_priv->cal_file_size = cal_file_size;
-			cnss_pr_dbg("%s: Cold boot support enabled. Driver mode %u. CALDB downloaded, file size %u\n",
-				    __func__, driver_mode,
-				    plat_priv->cal_file_size);
+			cnss_pr_dbg("%s: Cold boot support enabled. CALDB downloaded, file size %u\n",
+				    __func__, plat_priv->cal_file_size);
 		}
 	}
 

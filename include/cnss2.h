@@ -322,10 +322,6 @@ static inline void cnss_wait_for_fw_ready(struct device *dev)
 {
 }
 
-static inline void cnss_wait_for_cold_boot_cal_done(struct device *dev)
-{
-}
-
 static inline void cnss_set_ramdump_enabled(struct device *dev, bool enabled)
 {
 }
@@ -540,7 +536,6 @@ extern int cnss_wlan_enable(struct device *dev,
 extern int cnss_wlan_disable(struct device *dev, enum cnss_driver_mode mode);
 extern unsigned int cnss_get_boot_timeout(struct device *dev);
 void cnss_wait_for_fw_ready(struct device *dev);
-void cnss_wait_for_cold_boot_cal_done(struct device *dev);
 void cnss_set_ramdump_enabled(struct device *dev, bool enabled);
 void cnss_set_recovery_enabled(struct device *dev, bool enabled);
 void *cnss_subsystem_get(struct device *dev, int device_id);
@@ -558,7 +553,6 @@ extern int cnss_athdiag_read(struct device *dev, uint32_t offset,
 extern int cnss_athdiag_write(struct device *dev, uint32_t offset,
 			      uint32_t mem_type, uint32_t data_len,
 			      uint8_t *input);
-extern int cnss_set_fw_log_mode(struct device *dev, uint8_t fw_log_mode);
 bool cnss_is_dev_initialized(struct device *dev);
 u64 cnss_get_q6_time(struct device *dev);
 extern void cnss_dump_qmi_history(void);
