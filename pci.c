@@ -321,6 +321,7 @@ static DEFINE_SPINLOCK(qdss_lock);
 #define QCN9224_PCIE_BHI_ERRDBG2_REG		0x1E0E238
 #define QCN9224_PCIE_BHI_ERRDBG3_REG		0x1E0E23C
 #define QCN9224_PBL_LOG_SRAM_START		0x01303da0
+#define QCN9224_v2_PBL_LOG_SRAM_START		0x01303e98
 #define QCN9224_PBL_LOG_SRAM_MAX_SIZE		40
 #define QCN9224_TCSR_PBL_LOGGING_REG		0x1B00094
 #define QCN9224_PBL_WLAN_BOOT_CFG		0x1E22B34
@@ -1158,6 +1159,7 @@ static void cnss_pci_dump_bl_sram_mem(struct cnss_pci_data *pci_priv)
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 	struct sbl_reg_addr sbl_data = {0};
 	struct pbl_reg_addr pbl_data = {0};
+	struct mhi_controller *mhi_ctrl = pci_priv->mhi_ctrl;
 
 	switch (plat_priv->device_id) {
 	case QCN9000_DEVICE_ID:
@@ -1177,7 +1179,13 @@ static void cnss_pci_dump_bl_sram_mem(struct cnss_pci_data *pci_priv)
 		sbl_data.sbl_sram_end = QCN9224_SRAM_END;
 		sbl_data.sbl_log_size_reg = QCN9224_PCIE_BHI_ERRDBG3_REG;
 		sbl_data.sbl_log_start_reg = QCN9224_PCIE_BHI_ERRDBG2_REG;
-		pbl_data.pbl_log_sram_start = QCN9224_PBL_LOG_SRAM_START;
+		if (mhi_ctrl->major_version == 2)
+			pbl_data.pbl_log_sram_start =
+				QCN9224_v2_PBL_LOG_SRAM_START;
+		else
+			pbl_data.pbl_log_sram_start =
+				QCN9224_PBL_LOG_SRAM_START;
+
 		pbl_data.pbl_log_sram_max_size = QCN9224_PBL_LOG_SRAM_MAX_SIZE;
 		pbl_data.tcsr_pbl_logging_reg = QCN9224_TCSR_PBL_LOGGING_REG;
 		pbl_data.pbl_wlan_boot_cfg = QCN9224_PBL_WLAN_BOOT_CFG;
