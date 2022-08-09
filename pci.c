@@ -2621,6 +2621,7 @@ static void cnss_dereg_pci_event(struct cnss_pci_data *pci_priv)
 }
 #endif
 
+#ifdef CONFIG_PM_SLEEP
 static int cnss_pci_suspend(struct device *dev)
 {
 #ifdef CONFIG_PCI_SUSPENDRESUME
@@ -2815,7 +2816,9 @@ out:
 #endif
 	return 0;
 }
+#endif /* CONFIG_PM_SLEEP */
 
+#ifdef CONFIG_PM
 static int cnss_pci_runtime_suspend(struct device *dev)
 {
 #ifdef CONFIG_PCI_SUSPENDRESUME
@@ -2912,6 +2915,7 @@ static int cnss_pci_runtime_idle(struct device *dev)
 #endif
 	return 0;
 }
+#endif /* CONFIG_PM */
 
 int cnss_wlan_pm_control(struct device *dev, bool vote)
 {
