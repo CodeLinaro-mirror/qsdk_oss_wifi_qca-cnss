@@ -727,7 +727,7 @@ static int cnss_pci_reg_write(struct cnss_pci_data *pci_priv, u32 addr,
 	return 0;
 }
 
-int cnss_reg_read(struct device *dev, u32 addr, u32 *val)
+int cnss_reg_read(struct device *dev, u32 addr, u32 *val, void __iomem *base)
 {
 	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
 	struct cnss_pci_data *pci_priv;
@@ -747,6 +747,11 @@ int cnss_reg_read(struct device *dev, u32 addr, u32 *val)
 		}
 		return cnss_pci_reg_read(pci_priv, addr, val);
 	case CNSS_BUS_AHB:
+		if (base)
+			*val = readl_relaxed(addr + base);
+		else
+			cnss_pr_err("Base addr is NULL\n");
+		return 0;
 	default:
 		cnss_pr_err("Unsupported bus type %d, only PCI bus type is supported\n",
 			    plat_priv->bus_type);
@@ -755,7 +760,7 @@ int cnss_reg_read(struct device *dev, u32 addr, u32 *val)
 }
 EXPORT_SYMBOL(cnss_reg_read);
 
-int cnss_reg_write(struct device *dev, u32 addr, u32 val)
+int cnss_reg_write(struct device *dev, u32 addr, u32 val, void __iomem *base)
 {
 	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
 	struct cnss_pci_data *pci_priv;
@@ -775,6 +780,8 @@ int cnss_reg_write(struct device *dev, u32 addr, u32 val)
 		}
 		return cnss_pci_reg_write(pci_priv, addr, val);
 	case CNSS_BUS_AHB:
+		writel_relaxed(val, addr + base);
+		return 0;
 	default:
 		cnss_pr_err("Unsupported bus type %d, only PCI bus type is supported\n",
 			    plat_priv->bus_type);

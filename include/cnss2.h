@@ -441,11 +441,13 @@ static inline int cnss_get_dev_link_ids(struct device *dev, u8 *link_ids,
 {
 	return -EINVAL;
 }
-static inline int cnss_reg_read(struct device *dev, u32 addr, u32 *val)
+static inline int cnss_reg_read(struct device *dev, u32 addr, u32 *val,
+				void __iomem *base)
 {
 	return -EINVAL;
 }
-static inline int cnss_reg_write(struct device *dev, u32 addr, u32 val)
+static inline int cnss_reg_write(struct device *dev, u32 addr, u32 val,
+				 void __iomem *base)
 {
 	return -EINVAL;
 }
@@ -572,8 +574,8 @@ int cnss_get_num_mlo_links(struct device *dev);
 int cnss_get_num_mlo_capable_devices(unsigned int *device_id,
 				     int num_elements);
 int cnss_get_dev_link_ids(struct device *dev, u8 *link_ids, int max_elements);
-int cnss_reg_read(struct device *dev, u32 addr, u32 *val);
-int cnss_reg_write(struct device *dev, u32 addr, u32 val);
+int cnss_reg_read(struct device *dev, u32 addr, u32 *val, void __iomem *base);
+int cnss_reg_write(struct device *dev, u32 addr, u32 val, void __iomem *base);
 int cnss_set_bar_addr(struct device *dev, void __iomem *mem);
 int cnss_set_mlo_config(struct cnss_mlo_group_info *group_info, int num_groups);
 void cnss_print_mlo_config(void);
