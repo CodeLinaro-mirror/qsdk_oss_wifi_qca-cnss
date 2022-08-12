@@ -4455,14 +4455,14 @@ static void cnss_driver_cal_work(struct work_struct *work)
 
 	cnss_wait_for_cold_boot_cal_done(plat_priv);
 
-	if (soft_switch) {
-		ret = cnss_wlfw_wlan_mode_send_sync(plat_priv, CNSS_OFF);
-		if (ret) {
-			cnss_pr_err("Failed to send Mode OFF for %s. Ret: %d",
-				    plat_priv->device_name, ret);
-			return;
-		}
+	ret = cnss_wlfw_wlan_mode_send_sync(plat_priv, CNSS_OFF);
+	if (ret) {
+		cnss_pr_err("Failed to send Mode OFF for %s. Ret: %d",
+			    plat_priv->device_name, ret);
+		return;
+	}
 
+	if (soft_switch) {
 		plat_priv->cal_in_progress = false;
 		plat_priv->driver_ops->probe(
 				(struct pci_dev *)plat_priv->plat_dev,
