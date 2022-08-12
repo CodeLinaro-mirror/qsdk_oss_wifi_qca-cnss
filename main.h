@@ -734,7 +734,6 @@ int cnss_get_cpr_info(struct cnss_plat_data *plat_priv);
 int cnss_update_cpr_info(struct cnss_plat_data *plat_priv);
 void cnss_update_platform_feature_support(u8 type, u32 instance_id, u32 value);
 const char *cnss_get_fw_path(struct cnss_plat_data *plat_priv);
-unsigned int cnss_get_global_driver_mode(void);
 int cnss_cal_file_download_to_mem(struct cnss_plat_data *plat_priv,
 				  u32 *cal_file_size);
 
