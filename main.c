@@ -1030,6 +1030,27 @@ void cnss_get_ramdump_device_name(struct device *dev,
 }
 EXPORT_SYMBOL(cnss_get_ramdump_device_name);
 
+static void cnss_set_global_mlo_support(bool enable)
+{
+	struct cnss_plat_data *plat_priv = NULL;
+	int i;
+
+	cnss_pr_info("%s MLO support..\n", enable ? "Enabling" : "Disabling");
+	enable_mlo_support = enable;
+
+	for (i = 0; i < plat_env_index; i++) {
+		plat_priv = plat_env[i];
+		switch (plat_priv->device_id) {
+		case QCN9224_DEVICE_ID:
+			plat_priv->mlo_support = enable;
+			break;
+		default:
+			cnss_pr_dbg("MLO not supported for %s",
+				    plat_priv->device_name);
+		}
+	}
+}
+
 int cnss_set_mlo_config(struct cnss_mlo_group_info *in_group_info,
 			int num_groups)
 {
@@ -1109,6 +1130,11 @@ void cnss_print_mlo_config(void)
 	struct cnss_mlo_chip_info *chip_info;
 
 	int i, j, k;
+
+	if (!enable_mlo_support) {
+		pr_err("MLO is disabled!\n");
+		return;
+	}
 
 	pr_err("\n****** CNSS MLO CONFIG ******\n");
 	for (i = 0; i < CNSS_MAX_MLO_GROUPS; i++) {
@@ -1616,6 +1642,10 @@ int cnss_set_driver_mode(unsigned int mode)
 		pr_err("%s: Invalid driver mode %d", __func__, mode);
 		return -EINVAL;
 	}
+
+	/* MLO support needs to be enabled only for Mission mode */
+	if (mode != CNSS_MISSION)
+		cnss_set_global_mlo_support(false);
 
 	return 0;
 }
@@ -4802,11 +4832,6 @@ void cnss_update_platform_feature_support(u8 type, u32 instance_id, u32 value)
 		cnss_pr_err("Unknown type %d\n", type);
 		break;
 	}
-}
-
-unsigned int cnss_get_global_driver_mode(void)
-{
-	return driver_mode;
 }
 
 static int platform_get_qcn6122_userpd_id(struct platform_device *plat_dev,
