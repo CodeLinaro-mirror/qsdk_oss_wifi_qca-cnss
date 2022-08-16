@@ -2175,6 +2175,14 @@ int cnss_wlan_probe_driver(void)
 		plat_priv->driver_status = CNSS_LOAD_UNLOAD;
 
 		if (plat_priv->bus_type == CNSS_BUS_PCI) {
+			/* If plat_priv->pci_dev is NULL, the PCI device is not
+			 * enumerated, set driver status and skip that device
+			 * so that other devices can continue to boot.
+			 */
+			if (!plat_priv->pci_dev) {
+				plat_priv->driver_status = CNSS_INITIALIZED;
+				continue;
+			}
 			cnss_pci_init(plat_priv);
 			set_bit(CNSS_DRIVER_LOADING, &plat_priv->driver_state);
 		}
@@ -3933,13 +3941,6 @@ int cnss_register_subsys(struct cnss_plat_data *plat_priv)
 
 		break;
 	case CNSS_BUS_PCI:
-		/* If plat_priv->pci_dev is NULL, the PCI device is not probed,
-		 * return 0 here so that driver loading does not fail for other
-		 * devices
-		 */
-		if (!plat_priv->pci_dev)
-			return 0;
-
 		if (!plat_priv->rproc_handle) {
 			/* Should never happen as rproc_handle is allocated
 			 * during cnss_probe for PCI targets
