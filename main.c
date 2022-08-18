@@ -187,6 +187,10 @@ static unsigned int mlo_chip_bitmask = 0xFF;
 module_param(mlo_chip_bitmask, uint, 0600);
 MODULE_PARM_DESC(mlo_chip_bitmask, "mlo_chip_bitmask");
 
+/* Experimental module param to avoid FW shutdown/power on after coldboot
+ * calibration. Current FW does not support this and should not be enabled
+ * without FW support for this feature
+ */
 static unsigned int soft_switch;
 module_param(soft_switch, uint, 0600);
 MODULE_PARM_DESC(soft_switch, "soft_switch");

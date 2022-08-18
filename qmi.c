@@ -482,9 +482,16 @@ static int cnss_wlfw_host_cap_send_sync(struct cnss_plat_data *plat_priv)
 			     req->gpios_len);
 	}
 
-	/* update MLO configuration */
-
-	if (plat_priv->mlo_support && plat_priv->mlo_capable) {
+	/* update MLO configuration
+	 * Note: MLO capabilities needs to be sent only for mission mode
+	 * and plat_priv->mlo_support will be disabled for all other modes.
+	 * However, coldboot calibration is now handled within CNSS2 and
+	 * transparent to driver, so explictily check for cal_in_progress and
+	 * don't send MLO capabilitities for coldboot cal mode.
+	 */
+	if (!plat_priv->cal_in_progress && plat_priv->mlo_support &&
+	    plat_priv->mlo_capable) {
+		cnss_pr_info("MLO Capabilities added to QMI Host Cap msg\n");
 		req->mlo_capable_valid = 1;
 		req->mlo_capable = 1;
 
