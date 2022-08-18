@@ -6555,7 +6555,7 @@ void cnss_pci_remove(struct pci_dev *pci_dev)
 		break;
 	}
 
-	pci_load_and_free_saved_state(pci_dev, &pci_priv->saved_state);
+	pci_load_and_free_saved_state(pci_dev, &pci_priv->default_state);
 
 	cnss_pci_disable_bus(pci_priv);
 	if (plat_priv->enable_intx) {
