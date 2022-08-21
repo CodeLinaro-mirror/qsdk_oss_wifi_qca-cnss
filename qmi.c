@@ -2389,6 +2389,13 @@ int cnss_wlfw_send_qdss_trace_mode_req(struct cnss_plat_data *plat_priv,
 		return -EINVAL;
 	}
 
+	if (!test_bit(CNSS_QDSS_STARTED, &plat_priv->driver_state) &&
+	    mode == QMI_WLFW_QDSS_TRACE_OFF_V01) {
+		cnss_pr_info("QDSS not started, ignoring stop command. 0x%lx\n",
+			     plat_priv->driver_state);
+		return -EINVAL;
+	}
+
 	req = kzalloc(sizeof(*req), GFP_KERNEL);
 	if (!req)
 		return -ENOMEM;
