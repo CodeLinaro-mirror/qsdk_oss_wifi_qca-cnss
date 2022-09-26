@@ -195,6 +195,10 @@ static DEFINE_SPINLOCK(qdss_lock);
 #define QCA5332_CE_DST_RING_REG_BASE            0x741000
 #define QCA5332_CE_COMMON_REG_BASE              0x758000
 
+#define QCN9160_CE_SRC_RING_REG_BASE            0x3B80000
+#define QCN9160_CE_DST_RING_REG_BASE            0x3B81000
+#define QCN9160_CE_COMMON_REG_BASE              0x3B98000
+
 #define CE_SRC_RING_BASE_LSB_OFFSET		0x0
 #define CE_SRC_RING_BASE_MSB_OFFSET		0x4
 #define CE_SRC_RING_ID_OFFSET			0x8
@@ -3255,14 +3259,16 @@ static
 struct device_node *cnss_get_m3dump_dev_node(struct cnss_plat_data *plat_priv)
 {
 	struct device_node *dev_node = NULL;
+	char buf[M3_DUMP_NODE_LEN] = {0};
 
 	if (plat_priv->device_id == QCN6122_DEVICE_ID) {
-		if (plat_priv->userpd_id == QCN6122_0)
-			dev_node = of_find_node_by_name(NULL,
-							"m3_dump_qcn6122_1");
-		else if (plat_priv->userpd_id == QCN6122_1)
-			dev_node = of_find_node_by_name(NULL,
-							"m3_dump_qcn6122_2");
+		snprintf(buf, M3_DUMP_NODE_LEN, "%s_%d",
+				QCN6122_M3_DUMP_PREFIX, plat_priv->userpd_id);
+		dev_node = of_find_node_by_name(NULL, buf);
+	} else if (plat_priv->device_id == QCN9160_DEVICE_ID) {
+		snprintf(buf, M3_DUMP_NODE_LEN, "%s_%d",
+				QCN9160_M3_DUMP_PREFIX, plat_priv->userpd_id);
+		dev_node = of_find_node_by_name(NULL, buf);
 	} else {
 		dev_node = of_find_node_by_name(NULL, "m3_dump");
 	}
@@ -3274,8 +3280,10 @@ static void afc_memset(struct cnss_plat_data *plat_priv, void *s,
 		       int c, size_t n)
 {
 	switch (plat_priv->device_id) {
+	case QCN9160_DEVICE_ID:
 	case QCN6122_DEVICE_ID:
-		/* For QCN6122, AFC memory is ioremapped from M3_DUMP_REGION.
+		/* For QCN6122, QCN9160, AFC memory is ioremapped from
+		 * M3_DUMP_REGION.
 		 * Use memset_io for this.
 		 */
 		memset_io(s, c, n);
@@ -3526,12 +3534,13 @@ int cnss_ahb_alloc_fw_mem(struct cnss_plat_data *plat_priv)
 				if (!fw_mem[idx].va)
 					cnss_pr_err("WARNING: M3 Dump addr remap failed\n");
 			} else {
-				/* For QCN6122, AFC_REGION_TYPE needs to be
+				/* For multi-pd dev, AFC_REGION_TYPE needs to be
 				 * allocated from within the M3_DUMP_REGION.
-				 * This is because QCN6122 cannot access memory
+				 * This is because they cannot access memory
 				 * regions allocated outside FW reserved memory
 				 */
-				if (plat_priv->device_id != QCN6122_DEVICE_ID) {
+				if (plat_priv->device_id != QCN6122_DEVICE_ID &&
+				    plat_priv->device_id != QCN9160_DEVICE_ID) {
 					cnss_pr_err("Invalid AFC mem request from target");
 					CNSS_ASSERT(0);
 					return -EINVAL;
@@ -3548,8 +3557,12 @@ int cnss_ahb_alloc_fw_mem(struct cnss_plat_data *plat_priv)
 					idx++;
 					break;
 				}
-				fw_mem[idx].pa = m3_dump.start +
-						 AFC_QCN6122_MEM_OFFSET;
+
+				if (plat_priv->device_id == QCN6122_DEVICE_ID ||
+				    plat_priv->device_id == QCN9160_DEVICE_ID)
+					fw_mem[idx].pa = m3_dump.start +
+							 AFC_QCN6122_MEM_OFFSET;
+
 				fw_mem[idx].va = ioremap(fw_mem[idx].pa,
 							 fw_mem[idx].size);
 				if (!fw_mem[i].va) {
@@ -4471,17 +4484,19 @@ void cnss_free_soc_info(struct cnss_plat_data *plat_priv)
 		/* For PCI targets, BAR is freed from cnss_pci_disable_bus */
 		break;
 	case QCN6122_DEVICE_ID:
-		/* QCN6122 is considered AHB target from host but is actually
-		 * a PCI target where enumeration is handled by the firmware
-		 * PCI BAR is remmaped as part of QMI Device Info message.
+	case QCN9160_DEVICE_ID:
+		/* QCN6122/QCN9160 are considered AHB targets from host but is
+		 * actually a PCI target where enumeration is handled by the
+		 * firmware PCI BAR is remmaped as part of QMI Device Info
+		 * message.
 		 * iounmap the PCI BAR memory here */
-		if (plat_priv->qcn6122.bar_addr_va) {
+		if (plat_priv->tgt_data.bar_addr_va) {
 			cnss_pr_info("Freeing BAR Info for %s",
 				     plat_priv->device_name);
-			iounmap(plat_priv->qcn6122.bar_addr_va);
-			plat_priv->qcn6122.bar_addr_va = NULL;
-			plat_priv->qcn6122.bar_addr_pa = 0;
-			plat_priv->qcn6122.bar_size = 0;
+			iounmap(plat_priv->tgt_data.bar_addr_va);
+			plat_priv->tgt_data.bar_addr_va = NULL;
+			plat_priv->tgt_data.bar_addr_pa = 0;
+			plat_priv->tgt_data.bar_size = 0;
 		}
 		break;
 	case QCA8074_DEVICE_ID:
@@ -4503,9 +4518,10 @@ int cnss_get_soc_info(struct device *dev, struct cnss_soc_info *info)
 	if (!plat_priv)
 		return -ENODEV;
 
-	if (plat_priv->device_id == QCN6122_DEVICE_ID) {
-		info->va = plat_priv->qcn6122.bar_addr_va;
-		info->pa = (phys_addr_t)plat_priv->qcn6122.bar_addr_pa;
+	if (plat_priv->device_id == QCN6122_DEVICE_ID ||
+		plat_priv->device_id == QCN9160_DEVICE_ID) {
+		info->va = plat_priv->tgt_data.bar_addr_va;
+		info->pa = (phys_addr_t)plat_priv->tgt_data.bar_addr_pa;
 	} else {
 		struct cnss_pci_data *pci_priv =
 				cnss_get_pci_priv(to_pci_dev(dev));
@@ -4566,6 +4582,13 @@ static struct cnss_ce_base_addr ce_base_addr_qcn6122 = {
 	.src_base = QCN6122_CE_SRC_RING_REG_BASE,
 	.dst_base = QCN6122_CE_DST_RING_REG_BASE,
 	.common_base = QCN6122_CE_COMMON_REG_BASE,
+	.max_ce_count = DEFAULT_CE_COUNT,
+};
+
+static struct cnss_ce_base_addr ce_base_addr_qcn9160 = {
+	.src_base = QCN9160_CE_SRC_RING_REG_BASE,
+	.dst_base = QCN9160_CE_DST_RING_REG_BASE,
+	.common_base = QCN9160_CE_COMMON_REG_BASE,
 	.max_ce_count = DEFAULT_CE_COUNT,
 };
 
@@ -4671,6 +4694,16 @@ static struct cnss_msi_config msi_config_qcn6122_pci1 = {
 		{ .name = "DP", .num_vectors = 8, .base_vector = 5 },
 	},
 };
+
+static struct cnss_msi_config msi_config_qcn9160_pci0 = {
+	.total_vectors = 13,
+	.total_users = 2,
+	.users = (struct cnss_msi_user[]) {
+		{ .name = "CE", .num_vectors = 5, .base_vector = 0 },
+		{ .name = "DP", .num_vectors = 8, .base_vector = 5 },
+	},
+};
+
 #endif
 
 static void pci_update_msi_vectors(struct cnss_msi_config *msi_config,
@@ -4702,12 +4735,12 @@ static void pci_override_msi_assignment(struct cnss_plat_data *plat_priv,
 	struct device *dev = &plat_priv->plat_dev->dev;
 
 	if (plat_priv->qrtr_node_id == QCN9000_0 ||
-	    plat_priv->userpd_id == QCN6122_0 ||
+	    plat_priv->userpd_id == USERPD_0 ||
 	    plat_priv->qrtr_node_id == QCN9224_0)
 		bmap = pci0_num_msi_bmap;
 
 	if (plat_priv->qrtr_node_id == QCN9000_1 ||
-	    plat_priv->userpd_id == QCN6122_1 ||
+	    plat_priv->userpd_id == USERPD_1 ||
 	    plat_priv->qrtr_node_id == QCN9224_1)
 		bmap = pci1_num_msi_bmap;
 
@@ -4767,16 +4800,20 @@ static void pci_override_msi_assignment(struct cnss_plat_data *plat_priv,
 
 #ifdef CONFIG_CNSS2_QGIC2M
 static struct cnss_msi_config*
-cnss_get_msi_config_qcn6122(struct cnss_plat_data *plat_priv)
+cnss_get_msi_config(struct cnss_plat_data *plat_priv)
 {
-	if (plat_priv->userpd_id == QCN6122_0) {
-		return &msi_config_qcn6122_pci0;
-	} else if (plat_priv->userpd_id == QCN6122_1) {
-		return &msi_config_qcn6122_pci1;
-	} else {
-		cnss_pr_err("Unknown userpd_id 0x%X", plat_priv->userpd_id);
-		return NULL;
+	if (plat_priv->device_id == QCN6122_DEVICE_ID) {
+		if (plat_priv->userpd_id == USERPD_0)
+			return &msi_config_qcn6122_pci0;
+		else if (plat_priv->userpd_id == USERPD_1)
+			return &msi_config_qcn6122_pci1;
+
+	} else if (plat_priv->device_id == QCN9160_DEVICE_ID) {
+		if (plat_priv->userpd_id == USERPD_0)
+			return &msi_config_qcn9160_pci0;
 	}
+	cnss_pr_err("Unknown userpd_id 0x%X", plat_priv->userpd_id);
+	return NULL;
 }
 #endif
 
@@ -4920,9 +4957,9 @@ struct qgic2_msi *cnss_qgic2_enable_msi(struct cnss_plat_data *plat_priv)
 	struct device *dev = &plat_priv->plat_dev->dev;
 	struct irq_data *irq_data;
 
-	msi_config = cnss_get_msi_config_qcn6122(plat_priv);
+	msi_config = cnss_get_msi_config(plat_priv);
 	if (!msi_config) {
-		cnss_pr_err("qcn6122 msi_config NULL");
+		cnss_pr_err("%s msi_config NULL", plat_priv->device_name);
 		return NULL;
 	}
 
@@ -4943,12 +4980,14 @@ struct qgic2_msi *cnss_qgic2_enable_msi(struct cnss_plat_data *plat_priv)
 		return NULL;
 	}
 
-	plat_priv->qcn6122.qgic2_msi = qgic;
+	if (plat_priv->device_id == QCN6122_DEVICE_ID ||
+	    plat_priv->device_id == QCN9160_DEVICE_ID)
+		plat_priv->tgt_data.qgic2_msi = qgic;
 
 	msi_desc = first_msi_entry(dev);
 	irq_data = irq_desc_get_irq_data(irq_to_desc(msi_desc->irq));
 
-	/* For QCN6122 device, to retrieve msi base address and irq data,
+	/* For multi-pd device, to retrieve msi base address and irq data,
 	 * request a dummy irq  store the base address and data in qgic
 	 * private to provide the required base address/data info in
 	 * cnss_get_msi_address and cnss_get_user_msi_assignment API calls.
@@ -4976,11 +5015,13 @@ struct qgic2_msi *cnss_qgic2_enable_msi(struct cnss_plat_data *plat_priv)
 
 void cnss_qgic2_disable_msi(struct cnss_plat_data *plat_priv)
 {
-	if (plat_priv->device_id == QCN6122_DEVICE_ID &&
-				plat_priv->qcn6122.qgic2_msi) {
+	if ((plat_priv->device_id == QCN6122_DEVICE_ID ||
+	     plat_priv->device_id == QCN9160_DEVICE_ID) &&
+				plat_priv->tgt_data.qgic2_msi) {
 		platform_msi_domain_free_irqs(&plat_priv->plat_dev->dev);
-		plat_priv->qcn6122.qgic2_msi = NULL;
+		plat_priv->tgt_data.qgic2_msi = NULL;
 	}
+
 }
 #endif
 
@@ -5003,21 +5044,24 @@ int cnss_get_user_msi_assignment(struct device *dev, char *user_name,
 
 	if (plat_priv->device_id != QCN9000_DEVICE_ID &&
 	    plat_priv->device_id != QCN9224_DEVICE_ID &&
-	    plat_priv->device_id != QCN6122_DEVICE_ID) {
+	    plat_priv->device_id != QCN6122_DEVICE_ID &&
+	    plat_priv->device_id != QCN9160_DEVICE_ID) {
 		cnss_pr_dbg("MSI not supported on device 0x%lx",
 			    plat_priv->device_id);
 		return -EINVAL;
 	}
 
-	if (plat_priv->device_id == QCN6122_DEVICE_ID) {
+	if (plat_priv->device_id == QCN6122_DEVICE_ID ||
+	    plat_priv->device_id == QCN9160_DEVICE_ID) {
 #ifdef CONFIG_CNSS2_QGIC2M
-		msi_config = cnss_get_msi_config_qcn6122(plat_priv);
+		msi_config = cnss_get_msi_config(plat_priv);
 		if (!msi_config) {
 			cnss_pr_err("msi_config NULL");
 			return -EINVAL;
 		}
 
-		qgic2_msi = plat_priv->qcn6122.qgic2_msi;
+		qgic2_msi = plat_priv->tgt_data.qgic2_msi;
+
 		if (!qgic2_msi) {
 			cnss_pr_err("qgic2_msi NULL");
 			return -EINVAL;
@@ -5075,8 +5119,9 @@ int cnss_get_pci_slot(struct device *dev)
 	case QCN9224_DEVICE_ID:
 		return plat_priv->qrtr_node_id - QCN9224_0;
 	case QCN6122_DEVICE_ID:
-		return plat_priv->userpd_id - QCN6122_0;
-	default:
+	case QCN9160_DEVICE_ID:
+		return plat_priv->userpd_id - USERPD_0;
+default:
 		cnss_pr_info("PCI slot is 0 for target 0x%lx",
 			     plat_priv->device_id);
 		return 0;
@@ -5099,21 +5144,23 @@ int cnss_get_msi_irq(struct device *dev, unsigned int vector)
 		return -ENODEV;
 	}
 
-	if (plat_priv->device_id != QCN6122_DEVICE_ID) {
+	if (plat_priv->device_id != QCN6122_DEVICE_ID &&
+	    plat_priv->device_id != QCN9160_DEVICE_ID) {
 		pci_dev = to_pci_dev(dev);
 		irq_num = pci_irq_vector(pci_dev, vector);
 		return irq_num;
 	}
 #ifdef CONFIG_CNSS2_QGIC2M
-	qgic2_msi = plat_priv->qcn6122.qgic2_msi;
+	qgic2_msi = plat_priv->tgt_data.qgic2_msi;
 	if (!qgic2_msi) {
-		cnss_pr_err("%s: qcn6122 qgic2_msi NULL", __func__);
+		cnss_pr_err("%s: %s qgic2_msi NULL", __func__,
+						     plat_priv->device_name);
 		return -EINVAL;
 	}
 
-	msi_config = cnss_get_msi_config_qcn6122(plat_priv);
+	msi_config = cnss_get_msi_config(plat_priv);
 	if (!msi_config) {
-		cnss_pr_err("qcn6122 msi_config NULL");
+		cnss_pr_err("%s msi_config NULL", plat_priv->device_name);
 		return -EINVAL;
 	}
 
@@ -5143,9 +5190,10 @@ void cnss_get_msi_address(struct device *dev, u32 *msi_addr_low,
 		return;
 	}
 
-	if (plat_priv->device_id == QCN6122_DEVICE_ID) {
+	if (plat_priv->device_id == QCN6122_DEVICE_ID ||
+	    plat_priv->device_id == QCN9160_DEVICE_ID) {
 #ifdef CONFIG_CNSS2_QGIC2M
-		qgic2_msi = plat_priv->qcn6122.qgic2_msi;
+		qgic2_msi = plat_priv->tgt_data.qgic2_msi;
 		if (!qgic2_msi) {
 			cnss_pr_err("%s: qgic2_msi NULL", __func__);
 			return;
@@ -5460,6 +5508,9 @@ struct cnss_ce_base_addr *register_ce_object(struct cnss_plat_data *plat_priv)
 		break;
 	case QCN6122_DEVICE_ID:
 		ce_object = &ce_base_addr_qcn6122;
+		break;
+	case QCN9160_DEVICE_ID:
+		ce_object = &ce_base_addr_qcn9160;
 		break;
 	default:
 		cnss_pr_err("Unsupported device id 0x%lx\n",
