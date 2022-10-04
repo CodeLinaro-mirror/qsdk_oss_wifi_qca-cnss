@@ -4042,9 +4042,7 @@ static struct platform_driver cnss_platform_driver = {
 	.driver = {
 		.name = "cnss2",
 		.of_match_table = cnss_of_match_table,
-#ifdef CONFIG_CNSS_ASYNC
-		.probe_type = PROBE_PREFER_ASYNCHRONOUS,
-#endif
+		.probe_type = PROBE_FORCE_SYNCHRONOUS,
 	},
 };
 
