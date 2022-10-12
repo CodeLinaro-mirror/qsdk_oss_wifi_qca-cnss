@@ -455,6 +455,7 @@ enum cnss_bdf_type {
 	CNSS_BDF_WIN,
 	CNSS_CALDATA_WIN,
 	CNSS_BDF_HDS,
+	CNSS_BDF_RXGAINLUT,
 	CNSS_BDF_DUMMY = 255,
 };
 
@@ -658,6 +659,7 @@ struct cnss_plat_data {
 	};
 	bool hds_support;
 	bool regdb_support;
+	bool rxgainlut_support;
 	u32 qdss_support;
 	u32 qdss_etr_sg_mode;
 	enum wlfw_bdf_dnld_method_v01 bdf_dnld_method;
