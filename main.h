@@ -171,7 +171,7 @@ enum cnss_cal_db_op {
  * |   0  |  46MB  |    36MB   | 0x2400000 | 0x2500000 | 0x2600000 |   26MB   |
  * +======+========+===========+===========+===========+===========+==========+
  */
-#define MAX_TGT_MEM_MODES		5
+#define MAX_TGT_MEM_MODES		6
 
 #define CNSS_EVENT_SYNC   BIT(0)
 #define CNSS_EVENT_UNINTERRUPTIBLE BIT(1)
