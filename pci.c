@@ -6627,7 +6627,9 @@ void cnss_pci_remove(struct pci_dev *pci_dev)
 	if (pci_priv->smmu_mapping)
 		cnss_pci_deinit_smmu(pci_priv);
 #endif
+#ifdef CONFIG_CNSS2_KERNEL_IPQ
 	cnss_unregister_ramdump(plat_priv);
+#endif
 	cnss_pci_free_mhi_controller(pci_priv);
 	plat_priv->bus_priv = NULL;
 }

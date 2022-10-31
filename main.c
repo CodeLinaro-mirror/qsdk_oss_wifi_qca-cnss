@@ -4195,9 +4195,22 @@ static int cnss_register_ramdump_v2(struct cnss_plat_data *plat_priv)
 		create_ramdump_device((const char *)ramdump_dev_name,
 				      subsys_info->subsys_desc.dev);
 #else
+	/*
+	 * WAR to avoid memory corruption where freed memory of ramdump_device
+	 * is getting accessed inside kernel and getting crashed.
+	 *
+	 * ramdump_device created is not freed during cnss_pci_remove and the
+	 * same will be used the next time cnss_pci_probe is called
+	 */
+	if (plat_priv->rd_dev_present) {
+		cnss_pr_info("Skipping rd_dev creation for %s ",
+			      plat_priv->device_name);
+		return 0;
+	}
 	info_v2->ramdump_dev =
 		create_ramdump_device(subsys_info->subsys_desc.name,
 				      subsys_info->subsys_desc.dev);
+	plat_priv->rd_dev_present = true;
 #endif
 	if (!info_v2->ramdump_dev) {
 		cnss_pr_err("Failed to create ramdump device!\n");
@@ -4209,6 +4222,7 @@ static int cnss_register_ramdump_v2(struct cnss_plat_data *plat_priv)
 
 free_ramdump:
 	kfree(info_v2->dump_data_vaddr);
+	plat_priv->rd_dev_present = false;
 	info_v2->dump_data_vaddr = NULL;
 	return ret;
 }
@@ -5537,8 +5551,16 @@ static int cnss_remove(struct platform_device *plat_dev)
 		cnss_bus_free_fw_mem(plat_priv);
 		cnss_bus_free_qdss_mem(plat_priv);
 	}
-
 	cnss_deinit_m3_dump_class();
+#ifdef CONFIG_CNSS2_KERNEL_MSM
+	/*
+	 * ramdump_device allocated during pci_probe is not freed during
+	 * pci_remove. So we are freeing in cnss2 rmmod.
+	 */
+	if (plat_priv->rd_dev_present)
+		cnss_unregister_ramdump(plat_priv);
+#endif
+
 #ifdef CONFIG_CNSS2_QGIC2M
 	cnss_qgic2_disable_msi(plat_priv);
 #endif

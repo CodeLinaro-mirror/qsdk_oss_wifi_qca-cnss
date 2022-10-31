@@ -676,6 +676,7 @@ struct cnss_plat_data {
 	enum cnss_fw_type firmware_type;
 	struct qdss_stream_data qdss_stream;
 	bool cal_in_progress;
+	bool rd_dev_present;
 };
 
 #ifdef CONFIG_ARCH_QCOM
