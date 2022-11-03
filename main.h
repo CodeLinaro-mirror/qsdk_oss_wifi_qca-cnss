@@ -539,7 +539,7 @@ struct qgic2_msi {
 };
 #endif
 
-struct target_qcn6122 {
+struct target_data {
 	void *bar_addr_va;
 	u64 bar_addr_pa;
 	u32 bar_size;
@@ -655,7 +655,7 @@ struct cnss_plat_data {
 	bool dma_alloc_supported;
 	struct m3_dump m3_dump_data;
 	union {
-		struct target_qcn6122 qcn6122;
+		struct target_data tgt_data;
 	};
 	bool hds_support;
 	bool regdb_support;

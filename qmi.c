@@ -880,7 +880,8 @@ static int cnss_wlfw_load_bdf(struct wlfw_bdf_download_req_msg_v01 *req,
 				 plat_priv->board_info.board_id);
 		break;
 	case BDF_TYPE_CALDATA:
-		if (plat_priv->device_id == QCN6122_DEVICE_ID) {
+		if (plat_priv->device_id == QCN6122_DEVICE_ID ||
+		    plat_priv->device_id == QCN9160_DEVICE_ID) {
 			snprintf(filename, sizeof(filename),
 				 "%s" DEFAULT_CAL_FILE_PREFIX
 				 "%d" DEFAULT_CAL_FILE_SUFFIX,
@@ -1037,7 +1038,8 @@ int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv,
 				 "%d" DEFAULT_CAL_FILE_SUFFIX,
 				 cnss_get_fw_path(plat_priv),
 				 (plat_priv->pci_slot_id + 1));
-		else if (plat_priv->device_id == QCN6122_DEVICE_ID)
+		else if (plat_priv->device_id == QCN6122_DEVICE_ID ||
+			 plat_priv->device_id == QCN9160_DEVICE_ID)
 			snprintf(filename, sizeof(filename),
 				 "%s" DEFAULT_CAL_FILE_PREFIX
 				 "%d" DEFAULT_CAL_FILE_SUFFIX,
@@ -2798,25 +2800,25 @@ int cnss_wlfw_device_info_send_sync(struct cnss_plat_data *plat_priv)
 		goto out;
 	}
 
-	plat_priv->qcn6122.bar_addr_pa = resp->bar_addr;
-	plat_priv->qcn6122.bar_size = resp->bar_size;
+	plat_priv->tgt_data.bar_addr_pa = resp->bar_addr;
+	plat_priv->tgt_data.bar_size = resp->bar_size;
 
-	plat_priv->qcn6122.bar_addr_va =
-				ioremap_nocache(plat_priv->qcn6122.bar_addr_pa,
-						plat_priv->qcn6122.bar_size);
+	plat_priv->tgt_data.bar_addr_va =
+		ioremap_nocache(plat_priv->tgt_data.bar_addr_pa,
+				plat_priv->tgt_data.bar_size);
 
-	if (!plat_priv->qcn6122.bar_addr_va) {
+	if (!plat_priv->tgt_data.bar_addr_va) {
 		cnss_pr_err("Ioremap failed for bar address\n");
-		plat_priv->qcn6122.bar_addr_pa = 0;
-		plat_priv->qcn6122.bar_size = 0;
+		plat_priv->tgt_data.bar_addr_pa = 0;
+		plat_priv->tgt_data.bar_size = 0;
 		ret = -EIO;
 		goto out;
 	}
 
 	cnss_pr_info("Device BAR Info pa: 0x%llx, va: 0x%p, size: 0x%x\n",
-		     plat_priv->qcn6122.bar_addr_pa,
-		     plat_priv->qcn6122.bar_addr_va,
-		     plat_priv->qcn6122.bar_size);
+			plat_priv->tgt_data.bar_addr_pa,
+			plat_priv->tgt_data.bar_addr_va,
+			plat_priv->tgt_data.bar_size);
 
 	qmi_record(plat_priv->wlfw_service_instance_id,
 		   QMI_WLFW_DEVICE_INFO_RESP_V01, ret, resp_error_msg);
@@ -3175,6 +3177,7 @@ static void cnss_wlfw_qdss_trace_save_ind_cb(struct qmi_handle *qmi_wlfw,
 	switch (plat_priv->device_id) {
 	case QCN9000_DEVICE_ID:
 	case QCN6122_DEVICE_ID:
+	case QCN9160_DEVICE_ID:
 	case QCN9224_DEVICE_ID:
 		break;
 	case QCA8074_DEVICE_ID:
