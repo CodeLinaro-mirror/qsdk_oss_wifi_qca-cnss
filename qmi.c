@@ -41,6 +41,8 @@
 #define DUMMY_BDF_FILE_NAME		"bdwlan.dmy"
 #define HDS_FILE_NAME			"hds.bin"
 #define FW_INI_CFG_FILE_NAME		"fw_ini_cfg.bin"
+#define DEFAULT_RXGAINLUT_FILE_NAME	"rxgainlut.bin"
+#define RXGAINLUT_WIN_FILE_NAME_PREFIX	"rxgainlut.b"
 #define FW_INI_FILE_NAME_LEN		100
 
 #define DEFAULT_CAL_FILE_NAME		"caldata.bin"
@@ -815,8 +817,10 @@ int cnss_wlfw_tgt_cap_send_sync(struct cnss_plat_data *plat_priv)
 		plat_priv->bdf_dnld_method = resp->bdf_dnld_method;
 	if (resp->regdb_mandatory_valid)
 		plat_priv->regdb_mandatory = !!resp->regdb_mandatory;
+	if (resp->rxgainlut_support_valid)
+		plat_priv->rxgainlut_support = !!resp->rxgainlut_support;
 
-	cnss_pr_info("Target capability: chip_id: 0x%x, chip_family: 0x%x, board_id: 0x%x, soc_id: 0x%x, fw_version: 0x%x, fw_build_timestamp: %s, otp_version: 0x%x eeprom_caldata_read_timeout %ds bdf_dnld_method %d regdb_mandatory %u\n",
+	cnss_pr_info("Target capability: chip_id: 0x%x, chip_family: 0x%x, board_id: 0x%x, soc_id: 0x%x, fw_version: 0x%x, fw_build_timestamp: %s, otp_version: 0x%x eeprom_caldata_read_timeout %ds bdf_dnld_method %d regdb_mandatory %u rxgainlut_support %u\n",
 		     plat_priv->chip_info.chip_id,
 		     plat_priv->chip_info.chip_family,
 		     plat_priv->board_info.board_id, plat_priv->soc_info.soc_id,
@@ -825,7 +829,8 @@ int cnss_wlfw_tgt_cap_send_sync(struct cnss_plat_data *plat_priv)
 		     plat_priv->otp_version,
 		     plat_priv->eeprom_caldata_read_timeout,
 		     plat_priv->bdf_dnld_method,
-		     plat_priv->regdb_mandatory);
+		     plat_priv->regdb_mandatory,
+		     plat_priv->rxgainlut_support);
 
 	kfree(req);
 	kfree(resp);
@@ -1061,7 +1066,6 @@ int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv,
 		break;
 	case CNSS_BDF_REGDB:
 		fw_bdf_type = BDF_TYPE_REGDB;
-
 		if (plat_priv->board_info.board_id_override) {
 			snprintf(filename, sizeof(filename),
 				 "%s" REGDB_WIN_FILE_NAME_PREFIX "%.*x",
@@ -1100,6 +1104,51 @@ int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv,
 		snprintf(filename, sizeof(filename),
 			 "%s" HDS_FILE_NAME, cnss_get_fw_path(plat_priv));
 		break;
+	case CNSS_BDF_RXGAINLUT:
+		fw_bdf_type = BDF_TYPE_RXGAINLUT;
+		if (plat_priv->board_info.board_id_override) {
+			snprintf(filename, sizeof(filename),
+				 "%s" RXGAINLUT_WIN_FILE_NAME_PREFIX "%.*x",
+				 cnss_get_fw_path(plat_priv),
+				 (plat_priv->board_info.num_bytes * 2),
+				 plat_priv->board_info.board_id_override);
+		} else {
+			/* If plat_priv->board_info.board_id is 0xFF,
+			 * rxgainlut.bff will not be found and eventually,
+			 * cnss2 would consider rxgainlut.bin in this case
+			 * as well, hence there is no need for a separate
+			 * check for plat_priv->board_info.board_id as 0xFF.
+			 */
+			snprintf(filename, sizeof(filename),
+				 "%s" RXGAINLUT_WIN_FILE_NAME_PREFIX "%.*x",
+				 cnss_get_fw_path(plat_priv),
+				 (plat_priv->board_info.num_bytes * 2),
+				 plat_priv->board_info.board_id);
+		}
+		/* If the rxgainlut corresponding to board ID is not found,
+		 * download rxgainlut.bin which is the default file.
+		 */
+		ret = request_firmware_direct(&fw_entry, filename,
+					      &plat_priv->plat_dev->dev);
+		if (ret) {
+			snprintf(filename, sizeof(filename),
+				 "%s" DEFAULT_RXGAINLUT_FILE_NAME,
+				 cnss_get_fw_path(plat_priv));
+		}
+		/* Temporary check to be compatible with older FW which
+		 * still has 1 byte board_id based BDF files
+		 */
+		if (plat_priv->device_id == QCN9224_DEVICE_ID &&
+		    request_firmware_direct(&fw_entry, filename,
+					    &plat_priv->plat_dev->dev))
+			snprintf(filename, sizeof(filename),
+				 "%s" RXGAINLUT_WIN_FILE_NAME_PREFIX "%02x",
+				 cnss_get_fw_path(plat_priv),
+				 (plat_priv->board_info.board_id_override &
+				  ~CNSS_FW_TYPE_MASK));
+		if (fw_entry)
+			release_firmware(fw_entry);
+		break;
 	default:
 		cnss_pr_err("Invalid BDF type: %d\n",
 			    plat_priv->ctrl_params.bdf_type);
@@ -1131,6 +1180,12 @@ int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv,
 					     plat_priv->device_name);
 				ret = 0;
 			}
+			goto out;
+		} else if (bdf_type == CNSS_BDF_RXGAINLUT) {
+			/* If RXGAINLUT bin file download is not mandatory */
+			cnss_pr_dbg("Failed to load RXGAINLUT. %s is not a mandatory file\n",
+					     filename);
+			ret = 0;
 			goto out;
 		} else {
 			/* BDF download is mandatory for all targets */
@@ -2355,18 +2410,6 @@ err_send:
 err_req_fw:
 	kfree(req);
 	kfree(resp);
-
-	/* If cnsscli command is issued to start QDSS when wifi down is in
-	 * progress, there is a chance QMI message might fail and ECONNRESET
-	 * would be returned. Also, if cnsscli command is issued before VAPs
-	 * are created for AHB targets, FW would return INCOMPATIBLE state
-	 * error and sometimes leads to resp wait timeout error.
-	 * Avoiding assert for all these cases.
-	 */
-	if (ret < 0 && ret != -ECONNRESET && ret != -ETIMEDOUT &&
-	    resp_error_msg != QMI_ERR_INCOMPATIBLE_STATE_V01)
-		CNSS_ASSERT(0);
-
 	return ret;
 }
 

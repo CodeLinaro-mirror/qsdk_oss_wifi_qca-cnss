@@ -270,6 +270,7 @@ enum cnss_feature_v01 {
 	BOOTSTRAP_CLOCK_SELECT_V01 = 0,
 	CNSS_DRV_SUPPORT_V01 = 1,
 	CNSS_WLAN_EN_SUPPORT_V01 = 2,
+	CNSS_QDSS_CFG_MISS_V01 = 3,
 	CNSS_MAX_FEATURE_V01 = 64,
 	CNSS_FEATURE_MAX_VAL_V01 = INT_MAX,
 };
@@ -522,7 +523,6 @@ struct wlfw_wlan_mode_req_msg_v01 {
 	u8 xo_cal_data_valid;
 	u8 xo_cal_data;
 };
-
 #define WLFW_WLAN_MODE_REQ_MSG_V01_MAX_MSG_LEN 15
 extern struct qmi_elem_info wlfw_wlan_mode_req_msg_v01_ei[];
 
@@ -615,8 +615,10 @@ struct wlfw_cap_resp_msg_v01 {
 	u8 regdb_mandatory;
 	u8 regdb_support_valid;
 	u8 regdb_support;
+	u8 rxgainlut_support_valid;
+	u8 rxgainlut_support;
 };
-#define WLFW_CAP_RESP_MSG_V01_MAX_MSG_LEN 1142
+#define WLFW_CAP_RESP_MSG_V01_MAX_MSG_LEN 1146
 extern struct qmi_elem_info wlfw_cap_resp_msg_v01_ei[];
 
 struct wlfw_bdf_download_req_msg_v01 {

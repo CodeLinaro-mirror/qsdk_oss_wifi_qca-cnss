@@ -952,6 +952,15 @@ static int cnss_fw_mem_ready_hdlr(struct cnss_plat_data *plat_priv)
 		}
 	}
 
+	if (plat_priv->rxgainlut_support) {
+		ret = cnss_wlfw_bdf_dnld_send_sync(plat_priv,
+						   CNSS_BDF_RXGAINLUT);
+		if (ret) {
+			cnss_pr_err("rxgainlut load failed. ret %d\n", ret);
+			goto out;
+		}
+	}
+
 	ret = cnss_wlfw_bdf_dnld_send_sync(plat_priv, CNSS_BDF_WIN);
 	if (ret) {
 		cnss_pr_err("bdf load failed. ret %d\n", ret);
@@ -5540,9 +5549,7 @@ static struct platform_driver cnss_platform_driver = {
 	.driver = {
 		.name = "cnss2",
 		.of_match_table = cnss_of_match_table,
-#ifdef CONFIG_CNSS_ASYNC
-		.probe_type = PROBE_PREFER_ASYNCHRONOUS,
-#endif
+		.probe_type = PROBE_FORCE_SYNCHRONOUS,
 	},
 };
 

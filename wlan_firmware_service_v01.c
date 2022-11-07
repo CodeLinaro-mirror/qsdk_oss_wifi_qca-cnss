@@ -11,7 +11,6 @@
  * GNU General Public License for more details.
  *
  */
-
 #include "wlan_firmware_service_v01.h"
 
 static struct qmi_elem_info wlfw_ce_tgt_pipe_cfg_s_v01_ei[] = {
@@ -2081,6 +2080,26 @@ struct qmi_elem_info wlfw_cap_resp_msg_v01_ei[] = {
 		.offset         = offsetof(struct
 					   wlfw_cap_resp_msg_v01,
 					   regdb_support),
+	},
+	{
+		.data_type      = QMI_OPT_FLAG,
+		.elem_len       = 1,
+		.elem_size      = sizeof(u8),
+		.array_type       = NO_ARRAY,
+		.tlv_type       = 0x25,
+		.offset         = offsetof(struct
+					   wlfw_cap_resp_msg_v01,
+					   rxgainlut_support_valid),
+	},
+	{
+		.data_type      = QMI_UNSIGNED_1_BYTE,
+		.elem_len       = 1,
+		.elem_size      = sizeof(u8),
+		.array_type       = NO_ARRAY,
+		.tlv_type       = 0x25,
+		.offset         = offsetof(struct
+					   wlfw_cap_resp_msg_v01,
+					   rxgainlut_support),
 	},
 	{
 		.data_type      = QMI_EOTI,
@@ -5990,4 +6009,3 @@ struct qmi_elem_info wlfw_ini_file_download_resp_msg_v01_ei[] = {
 		.tlv_type       = QMI_COMMON_TLV_TYPE,
 	},
 };
-
