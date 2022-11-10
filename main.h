@@ -677,6 +677,8 @@ struct cnss_plat_data {
 	struct qdss_stream_data qdss_stream;
 	bool cal_in_progress;
 	bool rd_dev_present;
+	bool mlo_default_cfg;
+	struct cnss_mlo_chip_info *adj_mlo_chip_info[CNSS_MAX_ADJ_CHIPS];
 };
 
 #ifdef CONFIG_ARCH_QCOM
@@ -739,5 +741,6 @@ void cnss_update_platform_feature_support(u8 type, u32 instance_id, u32 value);
 const char *cnss_get_fw_path(struct cnss_plat_data *plat_priv);
 int cnss_cal_file_download_to_mem(struct cnss_plat_data *plat_priv,
 				  u32 *cal_file_size);
+struct cnss_plat_data *cnss_get_plat_priv_by_chip_id(int chip_id);
 
 #endif /* _CNSS_MAIN_H */

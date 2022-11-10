@@ -29,6 +29,7 @@
 #define CNSS_MAX_LINKS_PER_CHIP		2
 #define CNSS_MAX_MLO_CHIPS		4
 #define CNSS_MAX_MLO_GROUPS		2
+#define CNSS_MAX_ADJ_CHIPS		2
 
 enum cnss_bus_width_type {
 	CNSS_BUS_WIDTH_NONE,
@@ -199,6 +200,8 @@ struct cnss_mlo_chip_info {
 	u8 soc_id;
 	u8 chip_id;
 	u8 num_local_links;
+	u8 num_adj_chips;
+	u8 adj_chip_ids[CNSS_MAX_LINKS_PER_CHIP];
 	u8 hw_link_ids[CNSS_MAX_LINKS_PER_CHIP];
 	u8 valid_link_ids[CNSS_MAX_LINKS_PER_CHIP];
 };
@@ -207,7 +210,17 @@ struct cnss_mlo_group_info {
 	u8 group_id;
 	u8 num_chips;
 	u16 max_num_peers;
+	u8 num_wsi_chips;
+	u8 soc_chip_bitmap;
+	u8 wsi_order_bitmap;
+	u8 skip_soc_chip_bitmap;
 	struct cnss_mlo_chip_info chip_info[CNSS_MAX_MLO_CHIPS];
+};
+
+struct cnss_module_param {
+	u8 mlo_max_groups;
+	u8 mlo_max_chips;
+	bool mlo_default_cfg;
 };
 
 struct cnss_plat_data;
@@ -421,6 +434,10 @@ static inline bool cnss_get_mlo_capable(struct device *dev)
 {
 	return false;
 }
+static inline bool cnss_is_mlo_default_cfg_enabled(struct device *dev)
+{
+	return false;
+}
 static inline int cnss_get_mlo_global_config_region_info(struct device *dev,
 							 void **bar,
 							 int *num_bytes)
@@ -428,6 +445,11 @@ static inline int cnss_get_mlo_global_config_region_info(struct device *dev,
 	return 0;
 }
 static inline int cnss_get_num_mlo_links(struct device *dev)
+{
+	return -EINVAL;
+}
+static inline int cnss_get_mlo_chip_info(struct device *dev,
+					 struct cnss_mlo_chip_info **chip_info)
 {
 	return -EINVAL;
 }
@@ -463,10 +485,16 @@ static inline int cnss_set_bar_addr(struct device *dev, void __iomem *mem)
 {
 	return -EINVAL;
 }
-static inline int cnss_set_mlo_config(struct cnss_mlo_group_info *group_info,
-				      int num_groups)
+static inline int cnss_set_mlo_config(struct cnss_module_param *modparam,
+				      struct cnss_mlo_group_info *group_info)
 {
 	return 0;
+}
+static inline void cnss_set_default_mlo_config(void)
+{
+}
+static inline void cnss_reset_mlo_config(void)
+{
 }
 static inline void cnss_print_mlo_config(void)
 {
@@ -581,16 +609,22 @@ int cnss_send_buffer_to_afcmem(struct device *dev, char *afcdb, uint32_t len,
 int cnss_reset_afcmem(struct device *dev, uint8_t slotid);
 int cnss_get_mlo_chip_id(struct device *dev);
 bool cnss_get_mlo_capable(struct device *dev);
+bool cnss_is_mlo_default_cfg_enabled(struct device *dev);
 int cnss_get_mlo_global_config_region_info(struct device *dev, void **bar,
 					   int *num_bytes);
 int cnss_get_num_mlo_links(struct device *dev);
+int cnss_get_mlo_chip_info(struct device *dev,
+			   struct cnss_mlo_chip_info **chip_info);
 int cnss_get_num_mlo_capable_devices(unsigned int *device_id,
 				     int num_elements);
 int cnss_get_dev_link_ids(struct device *dev, u8 *link_ids, int max_elements);
 int cnss_reg_read(struct device *dev, u32 addr, u32 *val, void __iomem *base);
 int cnss_reg_write(struct device *dev, u32 addr, u32 val, void __iomem *base);
 int cnss_set_bar_addr(struct device *dev, void __iomem *mem);
-int cnss_set_mlo_config(struct cnss_mlo_group_info *group_info, int num_groups);
+int cnss_set_mlo_config(struct cnss_module_param *modparam,
+			struct cnss_mlo_group_info *group_info);
+void cnss_set_default_mlo_config(void);
+void cnss_reset_mlo_config(void);
 void cnss_print_mlo_config(void);
 void cnss_set_led_gpio(int led_gpio, unsigned int value, unsigned int flags);
 bool cnss_get_enable_intx(struct device *dev);
