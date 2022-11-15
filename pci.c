@@ -6333,6 +6333,8 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 		}
 	}
 
+	cnss_pr_info("Dump Collection Completed, total entries is %d\n",
+			dump_data->nentries);
 	if (dump_data->nentries > 0)
 		plat_priv->ramdump_info_v2.dump_data_valid = true;
 

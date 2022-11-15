@@ -51,6 +51,19 @@
 #define DEFAULT_CAL_FILE_SUFFIX         ".bin"
 #define FTM_CONF_FILE_PATH		"/ini/ftm.conf"
 
+#define QMI_MSG_REQ_STR			"REQ"
+#define QMI_MSG_RESP_STR		"RESP"
+#define QMI_MSG_IND_STR			"IND"
+#define QMI_MSG_INVALID			"INVL"
+
+/* Bit 8 -> 0 -> TYPE IND
+ * Bit 8 -> 1 -> TYPE REQ
+ * Bit 9 -> 1 -> TYPE RESP
+ */
+#define QMI_TYPE_IND			0x0
+#define QMI_TYPE_REQ			0x100
+#define QMI_TYPE_RESP			0x200
+
 #define QMI_WLFW_TIMEOUT_MS		(plat_priv->ctrl_params.qmi_timeout)
 
 #define QMI_WLFW_TIMEOUT_JF		msecs_to_jiffies(QMI_WLFW_TIMEOUT_MS)
@@ -80,6 +93,137 @@ int qmi_history_index;
 DEFINE_SPINLOCK(qmi_log_spinlock);
 struct wlfw_request_mem_ind_msg_v01 ind_message = {0};
 
+struct device_name_string {
+	const char *device_name;
+	u16 instance_id;
+};
+
+struct qmi_msg_string {
+	char *qmi_id_str;
+	u16 qmi_msg_id;
+};
+
+static struct device_name_string device_name_table[] = {
+	{ "QCA8074", QCA8074_DEVICE_ID },
+	{ "QCA8074V2", QCA8074V2_DEVICE_ID },
+	{ "QCA6018", QCA6018_DEVICE_ID },
+	{ "QCA5018", QCA5018_DEVICE_ID },
+	{ "QCA9574", QCA9574_DEVICE_ID },
+	{ "QCA5332", QCA5332_DEVICE_ID },
+	{ "QCN9000_0", QCN9000_0+FW_ID_BASE },
+	{ "QCN9000_1", QCN9000_1+FW_ID_BASE },
+	{ "QCN9000_2", QCN9000_2+FW_ID_BASE },
+	{ "QCN9000_3", QCN9000_3+FW_ID_BASE },
+	{ "QCN9224_0", QCN9224_0+FW_ID_BASE },
+	{ "QCN9224_1", QCN9224_1+FW_ID_BASE },
+	{ "QCN9224_2", QCN9224_2+FW_ID_BASE },
+	{ "QCN9224_3", QCN9224_3+FW_ID_BASE },
+	{ "QCN6122_0", USERPD_0+WLFW_SERVICE_INS_ID_V01_QCN6122 },
+	{ "QCN6122_1", USERPD_1+WLFW_SERVICE_INS_ID_V01_QCN6122 },
+	{ "QCN9160_0", USERPD_0+WLFW_SERVICE_INS_ID_V01_QCN9160 },
+	{ "QCN9160_1", USERPD_1+WLFW_SERVICE_INS_ID_V01_QCN9160 },
+	{ "UNKNOWN", 0 },
+};
+
+static struct qmi_msg_string qmi_str_table[] = {
+	{ "SYS_RSTRT_", QMI_WLFW_SUBSYS_RESTART_LEVEL_REQ_V01 },
+	{ "TGT_CAP_", QMI_WLFW_CAP_REQ_V01 },
+	{ "CAL_RPRT_", QMI_WLFW_CAL_REPORT_REQ_V01 },
+	{ "IND_REG_", QMI_WLFW_IND_REGISTER_REQ_V01 },
+	{ "DYN_MASK_", QMI_WLFW_DYNAMIC_FEATURE_MASK_REQ_V01 },
+	{ "AUX_UC_INFO_", QMI_WLFW_AUX_UC_INFO_REQ_V01 },
+	{ "FW_RDY_", QMI_WLFW_FW_READY_IND_V01 },
+	{ "CAL_UPDTE_", QMI_WLFW_CAL_UPDATE_REQ_V01 },
+	{ "PHY_CAP_", QMI_WLFW_PHY_CAP_REQ_V01 },
+	{ "FW_MEM_REQ_", QMI_WLFW_REQUEST_MEM_IND_V01 },
+	{ "QDSS_MODE_", QMI_WLFW_QDSS_TRACE_MODE_REQ_V01 },
+	{ "CAL_DNDL_", QMI_WLFW_CAL_DOWNLOAD_REQ_V01 },
+	{ "M3_INFO_", QMI_WLFW_M3_INFO_REQ_V01 },
+	{ "PCI_GEN_SWT_", QMI_WLFW_PCIE_GEN_SWITCH_REQ_V01 },
+	{ "CAL_UPDTE_", QMI_WLFW_INITIATE_CAL_UPDATE_IND_V01 },
+	{ "MEM_INFO_", QMI_WLFW_RESPOND_MEM_REQ_V01 },
+	{ "MSA_RDY_", QMI_WLFW_MSA_READY_IND_V01 },
+	{ "WLFW_MODE_", QMI_WLFW_WLAN_MODE_REQ_V01 },
+	{ "REJUVNTE_", QMI_WLFW_REJUVENATE_IND_V01 },
+	{ "ATHD_WRT_", QMI_WLFW_ATHDIAG_WRITE_REQ_V01 },
+	{ "SOC_WAKE_", QMI_WLFW_SOC_WAKE_REQ_V01 },
+	{ "FW_PIN_RSLT_", QMI_WLFW_PIN_CONNECT_RESULT_IND_V01 },
+	{ "QDSS_SAVE_", QMI_WLFW_QDSS_TRACE_SAVE_IND_V01 },
+	{ "SHUTDWN_", QMI_WLFW_SHUTDOWN_REQ_V01 },
+	{ "VBATT_", QMI_WLFW_VBATT_REQ_V01 },
+	{ "PCI_LNK_CTRL_", QMI_WLFW_PCIE_LINK_CTRL_REQ_V01 },
+	{ "MAC_ADDR_", QMI_WLFW_MAC_ADDR_REQ_V01 },
+	{ "WLAN_CFG_", QMI_WLFW_WLAN_CFG_REQ_V01 },
+	{ "ANT_GRNT_", QMI_WLFW_ANTENNA_GRANT_REQ_V01 },
+	{ "BDF_DNLD_", QMI_WLFW_BDF_DOWNLOAD_REQ_V01 },
+	{ "FW_MEM_RDY_", QMI_WLFW_FW_MEM_READY_IND_V01 },
+	{ "HW_INIT_CFG_", QMI_WLFW_WLAN_HW_INIT_CFG_REQ_V01 },
+	{ "RSPND_GET_INF_", QMI_WLFW_RESPOND_GET_INFO_IND_V01 },
+	{ "QDSS_TRACE_", QMI_WLFW_QDSS_TRACE_DATA_REQ_V01 },
+	{ "QDSS_MEM_INFO_", QMI_WLFW_QDSS_TRACE_MEM_INFO_REQ_V01 },
+	{ "ANT_SWT_", QMI_WLFW_ANTENNA_SWITCH_REQ_V01 },
+	{ "QDSS_REQ_MEM_", QMI_WLFW_QDSS_TRACE_REQ_MEM_IND_V01 },
+	{ "INIT_CAL_DNLD_", QMI_WLFW_INITIATE_CAL_DOWNLOAD_IND_V01 },
+	{ "INI_MSG_", QMI_WLFW_INI_REQ_V01 },
+	{ "M3_DMP_UPLD_", QMI_WLFW_M3_DUMP_UPLOAD_SEGMENTS_REQ_IND_V01 },
+	{ "MSD_RDY_", QMI_WLFW_MSA_READY_REQ_V01 },
+	{ "M3_DMP_UPLD_DONE_", QMI_WLFW_M3_DUMP_UPLOAD_DONE_REQ_V01 },
+	{ "REJUVNTE_ACK_", QMI_WLFW_REJUVENATE_ACK_REQ_V01 },
+	{ "DEV_INF_", QMI_WLFW_DEVICE_INFO_REQ_V01 },
+	{ "MSA_INF_", QMI_WLFW_MSA_INFO_REQ_V01 },
+	{ "HOST_CAP_", QMI_WLFW_HOST_CAP_REQ_V01 },
+	{ "QDSS_CONF_DNLD_", QMI_WLFW_QDSS_TRACE_CONFIG_DOWNLOAD_REQ_V01 },
+	{ "GET_INFO_", QMI_WLFW_GET_INFO_REQ_V01 },
+	{ "CAL_DONE_", QMI_WLFW_CAL_DONE_IND_V01 },
+	{ "M3_DUMP_UPLD_REQ_", QMI_WLFW_M3_DUMP_UPLOAD_REQ_IND_V01 },
+	{ "FW_INIT_DONE_", QMI_WLFW_FW_INIT_DONE_IND_V01 },
+	{ "PWR_SAVE_", QMI_WLFW_POWER_SAVE_REQ_V01 },
+	{ "X0_CAL_", QMI_WLFW_XO_CAL_IND_V01 },
+	{ "ATHD_READ_", QMI_WLFW_ATHDIAG_READ_REQ_V01 },
+	{ "WFC_CALL_TWT_", QMI_WLFW_WFC_CALL_TWT_CONFIG_IND_V01 },
+	{ "WFC_CALL_STAT_", QMI_WLFW_WFC_CALL_STATUS_REQ_V01 },
+	{ "INI_DNLD_", QMI_WLFW_INI_FILE_DOWNLOAD_REQ_V01 },
+	{ "QDSS_FREE_", QMI_WLFW_QDSS_TRACE_FREE_IND_V01 },
+	{ "QDSS_MEM_RDY_", QMI_WLFW_QDSS_MEM_READY_IND_V01 },
+	{ "UNKNOWN_", 0 },
+};
+
+const char *get_device_name_from_ins_id(u8 instance_id)
+{
+	struct device_name_string *table = device_name_table;
+	struct cnss_plat_data *plat_priv = NULL;
+	u16 ahb_instance_id = 0;
+
+	if (instance_id == WLFW_SERVICE_INS_ID_V01_QCA8074) {
+		plat_priv = cnss_get_plat_priv_by_instance_id(instance_id);
+		ahb_instance_id = plat_priv->device_id;
+		while (table->instance_id != 0) {
+			if (ahb_instance_id == table->instance_id)
+				break;
+			table++;
+		}
+	} else {
+		while (table->instance_id != 0) {
+			if (instance_id == table->instance_id)
+				break;
+			table++;
+		}
+	}
+	return table->device_name;
+}
+
+const char *get_msg_name_from_qmi_msg_id(u16 msg_id)
+{
+	struct qmi_msg_string *table = qmi_str_table;
+
+	while (table->qmi_msg_id != 0) {
+		if (msg_id == table->qmi_msg_id)
+			break;
+		table++;
+	}
+	return table->qmi_id_str;
+}
+
 void cnss_dump_qmi_history(void)
 {
 	int i;
@@ -89,10 +233,13 @@ void cnss_dump_qmi_history(void)
 	for (i = 0; i < QMI_HISTORY_SIZE; i++) {
 		if (qmi_log[i].msg_id)
 			pr_err(
-			"qmi_history[%d]:timestamp[%llu] instance_id [0x%X] msg_id[0x%X] err[%d] resp_err[%d]\n",
+			"qmi_history[%d]:tstamp[%llu] ins_id [0x%x : %s] msg_id [0x%x : %s%s] err[%d] resp_err[%d]\n",
 			i, qmi_log[i].timestamp,
 			qmi_log[i].instance_id,
+			get_device_name_from_ins_id(qmi_log[i].instance_id),
 			qmi_log[i].msg_id,
+			get_msg_name_from_qmi_msg_id(qmi_log[i].msg_id),
+			qmi_log[i].msg_type,
 			qmi_log[i].error_msg,
 			qmi_log[i].resp_err_msg);
 	}
@@ -101,9 +248,27 @@ EXPORT_SYMBOL(cnss_dump_qmi_history);
 
 void qmi_record(u8 instance_id, u16 msg_id, s8 error_msg, s8 resp_err_msg)
 {
+	int qmi_msg_type = 0;
+
 	spin_lock(&qmi_log_spinlock);
 	qmi_log[qmi_history_index].instance_id = instance_id;
+
+	qmi_msg_type = (msg_id & (QMI_TYPE_REQ | QMI_TYPE_RESP));
+	msg_id = (msg_id & 0xFF);
 	qmi_log[qmi_history_index].msg_id = msg_id;
+
+	if (resp_err_msg != 0 || qmi_msg_type == QMI_TYPE_RESP)
+		strlcpy(qmi_log[qmi_history_index].msg_type,
+			QMI_MSG_RESP_STR, (sizeof(QMI_MSG_RESP_STR)));
+	else if (error_msg != 0 || qmi_msg_type == QMI_TYPE_REQ)
+		strlcpy(qmi_log[qmi_history_index].msg_type,
+			QMI_MSG_REQ_STR, (sizeof(QMI_MSG_REQ_STR)));
+	else if (qmi_msg_type == QMI_TYPE_IND)
+		strlcpy(qmi_log[qmi_history_index].msg_type,
+			QMI_MSG_IND_STR, (sizeof(QMI_MSG_IND_STR)));
+	else
+		strlcpy(qmi_log[qmi_history_index].msg_type,
+			QMI_MSG_INVALID, (sizeof(QMI_MSG_INVALID)));
 
 	if (error_msg < 0 || resp_err_msg != 0)
 		qmi_log[qmi_history_index].error_msg = error_msg;
@@ -208,7 +373,8 @@ static int cnss_wlfw_ind_register_send_sync(struct cnss_plat_data *plat_priv)
 	req->qdss_mem_ready_enable = 1;
 
 	qmi_record(plat_priv->wlfw_service_instance_id,
-		   QMI_WLFW_IND_REGISTER_REQ_V01, ret, resp_error_msg);
+		   (QMI_TYPE_REQ | QMI_WLFW_IND_REGISTER_REQ_V01), ret,
+		   resp_error_msg);
 	ret = qmi_txn_init(&plat_priv->qmi_wlfw, &txn,
 			   wlfw_ind_register_resp_msg_v01_ei, resp);
 	if (ret < 0) {
@@ -230,6 +396,7 @@ static int cnss_wlfw_ind_register_send_sync(struct cnss_plat_data *plat_priv)
 
 	ret = qmi_txn_wait(&txn, QMI_WLFW_TIMEOUT_JF);
 	if (ret < 0) {
+		resp_error_msg = -QMI_RESULT_FAILURE_V01;
 		cnss_pr_err("Failed to wait for response of indication register request, err: %d\n",
 			    ret);
 		goto out;
@@ -253,11 +420,13 @@ static int cnss_wlfw_ind_register_send_sync(struct cnss_plat_data *plat_priv)
 	kfree(req);
 	kfree(resp);
 	qmi_record(plat_priv->wlfw_service_instance_id,
-		   QMI_WLFW_IND_REGISTER_REQ_V01, ret, resp_error_msg);
+		   (QMI_TYPE_RESP | QMI_WLFW_IND_REGISTER_REQ_V01), ret,
+		   resp_error_msg);
 	return 0;
 out:
 	qmi_record(plat_priv->wlfw_service_instance_id,
-		   QMI_WLFW_IND_REGISTER_REQ_V01, ret, resp_error_msg);
+		   (QMI_WLFW_IND_REGISTER_REQ_V01), ret,
+		   resp_error_msg);
 	CNSS_ASSERT(0);
 
 qmi_registered:
@@ -290,7 +459,6 @@ static int cnss_wlfw_ini_file_send_sync(struct cnss_plat_data *plat_priv,
 		kfree(req);
 		return -ENOMEM;
 	}
-
 	switch (file_type) {
 	case WLFW_INI_CFG_FILE_V01:
 		snprintf(filename, sizeof(filename), "%s" FW_INI_CFG_FILE_NAME,
@@ -313,7 +481,8 @@ static int cnss_wlfw_ini_file_send_sync(struct cnss_plat_data *plat_priv,
 	temp = fw->data;
 	remaining = fw->size;
 	qmi_record(plat_priv->wlfw_service_instance_id,
-		   QMI_WLFW_INI_FILE_DOWNLOAD_REQ_V01, ret, resp_error_msg);
+		  (QMI_TYPE_REQ | QMI_WLFW_INI_FILE_DOWNLOAD_REQ_V01), ret,
+		  resp_error_msg);
 
 	while (remaining) {
 		req->file_type_valid = 1;
@@ -356,6 +525,7 @@ static int cnss_wlfw_ini_file_send_sync(struct cnss_plat_data *plat_priv,
 
 		ret = qmi_txn_wait(&txn, QMI_WLFW_TIMEOUT_JF);
 		if (ret < 0) {
+			resp_error_msg = -QMI_RESULT_FAILURE_V01;
 			cnss_pr_err("Failed to wait for response of FW File download request, err: %d\n",
 				    ret);
 			goto err;
@@ -377,7 +547,8 @@ static int cnss_wlfw_ini_file_send_sync(struct cnss_plat_data *plat_priv,
 	release_firmware(fw);
 
 	qmi_record(plat_priv->wlfw_service_instance_id,
-		   QMI_WLFW_INI_FILE_DOWNLOAD_REQ_V01, ret, resp_error_msg);
+		  (QMI_TYPE_RESP | QMI_WLFW_INI_FILE_DOWNLOAD_REQ_V01), ret,
+		  resp_error_msg);
 	kfree(req);
 	kfree(resp);
 	return 0;
@@ -389,7 +560,8 @@ err:
 	kfree(req);
 	kfree(resp);
 	qmi_record(plat_priv->wlfw_service_instance_id,
-		   QMI_WLFW_INI_FILE_DOWNLOAD_REQ_V01, ret, resp_error_msg);
+		  (QMI_WLFW_INI_FILE_DOWNLOAD_REQ_V01), ret,
+		  resp_error_msg);
 	CNSS_ASSERT(0);
 
 	return ret;
@@ -634,7 +806,8 @@ static int cnss_wlfw_host_cap_send_sync(struct cnss_plat_data *plat_priv)
 	}
 
 	qmi_record(plat_priv->wlfw_service_instance_id,
-		   QMI_WLFW_HOST_CAP_REQ_V01, ret, resp_error_msg);
+		  (QMI_TYPE_REQ | QMI_WLFW_HOST_CAP_REQ_V01), ret,
+		  resp_error_msg);
 	ret = qmi_txn_init(&plat_priv->qmi_wlfw, &txn,
 			   wlfw_host_cap_resp_msg_v01_ei, resp);
 	if (ret < 0) {
@@ -656,6 +829,7 @@ static int cnss_wlfw_host_cap_send_sync(struct cnss_plat_data *plat_priv)
 
 	ret = qmi_txn_wait(&txn, QMI_WLFW_TIMEOUT_JF);
 	if (ret < 0) {
+		resp_error_msg = -QMI_RESULT_FAILURE_V01;
 		cnss_pr_err("Failed to wait for response of host capability request, err: %d\n",
 			    ret);
 		goto out;
@@ -669,7 +843,8 @@ static int cnss_wlfw_host_cap_send_sync(struct cnss_plat_data *plat_priv)
 		goto out;
 	}
 	qmi_record(plat_priv->wlfw_service_instance_id,
-		   QMI_WLFW_HOST_CAP_REQ_V01, ret, resp_error_msg);
+		  (QMI_TYPE_RESP | QMI_WLFW_HOST_CAP_REQ_V01), ret,
+		  resp_error_msg);
 
 	kfree(req);
 	kfree(resp);
@@ -680,7 +855,8 @@ err:
 	kfree(resp);
 out:
 	qmi_record(plat_priv->wlfw_service_instance_id,
-		   QMI_WLFW_HOST_CAP_REQ_V01, ret, resp_error_msg);
+		  (QMI_WLFW_HOST_CAP_REQ_V01), ret,
+		  resp_error_msg);
 	CNSS_ASSERT(0);
 
 	return ret;
@@ -734,7 +910,8 @@ int cnss_wlfw_respond_mem_send_sync(struct cnss_plat_data *plat_priv)
 	}
 
 	qmi_record(plat_priv->wlfw_service_instance_id,
-		   QMI_WLFW_RESPOND_MEM_REQ_V01, ret, resp_error_msg);
+		  (QMI_TYPE_REQ | QMI_WLFW_RESPOND_MEM_REQ_V01), ret,
+		  resp_error_msg);
 	ret = qmi_txn_init(&plat_priv->qmi_wlfw, &txn,
 			   wlfw_respond_mem_resp_msg_v01_ei, resp);
 	if (ret < 0) {
@@ -756,6 +933,7 @@ int cnss_wlfw_respond_mem_send_sync(struct cnss_plat_data *plat_priv)
 
 	ret = qmi_txn_wait(&txn, QMI_WLFW_TIMEOUT_JF);
 	if (ret < 0) {
+		resp_error_msg = -QMI_RESULT_FAILURE_V01;
 		cnss_pr_err("Failed to wait for response of respond memory request, err: %d\n",
 			    ret);
 		goto out;
@@ -769,14 +947,16 @@ int cnss_wlfw_respond_mem_send_sync(struct cnss_plat_data *plat_priv)
 		goto out;
 	}
 	qmi_record(plat_priv->wlfw_service_instance_id,
-		   QMI_WLFW_RESPOND_MEM_REQ_V01, ret, resp_error_msg);
+		  (QMI_TYPE_RESP | QMI_WLFW_RESPOND_MEM_REQ_V01), ret,
+		  resp_error_msg);
 
 	kfree(req);
 	kfree(resp);
 	return 0;
 out:
 	qmi_record(plat_priv->wlfw_service_instance_id,
-		   QMI_WLFW_RESPOND_MEM_REQ_V01, ret, resp_error_msg);
+		  (QMI_WLFW_RESPOND_MEM_REQ_V01), ret,
+		  resp_error_msg);
 	CNSS_ASSERT(0);
 	kfree(req);
 	kfree(resp);
@@ -806,7 +986,8 @@ int cnss_wlfw_tgt_cap_send_sync(struct cnss_plat_data *plat_priv)
 	}
 
 	qmi_record(plat_priv->wlfw_service_instance_id,
-		   QMI_WLFW_CAP_REQ_V01, ret, resp_error_msg);
+		  (QMI_TYPE_REQ | QMI_WLFW_CAP_REQ_V01), ret,
+		  resp_error_msg);
 
 	ret = qmi_txn_init(&plat_priv->qmi_wlfw, &txn,
 			   wlfw_cap_resp_msg_v01_ei, resp);
@@ -829,6 +1010,7 @@ int cnss_wlfw_tgt_cap_send_sync(struct cnss_plat_data *plat_priv)
 
 	ret = qmi_txn_wait(&txn, QMI_WLFW_TIMEOUT_JF);
 	if (ret < 0) {
+		resp_error_msg = -QMI_RESULT_FAILURE_V01;
 		cnss_pr_err("Failed to wait for response of target capability request, err: %d\n",
 			    ret);
 		goto out;
@@ -843,7 +1025,8 @@ int cnss_wlfw_tgt_cap_send_sync(struct cnss_plat_data *plat_priv)
 	}
 
 	qmi_record(plat_priv->wlfw_service_instance_id,
-		   QMI_WLFW_CAP_RESP_V01, ret, resp_error_msg);
+		  (QMI_TYPE_RESP | QMI_WLFW_CAP_REQ_V01), ret,
+		  resp_error_msg);
 	if (resp->chip_info_valid) {
 		plat_priv->chip_info.chip_id = resp->chip_info.chip_id;
 		plat_priv->chip_info.chip_family = resp->chip_info.chip_family;
@@ -920,7 +1103,8 @@ int cnss_wlfw_tgt_cap_send_sync(struct cnss_plat_data *plat_priv)
 
 out:
 	qmi_record(plat_priv->wlfw_service_instance_id,
-		   QMI_WLFW_CAP_RESP_V01, ret, resp_error_msg);
+		  (QMI_WLFW_CAP_REQ_V01), ret,
+		  resp_error_msg);
 	CNSS_ASSERT(0);
 	kfree(req);
 	kfree(resp);
@@ -1072,7 +1256,6 @@ int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv,
 		kfree(req);
 		return -ENOMEM;
 	}
-
 	switch (bdf_type) {
 	case CNSS_BDF_WIN:
 		if (plat_priv->board_info.board_id_override)
@@ -1308,7 +1491,8 @@ int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv,
 bypass_bdf:
 
 	qmi_record(plat_priv->wlfw_service_instance_id,
-		   QMI_WLFW_BDF_DOWNLOAD_REQ_V01, ret, resp_error_msg);
+		  (QMI_TYPE_REQ | QMI_WLFW_BDF_DOWNLOAD_REQ_V01), ret,
+		  resp_error_msg);
 	while (remaining) {
 		req->valid = 1;
 		req->file_id_valid = 1;
@@ -1382,7 +1566,6 @@ bypass_bdf:
 				    ret);
 			goto err_send;
 		}
-
 		if (fw_bdf_type == BDF_TYPE_EEPROM) {
 			cnss_pr_info("EEPROM READ WAIT STARTED: %d seconds",
 				     plat_priv->eeprom_caldata_read_timeout);
@@ -1395,6 +1578,7 @@ bypass_bdf:
 		}
 
 		if (ret < 0) {
+			resp_error_msg = -QMI_RESULT_FAILURE_V01;
 			cnss_pr_err("Failed to wait for response of BDF download request, err: %d\n",
 				    ret);
 			goto err_send;
@@ -1416,7 +1600,8 @@ bypass_bdf:
 		release_firmware(fw_entry);
 
 	qmi_record(plat_priv->wlfw_service_instance_id,
-		   QMI_WLFW_BDF_DOWNLOAD_REQ_V01, ret, resp_error_msg);
+		  (QMI_TYPE_RESP | QMI_WLFW_BDF_DOWNLOAD_REQ_V01), ret,
+		  resp_error_msg);
 	kfree(req);
 	kfree(resp);
 	return 0;
@@ -1426,7 +1611,8 @@ err_send:
 		release_firmware(fw_entry);
 err_req_fw:
 	qmi_record(plat_priv->wlfw_service_instance_id,
-		   QMI_WLFW_BDF_DOWNLOAD_REQ_V01, ret, resp_error_msg);
+		  (QMI_WLFW_BDF_DOWNLOAD_REQ_V01), ret,
+		  resp_error_msg);
 out:
 	kfree(req);
 	kfree(resp);
@@ -1474,7 +1660,8 @@ int cnss_wlfw_m3_dnld_send_sync(struct cnss_plat_data *plat_priv)
 	req->size = plat_priv->m3_mem.size;
 
 	qmi_record(plat_priv->wlfw_service_instance_id,
-		   QMI_WLFW_M3_INFO_REQ_V01, ret, resp_error_msg);
+		  (QMI_TYPE_REQ | QMI_WLFW_M3_INFO_REQ_V01), ret,
+		  resp_error_msg);
 	ret = qmi_txn_init(&plat_priv->qmi_wlfw, &txn,
 			   wlfw_m3_info_resp_msg_v01_ei, resp);
 	if (ret < 0) {
@@ -1496,6 +1683,7 @@ int cnss_wlfw_m3_dnld_send_sync(struct cnss_plat_data *plat_priv)
 
 	ret = qmi_txn_wait(&txn, QMI_WLFW_TIMEOUT_JF);
 	if (ret < 0) {
+		resp_error_msg = -QMI_RESULT_FAILURE_V01;
 		cnss_pr_err("Failed to wait for response of M3 information request, err: %d\n",
 			    ret);
 		goto out;
@@ -1510,14 +1698,16 @@ int cnss_wlfw_m3_dnld_send_sync(struct cnss_plat_data *plat_priv)
 	}
 
 	qmi_record(plat_priv->wlfw_service_instance_id,
-		   QMI_WLFW_M3_INFO_REQ_V01, ret, resp_error_msg);
+		  (QMI_TYPE_RESP | QMI_WLFW_M3_INFO_REQ_V01), ret,
+		  resp_error_msg);
 	kfree(req);
 	kfree(resp);
 	return 0;
 
 out:
 	qmi_record(plat_priv->wlfw_service_instance_id,
-		   QMI_WLFW_M3_INFO_REQ_V01, ret, resp_error_msg);
+		  (QMI_WLFW_M3_INFO_REQ_V01), ret,
+		  resp_error_msg);
 	CNSS_ASSERT(0);
 	kfree(req);
 	kfree(resp);
@@ -1556,7 +1746,8 @@ int cnss_wlfw_qdss_data_send_sync(struct cnss_plat_data *plat_priv,
 	remaining = total_size;
 	p_qdss_trace_data_temp = p_qdss_trace_data;
 	qmi_record(plat_priv->wlfw_service_instance_id,
-		   QMI_WLFW_QDSS_TRACE_DATA_REQ_V01, ret, resp_error_msg);
+		  (QMI_TYPE_REQ | QMI_WLFW_QDSS_TRACE_DATA_REQ_V01), ret,
+		  resp_error_msg);
 	while (remaining && resp->end == 0) {
 		ret = qmi_txn_init(&plat_priv->qmi_wlfw, &txn,
 				   wlfw_qdss_trace_data_resp_msg_v01_ei, resp);
@@ -1583,6 +1774,7 @@ int cnss_wlfw_qdss_data_send_sync(struct cnss_plat_data *plat_priv,
 		ret = qmi_txn_wait(&txn, plat_priv->ctrl_params.qmi_timeout);
 
 		if (ret < 0) {
+			resp_error_msg = -QMI_RESULT_FAILURE_V01;
 			cnss_pr_err("QDSS trace resp wait failed with rc %d\n",
 				    ret);
 			goto fail;
@@ -1627,7 +1819,8 @@ int cnss_wlfw_qdss_data_send_sync(struct cnss_plat_data *plat_priv,
 	}
 
 	qmi_record(plat_priv->wlfw_service_instance_id,
-		   QMI_WLFW_QDSS_TRACE_DATA_REQ_V01, ret, resp_error_msg);
+		  (QMI_TYPE_RESP | QMI_WLFW_QDSS_TRACE_DATA_REQ_V01), ret,
+		  resp_error_msg);
 
 	if (remaining == 0 && (resp->end_valid && resp->end)) {
 		ret = cnss_genl_send_msg(p_qdss_trace_data,
@@ -1649,7 +1842,8 @@ int cnss_wlfw_qdss_data_send_sync(struct cnss_plat_data *plat_priv,
 
 fail:
 	qmi_record(plat_priv->wlfw_service_instance_id,
-		   QMI_WLFW_QDSS_TRACE_DATA_REQ_V01, ret, resp_error_msg);
+		  (QMI_WLFW_QDSS_TRACE_DATA_REQ_V01), ret,
+		  resp_error_msg);
 	kfree(p_qdss_trace_data);
 
 end:
@@ -1693,7 +1887,8 @@ int cnss_wlfw_wlan_mode_send_sync(struct cnss_plat_data *plat_priv,
 	req->hw_debug_valid = 1;
 	req->hw_debug = 0;
 	qmi_record(plat_priv->wlfw_service_instance_id,
-		   QMI_WLFW_WLAN_MODE_REQ_V01, ret, resp_error_msg);
+		  (QMI_TYPE_REQ | QMI_WLFW_WLAN_MODE_REQ_V01), ret,
+		  resp_error_msg);
 	ret = qmi_txn_init(&plat_priv->qmi_wlfw, &txn,
 			   wlfw_wlan_mode_resp_msg_v01_ei, resp);
 	if (ret < 0) {
@@ -1715,6 +1910,7 @@ int cnss_wlfw_wlan_mode_send_sync(struct cnss_plat_data *plat_priv,
 
 	ret = qmi_txn_wait(&txn, QMI_WLFW_TIMEOUT_JF);
 	if (ret < 0) {
+		resp_error_msg = -QMI_RESULT_FAILURE_V01;
 		cnss_pr_err("Failed to wait for response of mode request, mode: %s(%d), err: %d\n",
 			    cnss_qmi_mode_to_str(mode), mode, ret);
 		goto out;
@@ -1729,7 +1925,8 @@ int cnss_wlfw_wlan_mode_send_sync(struct cnss_plat_data *plat_priv,
 		goto out;
 	}
 	qmi_record(plat_priv->wlfw_service_instance_id,
-		   QMI_WLFW_WLAN_MODE_REQ_V01, ret, resp_error_msg);
+		  (QMI_TYPE_RESP | QMI_WLFW_WLAN_MODE_REQ_V01), ret,
+		  resp_error_msg);
 
 	kfree(req);
 	kfree(resp);
@@ -1737,7 +1934,8 @@ int cnss_wlfw_wlan_mode_send_sync(struct cnss_plat_data *plat_priv,
 
 out:
 	qmi_record(plat_priv->wlfw_service_instance_id,
-		   QMI_WLFW_WLAN_MODE_REQ_V01, ret, resp_error_msg);
+		  (QMI_WLFW_WLAN_MODE_REQ_V01), ret,
+		  resp_error_msg);
 	if (mode == CNSS_OFF) {
 		cnss_pr_dbg("WLFW service is disconnected while sending mode off request\n");
 		ret = 0;
@@ -1816,7 +2014,8 @@ int cnss_wlfw_wlan_cfg_send_sync(struct cnss_plat_data *plat_priv,
 	       * req->shadow_reg_v2_len);
 
 	qmi_record(plat_priv->wlfw_service_instance_id,
-		   QMI_WLFW_WLAN_CFG_REQ_V01, ret, resp_error_msg);
+		  (QMI_TYPE_REQ | QMI_WLFW_WLAN_CFG_REQ_V01), ret,
+		  resp_error_msg);
 
 	ret = qmi_txn_init(&plat_priv->qmi_wlfw, &txn,
 			   wlfw_wlan_cfg_resp_msg_v01_ei, resp);
@@ -1839,6 +2038,7 @@ int cnss_wlfw_wlan_cfg_send_sync(struct cnss_plat_data *plat_priv,
 
 	ret = qmi_txn_wait(&txn, QMI_WLFW_TIMEOUT_JF);
 	if (ret < 0) {
+		resp_error_msg = -QMI_RESULT_FAILURE_V01;
 		cnss_pr_err("Failed to wait for response of WLAN config request, err: %d\n",
 			    ret);
 		goto out;
@@ -1852,7 +2052,8 @@ int cnss_wlfw_wlan_cfg_send_sync(struct cnss_plat_data *plat_priv,
 		goto out;
 	}
 	qmi_record(plat_priv->wlfw_service_instance_id,
-		   QMI_WLFW_WLAN_CFG_REQ_V01, ret, resp_error_msg);
+		  (QMI_TYPE_RESP | QMI_WLFW_WLAN_CFG_REQ_V01), ret,
+		  resp_error_msg);
 
 	kfree(req);
 	kfree(resp);
@@ -1860,7 +2061,8 @@ int cnss_wlfw_wlan_cfg_send_sync(struct cnss_plat_data *plat_priv,
 
 out:
 	qmi_record(plat_priv->wlfw_service_instance_id,
-		   QMI_WLFW_WLAN_CFG_REQ_V01, ret, resp_error_msg);
+		  (QMI_WLFW_WLAN_CFG_REQ_V01), ret,
+		  resp_error_msg);
 	CNSS_ASSERT(0);
 	kfree(req);
 	kfree(resp);
@@ -2062,7 +2264,8 @@ int cnss_wlfw_ini_send_sync(struct cnss_plat_data *plat_priv,
 	req->enablefwlog = fw_log_mode;
 
 	qmi_record(plat_priv->wlfw_service_instance_id,
-		   QMI_WLFW_INI_REQ_V01, ret, resp_error_msg);
+		  (QMI_TYPE_REQ | QMI_WLFW_INI_REQ_V01), ret,
+		  resp_error_msg);
 
 	ret = qmi_txn_init(&plat_priv->qmi_wlfw, &txn,
 			   wlfw_ini_resp_msg_v01_ei, resp);
@@ -2085,6 +2288,7 @@ int cnss_wlfw_ini_send_sync(struct cnss_plat_data *plat_priv,
 
 	ret = qmi_txn_wait(&txn, QMI_WLFW_TIMEOUT_JF);
 	if (ret < 0) {
+		resp_error_msg = -QMI_RESULT_FAILURE_V01;
 		cnss_pr_err("Failed to wait for response of ini request, fw_log_mode: %d, err: %d\n",
 			    fw_log_mode, ret);
 		goto out;
@@ -2099,13 +2303,18 @@ int cnss_wlfw_ini_send_sync(struct cnss_plat_data *plat_priv,
 	}
 
 	qmi_record(plat_priv->wlfw_service_instance_id,
-		   QMI_WLFW_INI_REQ_V01, ret, resp_error_msg);
+		  (QMI_TYPE_RESP | QMI_WLFW_INI_REQ_V01), ret,
+		  resp_error_msg);
 
 	kfree(req);
 	kfree(resp);
 	return 0;
 
 out:
+	qmi_record(plat_priv->wlfw_service_instance_id,
+		  (QMI_WLFW_INI_REQ_V01), ret,
+		  resp_error_msg);
+
 	kfree(req);
 	kfree(resp);
 	return ret;
@@ -2136,7 +2345,8 @@ int cnss_wlfw_antenna_switch_send_sync(struct cnss_plat_data *plat_priv)
 	}
 
 	qmi_record(plat_priv->wlfw_service_instance_id,
-		   QMI_WLFW_ANTENNA_SWITCH_REQ_V01, ret, resp_error_msg);
+		  (QMI_TYPE_REQ | QMI_WLFW_ANTENNA_SWITCH_REQ_V01), ret,
+		  resp_error_msg);
 	ret = qmi_txn_init(&plat_priv->qmi_wlfw, &txn,
 			   wlfw_antenna_switch_resp_msg_v01_ei, resp);
 	if (ret < 0) {
@@ -2158,6 +2368,7 @@ int cnss_wlfw_antenna_switch_send_sync(struct cnss_plat_data *plat_priv)
 
 	ret = qmi_txn_wait(&txn, QMI_WLFW_TIMEOUT_JF);
 	if (ret < 0) {
+		resp_error_msg = -QMI_RESULT_FAILURE_V01;
 		cnss_pr_err("Failed to wait for response of antenna switch request, err: %d\n",
 			    ret);
 		goto out;
@@ -2178,14 +2389,16 @@ int cnss_wlfw_antenna_switch_send_sync(struct cnss_plat_data *plat_priv)
 		    resp->antenna_valid, resp->antenna);
 
 	qmi_record(plat_priv->wlfw_service_instance_id,
-		   QMI_WLFW_ANTENNA_SWITCH_REQ_V01, ret, resp_error_msg);
+		  (QMI_TYPE_RESP | QMI_WLFW_ANTENNA_SWITCH_REQ_V01), ret,
+		  resp_error_msg);
 	kfree(req);
 	kfree(resp);
 	return 0;
 
 out:
 	qmi_record(plat_priv->wlfw_service_instance_id,
-		   QMI_WLFW_ANTENNA_SWITCH_REQ_V01, ret, resp_error_msg);
+		  (QMI_WLFW_ANTENNA_SWITCH_REQ_V01), ret,
+		  resp_error_msg);
 	kfree(req);
 	kfree(resp);
 	return ret;
@@ -2324,8 +2537,8 @@ int cnss_wlfw_qdss_trace_mem_info_send_sync(struct cnss_plat_data *plat_priv)
 		}
 
 		qmi_record(plat_priv->wlfw_service_instance_id,
-				QMI_WLFW_QDSS_TRACE_MEM_INFO_REQ_V01, ret,
-				resp_error_msg);
+			  (QMI_TYPE_REQ | QMI_WLFW_QDSS_TRACE_MEM_INFO_REQ_V01),
+			  ret, resp_error_msg);
 		ret = qmi_txn_init(&plat_priv->qmi_wlfw, &txn,
 				wlfw_qdss_trace_mem_info_resp_msg_v01_ei, resp);
 		if (ret < 0) {
@@ -2347,6 +2560,7 @@ int cnss_wlfw_qdss_trace_mem_info_send_sync(struct cnss_plat_data *plat_priv)
 
 		ret = qmi_txn_wait(&txn, QMI_WLFW_TIMEOUT_JF);
 		if (ret < 0) {
+			resp_error_msg = -QMI_RESULT_FAILURE_V01;
 			cnss_pr_err("Fail to wait for response of QDSS trace mem info request, err %d\n",
 					ret);
 			goto out;
@@ -2362,14 +2576,16 @@ int cnss_wlfw_qdss_trace_mem_info_send_sync(struct cnss_plat_data *plat_priv)
 	}
 
 	qmi_record(plat_priv->wlfw_service_instance_id,
-		   QMI_WLFW_QDSS_TRACE_MEM_INFO_REQ_V01, ret, resp_error_msg);
+		  (QMI_TYPE_RESP | QMI_WLFW_QDSS_TRACE_MEM_INFO_REQ_V01), ret,
+		  resp_error_msg);
 	kfree(req);
 	kfree(resp);
 	return 0;
 
 out:
 	qmi_record(plat_priv->wlfw_service_instance_id,
-		   QMI_WLFW_QDSS_TRACE_MEM_INFO_REQ_V01, ret, resp_error_msg);
+		  (QMI_WLFW_QDSS_TRACE_MEM_INFO_REQ_V01), ret,
+		  resp_error_msg);
 	kfree(req);
 	kfree(resp);
 	return ret;
@@ -2448,8 +2664,8 @@ int cnss_wlfw_qdss_dnld_send_sync(struct cnss_plat_data *plat_priv)
 
 	cnss_pr_dbg("Downloading QDSS Config file of size: %u\n", remaining);
 	qmi_record(plat_priv->wlfw_service_instance_id,
-		   QMI_WLFW_QDSS_TRACE_CONFIG_DOWNLOAD_REQ_V01,
-		   ret, resp_error_msg);
+		  (QMI_TYPE_REQ | QMI_WLFW_QDSS_TRACE_CONFIG_DOWNLOAD_REQ_V01),
+		  ret, resp_error_msg);
 
 	while (remaining) {
 		req->total_size_valid = 1;
@@ -2490,6 +2706,7 @@ int cnss_wlfw_qdss_dnld_send_sync(struct cnss_plat_data *plat_priv)
 
 		ret = qmi_txn_wait(&txn, QMI_WLFW_TIMEOUT_JF);
 		if (ret < 0) {
+			resp_error_msg = -QMI_RESULT_FAILURE_V01;
 			cnss_pr_err("Failed to wait for response of QDSS download request, err: %d\n",
 				    ret);
 			goto err_send;
@@ -2508,9 +2725,18 @@ int cnss_wlfw_qdss_dnld_send_sync(struct cnss_plat_data *plat_priv)
 		req->seg_id++;
 	}
 
+	qmi_record(plat_priv->wlfw_service_instance_id,
+		  (QMI_TYPE_RESP | QMI_WLFW_QDSS_TRACE_CONFIG_DOWNLOAD_REQ_V01),
+		   ret, resp_error_msg);
+	release_firmware(fw_entry);
+
+	kfree(req);
+	kfree(resp);
+	return ret;
+
 err_send:
 	qmi_record(plat_priv->wlfw_service_instance_id,
-		   QMI_WLFW_QDSS_TRACE_CONFIG_DOWNLOAD_REQ_V01,
+		  (QMI_WLFW_QDSS_TRACE_CONFIG_DOWNLOAD_REQ_V01),
 		   ret, resp_error_msg);
 
 	release_firmware(fw_entry);
@@ -2569,14 +2795,14 @@ int cnss_wlfw_send_qdss_trace_mode_req(struct cnss_plat_data *plat_priv,
 	cnss_pr_info("Sending QDSS Mode %u, option %llu", mode, option);
 
 	qmi_record(plat_priv->wlfw_service_instance_id,
-		   QMI_WLFW_QDSS_TRACE_MODE_REQ_V01,
-		   ret, resp_error_msg);
+		  (QMI_TYPE_REQ | QMI_WLFW_QDSS_TRACE_MODE_REQ_V01), ret,
+		  resp_error_msg);
 	ret = qmi_txn_init(&plat_priv->qmi_wlfw, &txn,
 			   wlfw_qdss_trace_mode_resp_msg_v01_ei, resp);
 	if (ret < 0) {
 		cnss_pr_err("Fail to init txn for QDSS Mode resp %d\n",
 			    ret);
-		goto out;
+		goto err_send;
 	}
 
 	ret = qmi_send_request(&plat_priv->qmi_wlfw, NULL, &txn,
@@ -2586,14 +2812,15 @@ int cnss_wlfw_send_qdss_trace_mode_req(struct cnss_plat_data *plat_priv,
 	if (ret < 0) {
 		qmi_txn_cancel(&txn);
 		cnss_pr_err("Fail to send QDSS Mode req %d\n", ret);
-		goto out;
+		goto err_send;
 	}
 
 	ret = qmi_txn_wait(&txn, QMI_WLFW_TIMEOUT_JF);
 	if (ret < 0) {
+		resp_error_msg = -QMI_RESULT_FAILURE_V01;
 		cnss_pr_err("QDSS Mode resp wait failed with rc %d\n",
 			    ret);
-		goto out;
+		goto err_send;
 	}
 
 	if (resp->resp.result != QMI_RESULT_SUCCESS_V01) {
@@ -2601,14 +2828,19 @@ int cnss_wlfw_send_qdss_trace_mode_req(struct cnss_plat_data *plat_priv,
 			    resp->resp.result, resp->resp.error);
 		ret = -resp->resp.result;
 		resp_error_msg = resp->resp.error;
-		goto out;
+		goto err_send;
 	}
+	qmi_record(plat_priv->wlfw_service_instance_id,
+		  (QMI_TYPE_RESP | QMI_WLFW_QDSS_TRACE_MODE_REQ_V01), ret,
+		  resp_error_msg);
+	goto out;
+
+err_send:
+	qmi_record(plat_priv->wlfw_service_instance_id,
+		  (QMI_WLFW_QDSS_TRACE_MODE_REQ_V01), ret,
+		  resp_error_msg);
 
 out:
-	qmi_record(plat_priv->wlfw_service_instance_id,
-		   QMI_WLFW_QDSS_TRACE_MODE_REQ_V01,
-		   ret, resp_error_msg);
-
 	kfree(resp);
 	kfree(req);
 
@@ -2791,7 +3023,8 @@ int cnss_wlfw_m3_dump_upload_done_send_sync(struct cnss_plat_data *plat_priv,
 	req->status = status;
 
 	qmi_record(plat_priv->wlfw_service_instance_id,
-		   QMI_WLFW_M3_DUMP_UPLOAD_DONE_REQ_V01, ret, resp_error_msg);
+		  (QMI_TYPE_REQ | QMI_WLFW_M3_DUMP_UPLOAD_DONE_REQ_V01), ret,
+		  resp_error_msg);
 	ret = qmi_txn_init(&plat_priv->qmi_wlfw, &txn,
 			   wlfw_m3_dump_upload_done_resp_msg_v01_ei, resp);
 	if (ret < 0) {
@@ -2813,6 +3046,7 @@ int cnss_wlfw_m3_dump_upload_done_send_sync(struct cnss_plat_data *plat_priv,
 
 	ret = qmi_txn_wait(&txn, QMI_WLFW_TIMEOUT_JF);
 	if (ret < 0) {
+		resp_error_msg = -QMI_RESULT_FAILURE_V01;
 		cnss_pr_err("Fail to wait for response of M3 dump upload done request, err %d\n",
 			    ret);
 		goto out;
@@ -2826,9 +3060,17 @@ int cnss_wlfw_m3_dump_upload_done_send_sync(struct cnss_plat_data *plat_priv,
 		goto out;
 	}
 
+	qmi_record(plat_priv->wlfw_service_instance_id,
+		  (QMI_TYPE_RESP | QMI_WLFW_M3_DUMP_UPLOAD_DONE_REQ_V01), ret,
+		  resp_error_msg);
+	kfree(req);
+	kfree(resp);
+	return ret;
+
 out:
 	qmi_record(plat_priv->wlfw_service_instance_id,
-		   QMI_WLFW_M3_DUMP_UPLOAD_DONE_REQ_V01, ret, resp_error_msg);
+		  (QMI_WLFW_M3_DUMP_UPLOAD_DONE_REQ_V01), ret,
+		  resp_error_msg);
 	kfree(req);
 	kfree(resp);
 	return ret;
@@ -2856,7 +3098,8 @@ int cnss_wlfw_device_info_send_sync(struct cnss_plat_data *plat_priv)
 	}
 
 	qmi_record(plat_priv->wlfw_service_instance_id,
-		   QMI_WLFW_DEVICE_INFO_REQ_V01, ret, resp_error_msg);
+		  (QMI_TYPE_REQ | QMI_WLFW_DEVICE_INFO_REQ_V01), ret,
+		  resp_error_msg);
 
 	ret = qmi_txn_init(&plat_priv->qmi_wlfw, &txn,
 			   wlfw_device_info_resp_msg_v01_ei, resp);
@@ -2878,6 +3121,7 @@ int cnss_wlfw_device_info_send_sync(struct cnss_plat_data *plat_priv)
 
 	ret = qmi_txn_wait(&txn, QMI_WLFW_TIMEOUT_JF);
 	if (ret < 0) {
+		resp_error_msg = -QMI_RESULT_FAILURE_V01;
 		cnss_pr_err("Failed to wait for device info response err: %d\n",
 			    ret);
 		goto out;
@@ -2892,6 +3136,7 @@ int cnss_wlfw_device_info_send_sync(struct cnss_plat_data *plat_priv)
 	}
 
 	if (!resp->bar_addr_valid || !resp->bar_size_valid) {
+		resp_error_msg = -QMI_RESULT_FAILURE_V01;
 		cnss_pr_err("bar addr(%d) or bar size(%d) not received\n",
 			    resp->bar_addr_valid, resp->bar_size_valid);
 		ret = -EINVAL;
@@ -2900,6 +3145,7 @@ int cnss_wlfw_device_info_send_sync(struct cnss_plat_data *plat_priv)
 
 	if (!resp->bar_addr ||
 	    (resp->bar_size != QCN6122_DEVICE_BAR_SIZE)) {
+		resp_error_msg = -QMI_RESULT_FAILURE_V01;
 		cnss_pr_err("Invalid bar addr(0x%llx) or bar size (0x%x)\n",
 			    resp->bar_addr, resp->bar_size);
 		ret = -EINVAL;
@@ -2933,7 +3179,8 @@ int cnss_wlfw_device_info_send_sync(struct cnss_plat_data *plat_priv)
 			plat_priv->tgt_data.bar_size);
 
 	qmi_record(plat_priv->wlfw_service_instance_id,
-		   QMI_WLFW_DEVICE_INFO_RESP_V01, ret, resp_error_msg);
+		  (QMI_TYPE_RESP | QMI_WLFW_DEVICE_INFO_REQ_V01), ret,
+		  resp_error_msg);
 
 	kfree(resp);
 	kfree(req);
@@ -2941,7 +3188,8 @@ int cnss_wlfw_device_info_send_sync(struct cnss_plat_data *plat_priv)
 
 out:
 	qmi_record(plat_priv->wlfw_service_instance_id,
-		   QMI_WLFW_DEVICE_INFO_RESP_V01, ret, resp_error_msg);
+		  (QMI_WLFW_DEVICE_INFO_REQ_V01), ret,
+		  resp_error_msg);
 
 	kfree(resp);
 	kfree(req);
@@ -3146,7 +3394,8 @@ int cnss_wlfw_cal_report_req_send_sync(struct cnss_plat_data *plat_priv,
 	req->cal_file_download_size = cal_file_download_size;
 
 	qmi_record(plat_priv->wlfw_service_instance_id,
-		   QMI_WLFW_CAL_REPORT_REQ_V01, ret, resp_error_msg);
+		  (QMI_TYPE_REQ | QMI_WLFW_CAL_REPORT_REQ_V01), ret,
+		  resp_error_msg);
 
 	ret = qmi_txn_init(&plat_priv->qmi_wlfw, &txn,
 			   wlfw_cal_report_resp_msg_v01_ei, resp);
@@ -3167,6 +3416,7 @@ int cnss_wlfw_cal_report_req_send_sync(struct cnss_plat_data *plat_priv,
 	}
 	ret = qmi_txn_wait(&txn, QMI_WLFW_TIMEOUT_JF);
 	if (ret < 0) {
+		resp_error_msg = -QMI_RESULT_FAILURE_V01;
 		cnss_pr_err("Failed to wait for response of Cal Report request, err: %d\n",
 			    ret);
 		goto out;
@@ -3178,9 +3428,17 @@ int cnss_wlfw_cal_report_req_send_sync(struct cnss_plat_data *plat_priv,
 		ret = -resp->resp.result;
 		goto out;
 	}
+
+	qmi_record(plat_priv->wlfw_service_instance_id,
+		  (QMI_TYPE_RESP | QMI_WLFW_CAL_REPORT_REQ_V01), ret,
+		  resp_error_msg);
+	kfree(req);
+	kfree(resp);
+	return ret;
 out:
 	qmi_record(plat_priv->wlfw_service_instance_id,
-		   QMI_WLFW_CAL_REPORT_REQ_V01, ret, resp_error_msg);
+		  (QMI_WLFW_CAL_REPORT_REQ_V01), ret,
+		  resp_error_msg);
 	kfree(req);
 	kfree(resp);
 	return ret;
