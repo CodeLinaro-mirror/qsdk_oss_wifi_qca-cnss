@@ -52,11 +52,12 @@
 
 struct qmi_history {
 	u16  msg_id;
-	s8  error_msg;
-	s8  resp_err_msg;
-	u8  instance_id;
-	u8  reserved[3];
-	u64 timestamp;
+	s8   error_msg;
+	s8   resp_err_msg;
+	u8   instance_id;
+	u8   reserved[3];
+	char msg_type[5];
+	u64  timestamp;
 };
 
 extern struct qmi_history qmi_log[];
@@ -95,6 +96,7 @@ struct cnss_qmi_event_m3_dump_upload_req_data {
 #include "coexistence_service_v01.h"
 #include "ip_multimedia_subsystem_private_service_v01.h"
 
+const char *get_device_name_from_instance_id(u8 instance_id);
 void cnss_dump_qmi_history(void);
 int cnss_qmi_init(struct cnss_plat_data *plat_priv);
 void cnss_qmi_deinit(struct cnss_plat_data *plat_priv);
@@ -141,6 +143,7 @@ int cnss_wlfw_cal_report_req_send_sync(struct cnss_plat_data *plat_priv,
 int cnss_wlfw_qdss_data_send_sync(struct cnss_plat_data *plat_priv,
 				  char *file_name,
 				  u32 total_size);
+char *qmi_id_to_str(char *bdf_str, char *msg_name);
 #else
 #define QMI_WLFW_TIMEOUT_MS		10000
 
@@ -319,6 +322,11 @@ static inline
 int cnss_wlfw_qdss_data_send_sync(struct cnss_plat_data *plat_priv,
 				  char *file_name,
 				  u32 total_size)
+{
+	return 0;
+}
+static inline
+char *qmi_id_to_str(char *bdf_str, char *msg_name)
 {
 	return 0;
 }
