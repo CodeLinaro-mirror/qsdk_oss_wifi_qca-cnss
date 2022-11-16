@@ -1289,6 +1289,66 @@ int cnss_get_num_mlo_capable_devices(unsigned int *device_id, int num_elements)
 }
 EXPORT_SYMBOL(cnss_get_num_mlo_capable_devices);
 
+int cnss_get_num_mlo_groups(void)
+{
+	struct cnss_plat_data *plat_priv = NULL;
+	int num_mlo_grp = 0;
+	int i;
+	int group_count = 0;
+
+	if (!enable_mlo_support)
+		return 0;
+
+	for (i = 0; i < plat_env_index; i++) {
+		plat_priv = plat_env[i];
+
+		if (!plat_priv) {
+			cnss_pr_err("%s: Failed to get plat_priv for soc_id %d",
+				    __func__, i);
+			continue;
+		}
+
+		if (!plat_priv->mlo_capable ||
+		    ((plat_priv->bus_type == CNSS_BUS_PCI) &&
+		     !plat_priv->pci_dev)) {
+			continue;
+		}
+
+		group_count = plat_priv->mlo_group_info->group_id;
+		if (group_count > num_mlo_grp)
+			num_mlo_grp = group_count;
+	}
+
+	return ++num_mlo_grp;
+}
+EXPORT_SYMBOL(cnss_get_num_mlo_groups);
+
+int cnss_get_mlo_group_id(struct device *dev)
+{
+	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
+
+	if (!plat_priv || !plat_priv->mlo_support)
+		return -EINVAL;
+
+	if (!plat_priv->mlo_capable || !plat_priv->mlo_chip_info)
+		return -EINVAL;
+
+	return plat_priv->mlo_chip_info->group_id;
+}
+EXPORT_SYMBOL(cnss_get_mlo_group_id);
+
+bool cnss_get_mlo_group_info(uint8_t grp_id,
+			struct cnss_mlo_group_info *grp_info)
+{
+	if (grp_id < 0 && grp_id >= CNSS_MAX_MLO_GROUPS)
+		return false;
+	memcpy(grp_info, &g_mlo_group_info[grp_id],
+		sizeof(struct cnss_mlo_group_info));
+
+	return true;
+}
+EXPORT_SYMBOL(cnss_get_mlo_group_info);
+
 int cnss_get_dev_link_ids(struct device *dev, u8 *link_ids, int max_elements)
 {
 	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);

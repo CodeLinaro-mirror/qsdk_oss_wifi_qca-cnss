@@ -479,6 +479,19 @@ static bool cnss_get_enable_intx(struct device *dev)
 {
 	return false;
 }
+static int cnss_get_num_mlo_groups(void)
+{
+	return 0;
+}
+static bool cnss_get_mlo_group_info(uint8_t grp_id,
+			struct cnss_mlo_group_info *grp_info)
+{
+	return false;
+}
+static inline int cnss_get_mlo_group_id(struct device *dev)
+{
+	return -EINVAL;
+}
 #else
 extern int cnss_wlan_register_driver_ops(struct cnss_wlan_driver *driver);
 extern int cnss_wlan_probe_driver(void);
@@ -582,5 +595,9 @@ void cnss_print_mlo_config(void);
 void cnss_set_led_gpio(int led_gpio, unsigned int value, unsigned int flags);
 bool cnss_get_enable_intx(struct device *dev);
 void *cnss_get_plat_dev_by_bus_dev(struct device *dev);
+int cnss_get_num_mlo_groups(void);
+bool cnss_get_mlo_group_info(uint8_t grp_id,
+			struct cnss_mlo_group_info *grp_info);
+int cnss_get_mlo_group_id(struct device *dev);
 #endif
 #endif /* _NET_CNSS2_H */
