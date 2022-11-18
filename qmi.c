@@ -1147,7 +1147,8 @@ static int cnss_wlfw_load_bdf(struct wlfw_bdf_download_req_msg_v01 *req,
 		break;
 	case BDF_TYPE_CALDATA:
 		if (plat_priv->device_id == QCN6122_DEVICE_ID ||
-		    plat_priv->device_id == QCN9160_DEVICE_ID) {
+		    plat_priv->device_id == QCN9160_DEVICE_ID ||
+		    plat_priv->device_id == QCN6432_DEVICE_ID) {
 			snprintf(filename, sizeof(filename),
 				 "%s" DEFAULT_CAL_FILE_PREFIX
 				 "%d" DEFAULT_CAL_FILE_SUFFIX,
@@ -1326,7 +1327,8 @@ int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv,
 					 (plat_priv->pci_slot_id + 1));
 			}
 		} else if (plat_priv->device_id == QCN6122_DEVICE_ID ||
-			 plat_priv->device_id == QCN9160_DEVICE_ID) {
+			 plat_priv->device_id == QCN9160_DEVICE_ID ||
+			 plat_priv->device_id == QCN6432_DEVICE_ID) {
 			snprintf(filename, sizeof(filename),
 				 "%s" DEFAULT_CAL_FILE_PREFIX
 				 "%d" DEFAULT_CAL_FILE_SUFFIX,
@@ -3550,6 +3552,7 @@ static void cnss_wlfw_qdss_trace_save_ind_cb(struct qmi_handle *qmi_wlfw,
 	case QCN9160_DEVICE_ID:
 	case QCN9224_DEVICE_ID:
 	case QCA5332_DEVICE_ID:
+	case QCN6432_DEVICE_ID:
 		break;
 	case QCA8074_DEVICE_ID:
 	case QCA8074V2_DEVICE_ID:
