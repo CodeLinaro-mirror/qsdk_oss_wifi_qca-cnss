@@ -4594,9 +4594,10 @@ static struct cnss_ce_base_addr ce_base_addr_qcn9160 = {
 
 static struct cnss_msi_config msi_config_qcn9000_pci0 = {
 	.total_vectors = 16,
-	.total_users = 3,
+	.total_users = 4,
 	.users = (struct cnss_msi_user[]) {
-		{ .name = "MHI", .num_vectors = 3, .base_vector = 0 },
+		{ .name = "MHI", .num_vectors = 2, .base_vector = 0 },
+		{ .name = "QDSS", .num_vectors = 1, .base_vector = 2 },
 		{ .name = "CE", .num_vectors = 5, .base_vector = 3 },
 		{ .name = "DP", .num_vectors = 8, .base_vector = 8 },
 	},
@@ -4604,9 +4605,10 @@ static struct cnss_msi_config msi_config_qcn9000_pci0 = {
 
 static struct cnss_msi_config msi_config_qcn9000_pci1 = {
 	.total_vectors = 16,
-	.total_users = 3,
+	.total_users = 4,
 	.users = (struct cnss_msi_user[]) {
-		{ .name = "MHI", .num_vectors = 3, .base_vector = 0 },
+		{ .name = "MHI", .num_vectors = 2, .base_vector = 0 },
+		{ .name = "QDSS", .num_vectors = 1, .base_vector = 2 },
 		{ .name = "CE", .num_vectors = 5, .base_vector = 3 },
 		{ .name = "DP", .num_vectors = 8, .base_vector = 8 },
 	},
@@ -4614,9 +4616,10 @@ static struct cnss_msi_config msi_config_qcn9000_pci1 = {
 
 static struct cnss_msi_config msi_config_qcn9000_pci2 = {
 	.total_vectors = 16,
-	.total_users = 3,
+	.total_users = 4,
 	.users = (struct cnss_msi_user[]) {
-		{ .name = "MHI", .num_vectors = 3, .base_vector = 0 },
+		{ .name = "MHI", .num_vectors = 2, .base_vector = 0 },
+		{ .name = "QDSS", .num_vectors = 1, .base_vector = 2 },
 		{ .name = "CE", .num_vectors = 5, .base_vector = 3 },
 		{ .name = "DP", .num_vectors = 8, .base_vector = 8 },
 	},
@@ -4624,9 +4627,10 @@ static struct cnss_msi_config msi_config_qcn9000_pci2 = {
 
 static struct cnss_msi_config msi_config_qcn9000_pci3 = {
 	.total_vectors = 16,
-	.total_users = 3,
+	.total_users = 4,
 	.users = (struct cnss_msi_user[]) {
-		{ .name = "MHI", .num_vectors = 3, .base_vector = 0 },
+		{ .name = "MHI", .num_vectors = 2, .base_vector = 0 },
+		{ .name = "QDSS", .num_vectors = 1, .base_vector = 2 },
 		{ .name = "CE", .num_vectors = 5, .base_vector = 3 },
 		{ .name = "DP", .num_vectors = 8, .base_vector = 8 },
 	},
@@ -6253,7 +6257,8 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 		goto free_mhi_ctrl;
 	}
 
-	if (pci_dev->device == QCN9224_DEVICE_ID) {
+	if ((pci_dev->device == QCN9224_DEVICE_ID) ||
+		(pci_dev->device == QCN9000_DEVICE_ID)) {
 		ret = cnss_pci_get_qdss_msi(pci_priv);
 		if (ret) {
 			cnss_pr_err("Failed to get MSI for QDSS\n");
@@ -6332,7 +6337,8 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 	return 0;
 
 free_qdss_irq:
-	if (pci_dev->device == QCN9224_DEVICE_ID)
+	if ((pci_dev->device == QCN9224_DEVICE_ID) ||
+		(pci_dev->device == QCN9000_DEVICE_ID))
 		cnss_pci_disable_qdss_msi(pci_priv);
 free_mhi_ctrl:
 	mhi_free_controller(mhi_ctrl);
