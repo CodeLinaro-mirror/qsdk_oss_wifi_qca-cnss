@@ -548,6 +548,7 @@ struct cnss_plat_data {
 	bool hds_support;
 	bool regdb_support;
 	bool qdss_support;
+	bool rd_dev_present;
 };
 
 #ifdef CONFIG_ARCH_QCOM
