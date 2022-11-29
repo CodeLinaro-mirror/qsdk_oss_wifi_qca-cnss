@@ -3179,12 +3179,12 @@ static void cnss_wlfw_qdss_trace_save_ind_cb(struct qmi_handle *qmi_wlfw,
 	case QCN6122_DEVICE_ID:
 	case QCN9160_DEVICE_ID:
 	case QCN9224_DEVICE_ID:
+	case QCA5332_DEVICE_ID:
 		break;
 	case QCA8074_DEVICE_ID:
 	case QCA8074V2_DEVICE_ID:
 	case QCA6018_DEVICE_ID:
 	case QCA5018_DEVICE_ID:
-	case QCA5332_DEVICE_ID:
 	case QCA9574_DEVICE_ID:
 		/* Source 0 is for ETR and not supported for AHB targets */
 		if (ind_msg->source == 1)

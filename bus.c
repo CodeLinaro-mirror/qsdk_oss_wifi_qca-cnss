@@ -253,7 +253,8 @@ int cnss_bus_alloc_qdss_mem(struct cnss_plat_data *plat_priv)
 			plat_priv->qdss_mem[i].type = QMI_WLFW_MEM_QDSS_V01;
 
 			if (plat_priv->device_id == QCN6122_DEVICE_ID ||
-			    plat_priv->device_id == QCN9160_DEVICE_ID) {
+			    plat_priv->device_id == QCN9160_DEVICE_ID ||
+			    plat_priv->device_id == QCA5332_DEVICE_ID) {
 				plat_priv->qdss_mem[i].va =
 					ioremap(plat_priv->qdss_mem[i].pa,
 						plat_priv->qdss_mem[i].size);
