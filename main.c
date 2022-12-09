@@ -83,6 +83,7 @@ struct cnss_plat_data *plat_env[MAX_NUMBER_OF_SOCS];
 int plat_env_index;
 struct cnss_mlo_group_info g_mlo_group_info[CNSS_MAX_MLO_GROUPS];
 static DEFINE_SPINLOCK(plat_env_spinlock);
+static DEFINE_SPINLOCK(rddm_spinlock);
 
 #ifdef CONFIG_CNSS2_PM
 static DECLARE_RWSEM(cnss_pm_sem);
@@ -234,6 +235,9 @@ struct cnss_driver_event {
 /* M3 Dump related global structures/variables */
 static int m3_dump_major;
 static struct class *m3_dump_class;
+
+uint8_t rddm_dump_all;
+uint8_t rddm_count;
 
 atomic_t cal_in_progress_count;
 
@@ -2867,6 +2871,7 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 {
 	struct cnss_subsys_info *subsys_info =
 		&plat_priv->subsys_info;
+	unsigned long rddm_lock;
 
 	plat_priv->recovery_count++;
 
@@ -2886,6 +2891,11 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 		break;
 	case CNSS_REASON_RDDM:
 		cnss_bus_collect_dump_info(plat_priv, false);
+		if (enable_mlo_support && !plat_priv->recovery_enabled) {
+			spin_lock_irqsave(&rddm_spinlock, rddm_lock);
+			rddm_dump_all++;
+			spin_unlock_irqrestore(&rddm_spinlock, rddm_lock);
+		}
 		break;
 	case CNSS_REASON_DEFAULT:
 	case CNSS_REASON_TIMEOUT:
@@ -2908,6 +2918,9 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 		 */
 		if (ramdump_enabled)
 			cnss_bus_dev_ramdump(plat_priv);
+
+		if (enable_mlo_support && rddm_count != rddm_dump_all)
+			return 0;
 
 		cnss_pci_update_status(plat_priv->bus_priv, CNSS_FW_DOWN);
 	}
@@ -3037,6 +3050,10 @@ void cnss_schedule_recovery(struct device *dev,
 	data = kzalloc(sizeof(*data), gfp);
 	if (!data)
 		return;
+
+	if (enable_mlo_support && reason == CNSS_REASON_RDDM &&
+	    !plat_priv->recovery_enabled)
+		rddm_count++;
 
 	data->reason = reason;
 	cnss_driver_event_post(plat_priv,
