@@ -3037,6 +3037,11 @@ void cnss_schedule_recovery(struct device *dev,
 	struct cnss_recovery_data *data;
 	int gfp = GFP_KERNEL;
 
+	if (!plat_priv) {
+		pr_err("plat_priv is NULL\n");
+		return;
+	}
+
 	if (test_bit(CNSS_DRIVER_UNLOADING, &plat_priv->driver_state) ||
 	    test_bit(CNSS_DRIVER_IDLE_SHUTDOWN, &plat_priv->driver_state)) {
 		cnss_pr_dbg("Driver unload or idle shutdown is in progress, ignore schedule recovery\n");
@@ -3051,7 +3056,7 @@ void cnss_schedule_recovery(struct device *dev,
 	if (!data)
 		return;
 
-	if (enable_mlo_support && reason == CNSS_REASON_RDDM &&
+	if (enable_mlo_support && (reason == CNSS_REASON_RDDM) &&
 	    !plat_priv->recovery_enabled)
 		rddm_count++;
 
