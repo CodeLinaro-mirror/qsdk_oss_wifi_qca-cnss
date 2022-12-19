@@ -165,15 +165,20 @@ MODULE_PARM_DESC(enable_intx_bmap, "enable_intx_bmap");
 				defined(CONFIG_CNSS2_KERNEL_MSM)
 static int fw_ready_timeout = 60;
 static int cold_boot_cal_timeout = 180;
+int rddm_done_timeout = 30;
 #else
 static int fw_ready_timeout = 15;
 static int cold_boot_cal_timeout = 60;
+int rddm_done_timeout = 15;
 #endif
 module_param(fw_ready_timeout, int, 0644);
 MODULE_PARM_DESC(fw_ready_timeout, "fw ready timeout in seconds");
 
 module_param(cold_boot_cal_timeout, int, 0644);
 MODULE_PARM_DESC(cold_boot_cal_timeout, "Cold boot cal timeout in seconds");
+
+module_param(rddm_done_timeout, int, 0644);
+MODULE_PARM_DESC(rddm_done_timeout, "RDDM collection timeout in seconds");
 
 static int soc_version_major;
 module_param(soc_version_major, int, 0444);

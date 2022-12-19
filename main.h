@@ -410,6 +410,7 @@ enum cnss_driver_state {
 	CNSS_DAEMON_CONNECTED,
 	CNSS_QDSS_STARTED,
 	CNSS_RECOVERY_WAIT_FOR_DRIVER,
+	CNSS_RDDM_IN_PROGRESS,
 };
 
 struct cnss_recovery_data {
