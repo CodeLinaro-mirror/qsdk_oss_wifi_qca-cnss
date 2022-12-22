@@ -1379,19 +1379,30 @@ int cnss_get_dev_link_ids(struct device *dev, u8 *link_ids, int max_elements)
 }
 EXPORT_SYMBOL(cnss_get_dev_link_ids);
 
+static int cnss_get_group_id(struct cnss_plat_data *plat_priv)
+{
+	struct device *dev = &plat_priv->plat_dev->dev;
+	int group_id = 0;
+
+	of_property_read_u32(dev->of_node, "group_id",
+			&group_id);
+
+	return group_id;
+}
+
 /* Temporary API to set default MLO config, will be removed once driver starts
  * setting MLO config via PLD.
  */
 static void cnss_set_default_mlo_config(void)
 {
-	struct cnss_mlo_group_info mlo_group_info;
+	struct cnss_mlo_group_info mlo_group_info[CNSS_MAX_MLO_GROUPS];
 	struct cnss_plat_data *plat_priv = NULL;
-	int num_chip = 0, i = 0, link_id = 0;
+	int num_chip = 0, i = 0, link_id = 0, group_id = 0;
+	int grp_chip_id[CNSS_MAX_MLO_GROUPS] = {0};
+	int grp_link_id[CNSS_MAX_MLO_GROUPS] = {0};
 
 	memset(&mlo_group_info, 0, sizeof(struct cnss_mlo_group_info));
 
-	mlo_group_info.group_id = 0;
-	mlo_group_info.max_num_peers = 256;
 
 	for (i = 0; i < plat_env_index; i++) {
 		plat_priv = cnss_get_plat_priv_by_soc_id(i);
@@ -1406,37 +1417,48 @@ static void cnss_set_default_mlo_config(void)
 		     !plat_priv->pci_dev))
 			continue;
 
+		group_id = cnss_get_group_id(plat_priv);
+		if (group_id < 0 && group_id >= CNSS_MAX_MLO_GROUPS) {
+			cnss_pr_err("%s: Invalid group id: %d", __func__,
+				    group_id);
+			return;
+		}
+		mlo_group_info[group_id].group_id = group_id;
+		mlo_group_info[group_id].max_num_peers = 256;
 		if (mlo_chip_bitmask & (1 << i)) {
 			/*Temporarily Hard coding group id as 0 */
-			mlo_group_info.chip_info[num_chip].group_id = 0;
-			mlo_group_info.chip_info[num_chip].soc_id = i;
-			mlo_group_info.chip_info[num_chip].chip_id = num_chip;
+			num_chip = grp_chip_id[group_id];
+			link_id = grp_link_id[group_id];
+
+			mlo_group_info[group_id].chip_info[num_chip].group_id =
+				group_id;
+			mlo_group_info[group_id].chip_info[num_chip].soc_id = i;
+			mlo_group_info[group_id].chip_info[num_chip].chip_id =
+				num_chip;
 
 			if (plat_priv->firmware_type == CNSS_FW_DUAL_MAC)
-				mlo_group_info.chip_info[num_chip].
-							num_local_links = 2;
+				mlo_group_info[group_id].chip_info[num_chip].
+					num_local_links = 2;
 			else
-				mlo_group_info.chip_info[num_chip].
-							num_local_links = 1;
+				mlo_group_info[group_id].chip_info[num_chip].
+					num_local_links = 1;
 
-			mlo_group_info.chip_info[num_chip].hw_link_ids[0] =
-								link_id++;
-			mlo_group_info.chip_info[num_chip].hw_link_ids[1] =
-								link_id++;
-			mlo_group_info.chip_info[num_chip].valid_link_ids[0] =
-								1;
-			mlo_group_info.chip_info[num_chip].valid_link_ids[1] =
-								1;
-			num_chip++;
+			mlo_group_info[group_id].chip_info[num_chip].
+				hw_link_ids[0] = link_id;
+			mlo_group_info[group_id].chip_info[num_chip].
+				hw_link_ids[1] = link_id + 1;
+			mlo_group_info[group_id].chip_info[num_chip].
+				valid_link_ids[0] = 1;
+			mlo_group_info[group_id].chip_info[num_chip].
+				valid_link_ids[1] = 1;
+			grp_chip_id[group_id] = grp_chip_id[group_id] + 1;
+			grp_link_id[group_id] = grp_link_id[group_id] + 2;
 		}
-
-		if (num_chip >= CNSS_MAX_MLO_CHIPS)
-			break;
+		mlo_group_info[group_id].num_chips = grp_chip_id[group_id];
 	}
 
-	mlo_group_info.num_chips = num_chip;
 
-	cnss_set_mlo_config(&mlo_group_info, 1);
+	cnss_set_mlo_config(&mlo_group_info[0], group_id + 1);
 	cnss_pr_info("Default MLO configuration is set!");
 }
 

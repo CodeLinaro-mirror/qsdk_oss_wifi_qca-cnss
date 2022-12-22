@@ -27,8 +27,8 @@
 #define CNSS_API_WITH_DEV
 
 #define CNSS_MAX_LINKS_PER_CHIP		2
-#define CNSS_MAX_MLO_CHIPS		3
-#define CNSS_MAX_MLO_GROUPS		1
+#define CNSS_MAX_MLO_CHIPS		4
+#define CNSS_MAX_MLO_GROUPS		2
 
 enum cnss_bus_width_type {
 	CNSS_BUS_WIDTH_NONE,
