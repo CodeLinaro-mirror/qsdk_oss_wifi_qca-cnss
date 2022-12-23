@@ -5689,13 +5689,23 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 	struct cnss_fw_mem *qdss_mem = plat_priv->qdss_mem;
 	int ret, i, skip_count = 0;
 
+	if (test_bit(CNSS_RDDM_IN_PROGRESS, &plat_priv->driver_state)) {
+		cnss_pr_dbg("RAM dump is in progress for PCI%d, skip\n",
+			    plat_priv->pci_slot_id);
+		return;
+	}
+	set_bit(CNSS_RDDM_IN_PROGRESS, &plat_priv->driver_state);
+
 	if (test_bit(CNSS_MHI_RDDM_DONE, &pci_priv->mhi_state)) {
 		cnss_pr_dbg("RAM dump is already collected, skip\n");
+		clear_bit(CNSS_RDDM_IN_PROGRESS, &plat_priv->driver_state);
 		return;
 	}
 
-	if (cnss_pci_check_link_status(pci_priv))
+	if (cnss_pci_check_link_status(pci_priv)) {
+		clear_bit(CNSS_RDDM_IN_PROGRESS, &plat_priv->driver_state);
 		return;
+	}
 
 	plat_priv->target_assert_timestamp = ktime_to_ms(ktime_get());
 
@@ -5709,6 +5719,7 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 			       ret);
 		cnss_pci_dump_qdss_reg(pci_priv);
 		cnss_dump_all_ce_reg(plat_priv);
+		clear_bit(CNSS_RDDM_IN_PROGRESS, &plat_priv->driver_state);
 		return;
 	}
 
@@ -5881,6 +5892,7 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 		plat_priv->ramdump_info_v2.dump_data_valid = true;
 
 	cnss_pci_set_mhi_state(pci_priv, CNSS_MHI_RDDM_DONE);
+	clear_bit(CNSS_RDDM_IN_PROGRESS, &plat_priv->driver_state);
 	complete(&plat_priv->rddm_complete);
 }
 

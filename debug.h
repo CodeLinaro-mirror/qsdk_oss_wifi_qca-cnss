@@ -17,6 +17,7 @@
 #include <linux/printk.h>
 
 #define CNSS_IPC_LOG_PAGES		32
+#define RDDM_DONE_DELAY        100  /* in msecs */
 
 enum cnss_log_level {
 	CNSS_LOG_LEVEL_NONE,
@@ -28,6 +29,7 @@ enum cnss_log_level {
 };
 
 extern int log_level;
+extern int rddm_done_timeout;
 
 extern void *cnss_ipc_log_context;
 extern void *cnss_ipc_log_long_context;
@@ -128,7 +130,8 @@ extern void *cnss_ipc_log_long_context;
 	} while (0)
 
 #define CNSS_ASSERT(_condition) do {					\
-		if (!(_condition)) {					\
+		if (!(_condition) &&					\
+		    cnss_wait_for_rddm_complete(plat_priv)) {		\
 			cnss_dump_qmi_history();			\
 			cnss_pr_err("ASSERT at line %d\n",		\
 				    __LINE__);				\
@@ -146,6 +149,7 @@ extern void *cnss_ipc_log_long_context;
 		}							\
 	} while (0)
 
+bool cnss_wait_for_rddm_complete(struct cnss_plat_data *plat_priv);
 int cnss_debug_init(void);
 void cnss_debug_deinit(void);
 int cnss_debugfs_create(struct cnss_plat_data *plat_priv);
