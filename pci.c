@@ -1131,10 +1131,14 @@ static int cnss_dump_sbl_log(struct cnss_pci_data *pci_priv, u32 log_size,
 {
 	int i = 0;
 	int j = 0;
+	int gfp = GFP_KERNEL;
 	u32 mem_addr = 0;
 	u32 *buf = NULL;
 
-	buf = kzalloc(log_size, GFP_KERNEL);
+	if (in_interrupt() || irqs_disabled())
+		gfp = GFP_ATOMIC;
+
+	buf = kzalloc(log_size, gfp);
 	if (!buf)
 		return -ENOMEM;
 
