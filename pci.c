@@ -665,8 +665,8 @@ static int cnss_pci_reg_read(struct cnss_pci_data *pci_priv,
 	spin_lock_irqsave(&pci_reg_window_lock, flags);
 	cnss_pci_select_window(pci_priv, addr);
 
-	if (addr >= PCIE_LOCAL_REG_BASE && addr <= PCIE_LOCAL_REG_END &&
-		addr >= mhi_region_start_reg && addr <= mhi_region_end_reg) {
+	if ((addr >= PCIE_LOCAL_REG_BASE && addr <= PCIE_LOCAL_REG_END) ||
+		(addr >= mhi_region_start_reg && addr <= mhi_region_end_reg)) {
 		if (addr >= mhi_region_start_reg && addr <= mhi_region_end_reg)
 			addr = addr - mhi_region_start_reg;
 
@@ -715,8 +715,8 @@ static int cnss_pci_reg_write(struct cnss_pci_data *pci_priv, u32 addr,
 	spin_lock_irqsave(&pci_reg_window_lock, flags);
 	cnss_pci_select_window(pci_priv, addr);
 
-	if (addr >= PCIE_LOCAL_REG_BASE && addr <= PCIE_LOCAL_REG_END &&
-		addr >= mhi_region_start_reg && addr <= mhi_region_end_reg) {
+	if ((addr >= PCIE_LOCAL_REG_BASE && addr <= PCIE_LOCAL_REG_END) ||
+		(addr >= mhi_region_start_reg && addr <= mhi_region_end_reg)) {
 		if (addr >= mhi_region_start_reg && addr <= mhi_region_end_reg)
 			addr = addr - mhi_region_start_reg;
 
