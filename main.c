@@ -2083,6 +2083,14 @@ static int cnss_qca8074_notifier_nb(struct notifier_block *nb,
 		if (event_code == CNSS_AFTER_SHUTDOWN) {
 			clear_bit(CNSS_FW_READY, &plat_priv->driver_state);
 			clear_bit(CNSS_FW_MEM_READY, &plat_priv->driver_state);
+			/* FW handles coresight settings for QDSS for all
+			 * targets from 11be family onwards. Hence, clear QDSS
+			 * state to get it started automatically after
+			 * SSR recovery.
+			 */
+			if (plat_priv->device_id == QCA5332_DEVICE_ID)
+				clear_bit(CNSS_QDSS_STARTED,
+					  &plat_priv->driver_state);
 			cnss_bus_free_fw_mem(plat_priv);
 			cnss_bus_free_qdss_mem(plat_priv);
 		}
