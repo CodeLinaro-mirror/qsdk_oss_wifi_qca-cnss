@@ -1,5 +1,5 @@
 /* Copyright (c) 2016-2018, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1072,6 +1072,7 @@ static void cnss_set_global_mlo_support(bool enable)
 		plat_priv = plat_env[i];
 		switch (plat_priv->device_id) {
 		case QCN9224_DEVICE_ID:
+		case QCA5332_DEVICE_ID:
 			plat_priv->mlo_support = enable;
 			break;
 		default:
@@ -1389,8 +1390,11 @@ static int cnss_get_group_id(struct cnss_plat_data *plat_priv)
 	struct device *dev = &plat_priv->plat_dev->dev;
 	int group_id = 0;
 
-	of_property_read_u32(dev->of_node, "group_id",
-			&group_id);
+	if (of_property_read_u32(dev->of_node, "group_id", &group_id)) {
+		cnss_pr_dbg("%s: Group ID not specified in the DTS. Setting the default group ID 0\n",
+			    __func__);
+		group_id = 0;
+	}
 
 	return group_id;
 }
@@ -5480,12 +5484,14 @@ static int cnss_probe(struct platform_device *plat_dev)
 		plat_priv->pci_slot_id = plat_priv->wlfw_service_instance_id -
 						node_id_base;
 		break;
+	case QCA5332_DEVICE_ID:
+		plat_priv->mlo_support = !!enable_mlo_support;
+		/* Fall Through */
 	case QCA8074_DEVICE_ID:
 	case QCA8074V2_DEVICE_ID:
 	case QCA5018_DEVICE_ID:
 	case QCA6018_DEVICE_ID:
 	case QCA9574_DEVICE_ID:
-	case QCA5332_DEVICE_ID:
 		plat_priv->bus_type = CNSS_BUS_AHB;
 		plat_priv->bdf_dnld_method = WLFW_DIRECT_BDF_COPY_V01;
 		plat_priv->wlfw_service_instance_id =
