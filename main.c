@@ -1678,15 +1678,17 @@ void cnss_set_default_mlo_config(void)
 					ch_info->hw_link_ids[k] = link_id + k;
 					ch_info->valid_link_ids[k] = 1;
 				}
+				grp_link_id[group_id] = grp_link_id[group_id] +
+							CNSS_MAX_LINKS_PER_CHIP;
 			} else {
 				ch_info->num_local_links = 1;
 				ch_info->hw_link_ids[0] = link_id;
 				ch_info->valid_link_ids[0] = 1;
 				ch_info->valid_link_ids[1] = 0;
+				grp_link_id[group_id] = grp_link_id[group_id] +
+									1;
 			}
 
-			grp_link_id[group_id] = grp_link_id[group_id] +
-							CNSS_MAX_LINKS_PER_CHIP;
 			grp_chip_id[group_id] = grp_chip_id[group_id] + 1;
 		}
 
