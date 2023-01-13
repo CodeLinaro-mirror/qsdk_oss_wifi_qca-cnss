@@ -1,5 +1,5 @@
 /* Copyright (c) 2016-2018, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -3399,11 +3399,15 @@ int cnss_ahb_alloc_fw_mem(struct cnss_plat_data *plat_priv)
 	unsigned int reg[4], mem_region_reserved_size;
 	u32 caldb_size = 0;
 	struct device *dev;
-	int i, idx, mode;
+	int i, idx, mode, chip_id, group_id = 0;
 	struct device_node *dev_node = NULL;
 	struct device_node *mem_region_node = NULL;
 	phandle mem_region_phandle;
 	struct resource m3_dump;
+	unsigned int mlo_global_mem_size;
+	struct device_node *mlo_global_mem_node = NULL;
+	struct reserved_mem *mlo_mem = NULL;
+	char mlo_node_name[20];
 
 	dev = &plat_priv->plat_dev->dev;
 
@@ -3574,6 +3578,69 @@ int cnss_ahb_alloc_fw_mem(struct cnss_plat_data *plat_priv)
 					fw_mem[i].pa = 0;
 					CNSS_ASSERT(0);
 					return -ENOMEM;
+				}
+			}
+			idx++;
+			break;
+		case QMI_WLFW_MLO_GLOBAL_MEM_V01:
+			group_id = plat_priv->mlo_group_info->group_id;
+			snprintf(mlo_node_name, sizeof(mlo_node_name),
+				 "mlo_global_mem_%d", group_id);
+			mlo_global_mem_node =
+				of_find_node_by_name(NULL, mlo_node_name);
+			if (!mlo_global_mem_node) {
+				cnss_pr_err("could not get mlo_global_mem_node\n");
+				CNSS_ASSERT(0);
+				return -ENOMEM;
+			}
+
+			mlo_mem = of_reserved_mem_lookup(mlo_global_mem_node);
+			if (!mlo_mem) {
+				cnss_pr_err("%s: Unable to get mlo_mem",
+					    __func__);
+				of_node_put(mlo_global_mem_node);
+				CNSS_ASSERT(0);
+				return -ENOMEM;
+			}
+
+			of_node_put(mlo_global_mem_node);
+
+			mlo_global_mem_size = mlo_mem->size;
+
+			if (fw_mem[i].size > mlo_global_mem_size) {
+				cnss_pr_err("Error: Need more memory 0x%x\n",
+					    (unsigned int)fw_mem[i].size);
+				CNSS_ASSERT(0);
+				return -ENOMEM;
+			}
+
+			if (fw_mem[i].size < mlo_global_mem_size) {
+				cnss_pr_err("WARNING: More MLO global memory is reserved. Reserved size 0x%x, Requested size 0x%x.\n",
+					    mlo_global_mem_size,
+					    (unsigned int)fw_mem[i].size);
+			}
+
+			fw_mem[i].pa = mlo_mem->base;
+			if (!mlo_global_mem[group_id])
+				mlo_global_mem[group_id] = ioremap(fw_mem[i].pa,
+							 fw_mem[i].size);
+
+			fw_mem[i].va = mlo_global_mem[group_id];
+
+			fw_mem[idx].pa = fw_mem[i].pa;
+			fw_mem[idx].va = fw_mem[i].va;
+			fw_mem[idx].size = fw_mem[i].size;
+			fw_mem[idx].type = fw_mem[i].type;
+
+			if (!mlo_global_mem[group_id]) {
+				cnss_pr_err("WARNING: Host DDR remap failed\n");
+			} else {
+				chip_id = cnss_get_mlo_chip_id(dev);
+				if (chip_id == 0 &&
+				    !test_bit(CNSS_DRIVER_RECOVERY,
+					      &plat_priv->driver_state)) {
+					memset_io(mlo_global_mem[group_id], 0,
+						  fw_mem[i].size);
 				}
 			}
 			idx++;
