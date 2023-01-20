@@ -675,7 +675,7 @@ static void cnss_plat_ipc_qmi_disconnect_cb(struct qmi_handle *handle,
 		if (qmi_client[i].client_connected &&
 		    qmi_client[i].client_sq.sq_node == node &&
 		    qmi_client[i].client_sq.sq_port == port) {
-			cnss_pr_err("%s: QMI client disconnect. QMI Socket Node:%d Port:%d ID: %d\n",
+			cnss_pr_dbg("%s: QMI client disconnect. QMI Socket Node:%d Port:%d ID: %d\n",
 				    __func__, node, port, i);
 			qmi_client[i].client_sq.sq_node = 0;
 			qmi_client[i].client_sq.sq_port = 0;

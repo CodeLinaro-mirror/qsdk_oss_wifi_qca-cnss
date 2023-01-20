@@ -135,6 +135,9 @@ static int cnss_stats_show_state(struct seq_file *s,
 		case CNSS_RECOVERY_WAIT_FOR_DRIVER:
 			seq_puts(s, "CNSS_RECOVERY_WAIT_FOR_DRIVER");
 			continue;
+		case CNSS_RDDM_IN_PROGRESS:
+			seq_puts(s, "RDDM_IN_PROGRESS");
+			continue;
 		}
 
 		seq_printf(s, "UNKNOWN-%d", i);
@@ -1069,4 +1072,30 @@ void cnss_debug_deinit(void)
 		ipc_log_context_destroy(cnss_ipc_log_context);
 		cnss_ipc_log_context = NULL;
 	}
+}
+
+bool cnss_wait_for_rddm_complete(struct cnss_plat_data *plat_priv)
+{
+	int count = 0;
+
+	if (!plat_priv)
+		return true;
+
+	if (test_bit(CNSS_RDDM_IN_PROGRESS, &plat_priv->driver_state)) {
+		cnss_pr_dbg("Waiting for RDDM collection for device 0x%lx\n",
+			      plat_priv->device_id);
+		while (test_bit(CNSS_RDDM_IN_PROGRESS,
+		       &plat_priv->driver_state)) {
+			msleep(RDDM_DONE_DELAY);
+			if (count++ > rddm_done_timeout * 10) {
+				cnss_pr_err("RDDM collection timed-out %d seconds\n",
+					    rddm_done_timeout);
+				CNSS_ASSERT(0);
+			}
+		}
+		cnss_pr_dbg("RDDM collection wait ended for device 0x%lx\n",
+			     plat_priv->device_id);
+	}
+
+	return true;
 }

@@ -1,5 +1,5 @@
 /* Copyright (c) 2016-2018, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -83,6 +83,7 @@ struct cnss_plat_data *plat_env[MAX_NUMBER_OF_SOCS];
 int plat_env_index;
 struct cnss_mlo_group_info g_mlo_group_info[CNSS_MAX_MLO_GROUPS];
 static DEFINE_SPINLOCK(plat_env_spinlock);
+static DEFINE_SPINLOCK(rddm_spinlock);
 
 #ifdef CONFIG_CNSS2_PM
 static DECLARE_RWSEM(cnss_pm_sem);
@@ -164,15 +165,20 @@ MODULE_PARM_DESC(enable_intx_bmap, "enable_intx_bmap");
 				defined(CONFIG_CNSS2_KERNEL_MSM)
 static int fw_ready_timeout = 60;
 static int cold_boot_cal_timeout = 180;
+int rddm_done_timeout = 30;
 #else
 static int fw_ready_timeout = 15;
 static int cold_boot_cal_timeout = 60;
+int rddm_done_timeout = 15;
 #endif
 module_param(fw_ready_timeout, int, 0644);
 MODULE_PARM_DESC(fw_ready_timeout, "fw ready timeout in seconds");
 
 module_param(cold_boot_cal_timeout, int, 0644);
 MODULE_PARM_DESC(cold_boot_cal_timeout, "Cold boot cal timeout in seconds");
+
+module_param(rddm_done_timeout, int, 0644);
+MODULE_PARM_DESC(rddm_done_timeout, "RDDM collection timeout in seconds");
 
 static int soc_version_major;
 module_param(soc_version_major, int, 0444);
@@ -234,6 +240,9 @@ struct cnss_driver_event {
 /* M3 Dump related global structures/variables */
 static int m3_dump_major;
 static struct class *m3_dump_class;
+
+uint8_t rddm_dump_all;
+uint8_t rddm_count;
 
 atomic_t cal_in_progress_count;
 
@@ -1063,6 +1072,7 @@ static void cnss_set_global_mlo_support(bool enable)
 		plat_priv = plat_env[i];
 		switch (plat_priv->device_id) {
 		case QCN9224_DEVICE_ID:
+		case QCA5332_DEVICE_ID:
 			plat_priv->mlo_support = enable;
 			break;
 		default:
@@ -1285,6 +1295,66 @@ int cnss_get_num_mlo_capable_devices(unsigned int *device_id, int num_elements)
 }
 EXPORT_SYMBOL(cnss_get_num_mlo_capable_devices);
 
+int cnss_get_num_mlo_groups(void)
+{
+	struct cnss_plat_data *plat_priv = NULL;
+	int num_mlo_grp = 0;
+	int i;
+	int group_count = 0;
+
+	if (!enable_mlo_support)
+		return 0;
+
+	for (i = 0; i < plat_env_index; i++) {
+		plat_priv = plat_env[i];
+
+		if (!plat_priv) {
+			cnss_pr_err("%s: Failed to get plat_priv for soc_id %d",
+				    __func__, i);
+			continue;
+		}
+
+		if (!plat_priv->mlo_capable ||
+		    ((plat_priv->bus_type == CNSS_BUS_PCI) &&
+		     !plat_priv->pci_dev)) {
+			continue;
+		}
+
+		group_count = plat_priv->mlo_group_info->group_id;
+		if (group_count > num_mlo_grp)
+			num_mlo_grp = group_count;
+	}
+
+	return ++num_mlo_grp;
+}
+EXPORT_SYMBOL(cnss_get_num_mlo_groups);
+
+int cnss_get_mlo_group_id(struct device *dev)
+{
+	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
+
+	if (!plat_priv || !plat_priv->mlo_support)
+		return -EINVAL;
+
+	if (!plat_priv->mlo_capable || !plat_priv->mlo_chip_info)
+		return -EINVAL;
+
+	return plat_priv->mlo_chip_info->group_id;
+}
+EXPORT_SYMBOL(cnss_get_mlo_group_id);
+
+bool cnss_get_mlo_group_info(uint8_t grp_id,
+			struct cnss_mlo_group_info *grp_info)
+{
+	if (grp_id < 0 && grp_id >= CNSS_MAX_MLO_GROUPS)
+		return false;
+	memcpy(grp_info, &g_mlo_group_info[grp_id],
+		sizeof(struct cnss_mlo_group_info));
+
+	return true;
+}
+EXPORT_SYMBOL(cnss_get_mlo_group_info);
+
 int cnss_get_dev_link_ids(struct device *dev, u8 *link_ids, int max_elements)
 {
 	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
@@ -1315,19 +1385,33 @@ int cnss_get_dev_link_ids(struct device *dev, u8 *link_ids, int max_elements)
 }
 EXPORT_SYMBOL(cnss_get_dev_link_ids);
 
+static int cnss_get_group_id(struct cnss_plat_data *plat_priv)
+{
+	struct device *dev = &plat_priv->plat_dev->dev;
+	int group_id = 0;
+
+	if (of_property_read_u32(dev->of_node, "group_id", &group_id)) {
+		cnss_pr_dbg("%s: Group ID not specified in the DTS. Setting the default group ID 0\n",
+			    __func__);
+		group_id = 0;
+	}
+
+	return group_id;
+}
+
 /* Temporary API to set default MLO config, will be removed once driver starts
  * setting MLO config via PLD.
  */
 static void cnss_set_default_mlo_config(void)
 {
-	struct cnss_mlo_group_info mlo_group_info;
+	struct cnss_mlo_group_info mlo_group_info[CNSS_MAX_MLO_GROUPS];
 	struct cnss_plat_data *plat_priv = NULL;
-	int num_chip = 0, i = 0, link_id = 0;
+	int num_chip = 0, i = 0, link_id = 0, group_id = 0;
+	int grp_chip_id[CNSS_MAX_MLO_GROUPS] = {0};
+	int grp_link_id[CNSS_MAX_MLO_GROUPS] = {0};
 
 	memset(&mlo_group_info, 0, sizeof(struct cnss_mlo_group_info));
 
-	mlo_group_info.group_id = 0;
-	mlo_group_info.max_num_peers = 256;
 
 	for (i = 0; i < plat_env_index; i++) {
 		plat_priv = cnss_get_plat_priv_by_soc_id(i);
@@ -1342,37 +1426,48 @@ static void cnss_set_default_mlo_config(void)
 		     !plat_priv->pci_dev))
 			continue;
 
+		group_id = cnss_get_group_id(plat_priv);
+		if (group_id < 0 && group_id >= CNSS_MAX_MLO_GROUPS) {
+			cnss_pr_err("%s: Invalid group id: %d", __func__,
+				    group_id);
+			return;
+		}
+		mlo_group_info[group_id].group_id = group_id;
+		mlo_group_info[group_id].max_num_peers = 256;
 		if (mlo_chip_bitmask & (1 << i)) {
 			/*Temporarily Hard coding group id as 0 */
-			mlo_group_info.chip_info[num_chip].group_id = 0;
-			mlo_group_info.chip_info[num_chip].soc_id = i;
-			mlo_group_info.chip_info[num_chip].chip_id = num_chip;
+			num_chip = grp_chip_id[group_id];
+			link_id = grp_link_id[group_id];
+
+			mlo_group_info[group_id].chip_info[num_chip].group_id =
+				group_id;
+			mlo_group_info[group_id].chip_info[num_chip].soc_id = i;
+			mlo_group_info[group_id].chip_info[num_chip].chip_id =
+				num_chip;
 
 			if (plat_priv->firmware_type == CNSS_FW_DUAL_MAC)
-				mlo_group_info.chip_info[num_chip].
-							num_local_links = 2;
+				mlo_group_info[group_id].chip_info[num_chip].
+					num_local_links = 2;
 			else
-				mlo_group_info.chip_info[num_chip].
-							num_local_links = 1;
+				mlo_group_info[group_id].chip_info[num_chip].
+					num_local_links = 1;
 
-			mlo_group_info.chip_info[num_chip].hw_link_ids[0] =
-								link_id++;
-			mlo_group_info.chip_info[num_chip].hw_link_ids[1] =
-								link_id++;
-			mlo_group_info.chip_info[num_chip].valid_link_ids[0] =
-								1;
-			mlo_group_info.chip_info[num_chip].valid_link_ids[1] =
-								1;
-			num_chip++;
+			mlo_group_info[group_id].chip_info[num_chip].
+				hw_link_ids[0] = link_id;
+			mlo_group_info[group_id].chip_info[num_chip].
+				hw_link_ids[1] = link_id + 1;
+			mlo_group_info[group_id].chip_info[num_chip].
+				valid_link_ids[0] = 1;
+			mlo_group_info[group_id].chip_info[num_chip].
+				valid_link_ids[1] = 1;
+			grp_chip_id[group_id] = grp_chip_id[group_id] + 1;
+			grp_link_id[group_id] = grp_link_id[group_id] + 2;
 		}
-
-		if (num_chip >= CNSS_MAX_MLO_CHIPS)
-			break;
+		mlo_group_info[group_id].num_chips = grp_chip_id[group_id];
 	}
 
-	mlo_group_info.num_chips = num_chip;
 
-	cnss_set_mlo_config(&mlo_group_info, 1);
+	cnss_set_mlo_config(&mlo_group_info[0], group_id + 1);
 	cnss_pr_info("Default MLO configuration is set!");
 }
 
@@ -1992,6 +2087,14 @@ static int cnss_qca8074_notifier_nb(struct notifier_block *nb,
 		if (event_code == CNSS_AFTER_SHUTDOWN) {
 			clear_bit(CNSS_FW_READY, &plat_priv->driver_state);
 			clear_bit(CNSS_FW_MEM_READY, &plat_priv->driver_state);
+			/* FW handles coresight settings for QDSS for all
+			 * targets from 11be family onwards. Hence, clear QDSS
+			 * state to get it started automatically after
+			 * SSR recovery.
+			 */
+			if (plat_priv->device_id == QCA5332_DEVICE_ID)
+				clear_bit(CNSS_QDSS_STARTED,
+					  &plat_priv->driver_state);
 			cnss_bus_free_fw_mem(plat_priv);
 			cnss_bus_free_qdss_mem(plat_priv);
 		}
@@ -2867,6 +2970,7 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 {
 	struct cnss_subsys_info *subsys_info =
 		&plat_priv->subsys_info;
+	unsigned long rddm_lock;
 
 	plat_priv->recovery_count++;
 
@@ -2886,6 +2990,11 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 		break;
 	case CNSS_REASON_RDDM:
 		cnss_bus_collect_dump_info(plat_priv, false);
+		if (enable_mlo_support && !plat_priv->recovery_enabled) {
+			spin_lock_irqsave(&rddm_spinlock, rddm_lock);
+			rddm_dump_all++;
+			spin_unlock_irqrestore(&rddm_spinlock, rddm_lock);
+		}
 		break;
 	case CNSS_REASON_DEFAULT:
 	case CNSS_REASON_TIMEOUT:
@@ -2908,6 +3017,9 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 		 */
 		if (ramdump_enabled)
 			cnss_bus_dev_ramdump(plat_priv);
+
+		if (enable_mlo_support && rddm_count != rddm_dump_all)
+			return 0;
 
 		cnss_pci_update_status(plat_priv->bus_priv, CNSS_FW_DOWN);
 	}
@@ -3024,6 +3136,11 @@ void cnss_schedule_recovery(struct device *dev,
 	struct cnss_recovery_data *data;
 	int gfp = GFP_KERNEL;
 
+	if (!plat_priv) {
+		pr_err("plat_priv is NULL\n");
+		return;
+	}
+
 	if (test_bit(CNSS_DRIVER_UNLOADING, &plat_priv->driver_state) ||
 	    test_bit(CNSS_DRIVER_IDLE_SHUTDOWN, &plat_priv->driver_state)) {
 		cnss_pr_dbg("Driver unload or idle shutdown is in progress, ignore schedule recovery\n");
@@ -3037,6 +3154,10 @@ void cnss_schedule_recovery(struct device *dev,
 	data = kzalloc(sizeof(*data), gfp);
 	if (!data)
 		return;
+
+	if (enable_mlo_support && (reason == CNSS_REASON_RDDM) &&
+	    !plat_priv->recovery_enabled)
+		rddm_count++;
 
 	data->reason = reason;
 	cnss_driver_event_post(plat_priv,
@@ -5363,12 +5484,14 @@ static int cnss_probe(struct platform_device *plat_dev)
 		plat_priv->pci_slot_id = plat_priv->wlfw_service_instance_id -
 						node_id_base;
 		break;
+	case QCA5332_DEVICE_ID:
+		plat_priv->mlo_support = !!enable_mlo_support;
+		/* Fall Through */
 	case QCA8074_DEVICE_ID:
 	case QCA8074V2_DEVICE_ID:
 	case QCA5018_DEVICE_ID:
 	case QCA6018_DEVICE_ID:
 	case QCA9574_DEVICE_ID:
-	case QCA5332_DEVICE_ID:
 		plat_priv->bus_type = CNSS_BUS_AHB;
 		plat_priv->bdf_dnld_method = WLFW_DIRECT_BDF_COPY_V01;
 		plat_priv->wlfw_service_instance_id =
