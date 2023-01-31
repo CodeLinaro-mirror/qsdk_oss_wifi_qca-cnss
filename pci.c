@@ -4597,7 +4597,7 @@ int cnss_get_soc_info(struct device *dev, struct cnss_soc_info *info)
 		plat_priv->device_id == QCN9160_DEVICE_ID) {
 		info->va = plat_priv->tgt_data.bar_addr_va;
 		info->pa = (phys_addr_t)plat_priv->tgt_data.bar_addr_pa;
-	} else {
+	} else if (plat_priv->device_id != QCA5332_DEVICE_ID) {
 		struct cnss_pci_data *pci_priv =
 				cnss_get_pci_priv(to_pci_dev(dev));
 
