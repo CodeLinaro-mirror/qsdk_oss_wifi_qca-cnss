@@ -1911,8 +1911,10 @@ int cnss_ahb_update_status(struct cnss_plat_data *plat_priv,
 	}
 
 	driver_ops = plat_priv->driver_ops;
-	if (!driver_ops || !driver_ops->update_status)
+	if (!driver_ops || !driver_ops->update_status) {
+		cnss_pr_err("%s: driver_ops is NULL", __func__);
 		return -EINVAL;
+	}
 
 	cnss_pr_dbg("Update driver status: %d\n", status);
 
@@ -1936,8 +1938,10 @@ int cnss_pci_update_status(struct cnss_pci_data *pci_priv,
 
 	plat_priv = pci_priv->plat_priv;
 	driver_ops = pci_priv->driver_ops;
-	if (!driver_ops || !driver_ops->update_status)
+	if (!driver_ops || !driver_ops->update_status) {
+		cnss_pr_err("%s: driver_ops is NULL", __func__);
 		return -EINVAL;
+	}
 
 	cnss_pr_dbg("Update driver status: %d\n", status);
 
