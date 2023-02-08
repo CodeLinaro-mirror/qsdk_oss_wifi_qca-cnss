@@ -3372,6 +3372,8 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 	struct cnss_subsys_info *subsys_info =
 		&plat_priv->subsys_info;
 	unsigned long rddm_lock;
+	struct cnss_pci_data *pci_priv = NULL;
+	int ret = 0;
 
 	plat_priv->recovery_count++;
 
@@ -3423,7 +3425,18 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 		if (plat_priv->mlo_support && rddm_count != rddm_dump_all)
 			return 0;
 
-		cnss_bus_update_status(plat_priv, CNSS_FW_DOWN);
+		ret = cnss_bus_update_status(plat_priv, CNSS_FW_DOWN);
+		if (ret) {
+			/* Call CNSS_ASSERT if fatal call is missed in down
+			 * path. Target assert can happen in down path and
+			 * fatal is not called since the driver_ops is NULL.
+			 */
+			pci_priv = plat_priv->bus_priv;
+			if ((plat_priv->bus_type == CNSS_BUS_PCI) && pci_priv)
+				plat_priv = pci_priv->plat_priv;
+
+			CNSS_ASSERT(0);
+		}
 	}
 
 #ifdef CONFIG_CNSS2_KERNEL_SSR_FRAMEWORK
