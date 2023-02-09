@@ -1332,6 +1332,8 @@ int cnss_set_mlo_config(struct cnss_module_param *modparam,
 
 			cnss_pr_info("%s: Dynamic MLO Config updated for %s",
 				     __func__, plat_priv->device_name);
+			if (mlo_group_info->num_chips == num_chip)
+				break;
 		}
 		cnss_set_adj_mlo_chips(mlo_group_info);
 	}
