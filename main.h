@@ -474,6 +474,7 @@ struct cnss_control_params {
 	unsigned int qmi_timeout;
 	unsigned int bdf_type;
 	unsigned int time_sync_period;
+	unsigned int board_id;
 };
 
 struct cnss_cpr_info {
@@ -742,5 +743,6 @@ const char *cnss_get_fw_path(struct cnss_plat_data *plat_priv);
 int cnss_cal_file_download_to_mem(struct cnss_plat_data *plat_priv,
 				  u32 *cal_file_size);
 struct cnss_plat_data *cnss_get_plat_priv_by_chip_id(int chip_id);
+int cnss_set_fw_type_and_name(struct cnss_plat_data *plat_priv);
 
 #endif /* _CNSS_MAIN_H */
