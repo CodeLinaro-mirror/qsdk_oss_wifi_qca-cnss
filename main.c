@@ -2207,8 +2207,11 @@ static int cnss_qca8074_notifier_atomic_nb(struct notifier_block *nb,
 {
 	struct cnss_plat_data *plat_priv =
 		container_of(nb, struct cnss_plat_data, modem_atomic_nb);
+	struct cnss_subsys_info *subsys_info = &plat_priv->subsys_info;
+	struct rproc *rproc;
 	struct cnss_wlan_driver *driver_ops;
 	int event_code = cnss_get_event(code, plat_priv);
+	enum cnss_recovery_reason cnss_reason;
 	driver_ops = plat_priv->driver_ops;
 
 	if (event_code < 0)
@@ -2222,9 +2225,14 @@ static int cnss_qca8074_notifier_atomic_nb(struct notifier_block *nb,
 			    cnss_get_plat_env_index_from_plat_priv(plat_priv));
 		plat_priv->target_asserted = 1;
 		plat_priv->target_assert_timestamp = ktime_to_ms(ktime_get());
-		driver_ops->fatal((struct pci_dev *)plat_priv->plat_dev,
-				  (const struct pci_device_id *)
-				  plat_priv->plat_dev_id);
+		if (plat_priv->recovery_enabled)
+			cnss_bus_update_status(plat_priv, CNSS_FW_DOWN);
+		cnss_reason = CNSS_REASON_FATAL_SHUTDOWN;
+		if (plat_priv->mlo_support) {
+			rproc = subsys_info->subsys_handle;
+			rproc_stop(rproc, true);
+		}
+		cnss_schedule_recovery(&plat_priv->plat_dev->dev, cnss_reason);
 	}
 
 	return NOTIFY_OK;
@@ -3192,6 +3200,8 @@ static const char *cnss_recovery_reason_to_str(enum cnss_recovery_reason reason)
 		return "RDDM";
 	case CNSS_REASON_TIMEOUT:
 		return "TIMEOUT";
+	case CNSS_REASON_FATAL_SHUTDOWN:
+		return "FATAL_SHUTDOWN";
 	}
 
 	return "UNKNOWN";
@@ -3221,8 +3231,10 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 			goto self_recovery;
 		break;
 	case CNSS_REASON_RDDM:
-		cnss_bus_collect_dump_info(plat_priv, false);
-		if (enable_mlo_support && !plat_priv->recovery_enabled) {
+	case CNSS_REASON_FATAL_SHUTDOWN:
+		if (plat_priv->bus_type == CNSS_BUS_PCI)
+			cnss_bus_collect_dump_info(plat_priv, false);
+		if (plat_priv->mlo_support && !plat_priv->recovery_enabled) {
 			spin_lock_irqsave(&rddm_spinlock, rddm_lock);
 			rddm_dump_all++;
 			spin_unlock_irqrestore(&rddm_spinlock, rddm_lock);
@@ -3249,11 +3261,10 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 		 */
 		if (ramdump_enabled)
 			cnss_bus_dev_ramdump(plat_priv);
-
-		if (enable_mlo_support && rddm_count != rddm_dump_all)
+		if (plat_priv->mlo_support && rddm_count != rddm_dump_all)
 			return 0;
 
-		cnss_pci_update_status(plat_priv->bus_priv, CNSS_FW_DOWN);
+		cnss_bus_update_status(plat_priv, CNSS_FW_DOWN);
 	}
 
 #ifdef CONFIG_CNSS2_KERNEL_SSR_FRAMEWORK
@@ -3282,8 +3293,9 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 				       CNSS_DRIVER_EVENT_RAMDUMP_DONE,
 				       0, NULL);
 	} else {
-		rproc_report_crash(subsys_info->subsys_handle,
-				   RPROC_FATAL_ERROR);
+		if (plat_priv->bus_type == CNSS_BUS_PCI)
+			rproc_report_crash(subsys_info->subsys_handle,
+					RPROC_FATAL_ERROR);
 	}
 
 #endif
@@ -3387,8 +3399,9 @@ void cnss_schedule_recovery(struct device *dev,
 	if (!data)
 		return;
 
-	if (enable_mlo_support && (reason == CNSS_REASON_RDDM) &&
-	    !plat_priv->recovery_enabled)
+	if (plat_priv->mlo_support &&  ((reason == CNSS_REASON_RDDM) ||
+				(reason == CNSS_REASON_FATAL_SHUTDOWN)) &&
+				!plat_priv->recovery_enabled)
 		rddm_count++;
 
 	data->reason = reason;
@@ -4167,8 +4180,14 @@ static void cnss_driver_event_work(struct work_struct *work)
 							    event->data);
 			break;
 		case CNSS_DRIVER_EVENT_RAMDUMP_DONE:
-			ret = cnss_qcn9000_notifier_nb(&plat_priv->modem_nb,
-						       CNSS_RAMDUMP_DONE, NULL);
+			if (plat_priv->bus_type == CNSS_BUS_AHB)
+				ret = cnss_qca8074_notifier_nb(
+						&plat_priv->modem_nb,
+						CNSS_RAMDUMP_DONE, NULL);
+			else
+				ret = cnss_qcn9000_notifier_nb(
+						&plat_priv->modem_nb,
+						CNSS_RAMDUMP_DONE, NULL);
 			break;
 		default:
 			cnss_pr_err("Invalid driver event type: %d",

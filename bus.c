@@ -530,6 +530,8 @@ int cnss_bus_update_status(struct cnss_plat_data *plat_priv,
 	switch (plat_priv->bus_type) {
 	case CNSS_BUS_PCI:
 		return cnss_pci_update_status(plat_priv->bus_priv, status);
+	case CNSS_BUS_AHB:
+		return cnss_ahb_update_status(plat_priv, status);
 	default:
 		cnss_pr_err("Unsupported bus type: %d\n",
 			    plat_priv->bus_type);
