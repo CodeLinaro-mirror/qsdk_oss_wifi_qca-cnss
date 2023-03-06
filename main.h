@@ -570,6 +570,7 @@ struct cnss_plat_data {
 	void *pci_dev_id;
 	void *bus_priv;
 	void *rproc_handle;
+	void *rproc_rpd_handle;
 	int qrtr_node_id;
 	int userpd_id;
 	int pci_slot_id;
@@ -586,6 +587,7 @@ struct cnss_plat_data {
 	struct cnss_esoc_info esoc_info;
 	struct cnss_bus_bw_info bus_bw_info;
 	struct notifier_block modem_nb;
+	struct notifier_block rpd_nb;
 	struct cnss_platform_cap cap;
 	struct pm_qos_request qos_request;
 	struct cnss_device_version device_version;
@@ -596,8 +598,11 @@ struct cnss_plat_data {
 	unsigned long driver_state;
 	struct list_head event_list;
 	spinlock_t event_lock; /* spinlock for driver work event handling */
+	spinlock_t recovery_lock; /* spinlock for driver work event handling */
 	struct work_struct event_work;
+	struct work_struct recovery_work;
 	struct workqueue_struct *event_wq;
+	struct workqueue_struct *recovery_wq;
 	struct work_struct cal_work;
 	struct qmi_handle qmi_wlfw;
 	struct sockaddr_qrtr sq;
@@ -626,6 +631,7 @@ struct cnss_plat_data {
 	unsigned int wlfw_service_instance_id;
 	unsigned int service_id;
 	struct notifier_block modem_atomic_nb;
+	struct notifier_block rpd_atomic_nb;
 	struct completion cal_complete;
 	struct mutex dev_lock; /* mutex for register access through debugfs */
 	u32 device_freq_hz;
@@ -679,6 +685,7 @@ struct cnss_plat_data {
 	bool rd_dev_present;
 	bool mlo_default_cfg;
 	struct cnss_mlo_chip_info *adj_mlo_chip_info[CNSS_MAX_ADJ_CHIPS];
+	enum cnss_recovery_reason reason;
 };
 
 #ifdef CONFIG_ARCH_QCOM
