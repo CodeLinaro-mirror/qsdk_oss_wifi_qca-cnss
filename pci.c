@@ -264,6 +264,11 @@ static DEFINE_SPINLOCK(qdss_lock);
 
 #define QCN9224_PCIE_PCIE_MHI_TIME_LOW          0x1E0EB28
 #define QCN9224_PCIE_PCIE_MHI_TIME_HIGH         0x1E0EB2C
+#define QCN9224_PCIE_PCIE_LOCAL_REG_REMAP_BAR_CTRL	0x1E0310C
+#define QCN9224_WLAON_SOC_RESET_CAUSE_SHADOW_REG	0x1F80718
+#define QCN9224_PCIE_PCIE_PARF_LTSSM			0x1E081B0
+#define QCN9224_PCIE_TYPE0_STATUS_COMMAND_REG		0x1E1E004
+#define QCN9224_GCC_RAMSS_CBCR				0x1E38200
 
 #define SHADOW_REG_INTER_COUNT			43
 #define QCA6390_PCIE_SHADOW_REG_INTER_0		0x1E05000
@@ -1175,6 +1180,11 @@ static void cnss_pci_dump_bl_sram_mem(struct cnss_pci_data *pci_priv)
 	struct sbl_reg_addr sbl_data = {0};
 	struct pbl_reg_addr pbl_data = {0};
 	struct mhi_controller *mhi_ctrl = pci_priv->mhi_ctrl;
+	u32 remap_bar_ctrl = 0;
+	u32 soc_rc_shadow_reg = 0;
+	u32 parf_ltssm = 0;
+	u32 type0_status_cmd_reg = 0;
+	u32 gcc_ramss_cbcr = 0;
 
 	switch (plat_priv->device_id) {
 	case QCN9000_DEVICE_ID:
@@ -1205,6 +1215,26 @@ static void cnss_pci_dump_bl_sram_mem(struct cnss_pci_data *pci_priv)
 		pbl_data.tcsr_pbl_logging_reg = QCN9224_TCSR_PBL_LOGGING_REG;
 		pbl_data.pbl_wlan_boot_cfg = QCN9224_PBL_WLAN_BOOT_CFG;
 		pbl_data.pbl_bootstrap_status = QCN9224_PBL_BOOTSTRAP_STATUS;
+		cnss_pci_reg_read(pci_priv,
+				  QCN9224_PCIE_PCIE_LOCAL_REG_REMAP_BAR_CTRL,
+				  &remap_bar_ctrl);
+		cnss_pci_reg_read(pci_priv,
+				  QCN9224_WLAON_SOC_RESET_CAUSE_SHADOW_REG,
+				  &soc_rc_shadow_reg);
+		cnss_pci_reg_read(pci_priv,
+				  QCN9224_PCIE_PCIE_PARF_LTSSM,
+				  &parf_ltssm);
+		cnss_pci_reg_read(pci_priv,
+				  QCN9224_PCIE_TYPE0_STATUS_COMMAND_REG,
+				  &type0_status_cmd_reg);
+		cnss_pci_reg_read(pci_priv,
+				  QCN9224_GCC_RAMSS_CBCR,
+				  &gcc_ramss_cbcr);
+		cnss_pr_err("%s: LOCAL_REG_REMAP_BAR_CTRL: 0x%08x, WLAON_SOC_RESET_CAUSE_SHADOW_REG: 0x%08x, PARF_LTSSM: 0x%08x\n",
+			     __func__, remap_bar_ctrl, soc_rc_shadow_reg,
+			    parf_ltssm);
+		cnss_pr_err("%s: TYPE0_STATUS_COMMAND_REG: 0x%08x, GCC_RAMSS_CBCR: 0x%08x\n",
+			    __func__, type0_status_cmd_reg, gcc_ramss_cbcr);
 		break;
 	default:
 		cnss_pr_err("Unknown device type 0x%lx\n",
