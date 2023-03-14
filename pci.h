@@ -30,6 +30,9 @@
 #include <linux/msm_pcie.h>
 #endif
 #include <linux/pci.h>
+#ifdef CONFIG_CNSS2_KERNEL_5_15
+#include <linux/mhi_misc.h>
+#endif
 
 #include "main.h"
 
