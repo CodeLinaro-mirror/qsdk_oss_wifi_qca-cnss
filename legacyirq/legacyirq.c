@@ -458,7 +458,6 @@ static const struct file_operations cnss_statdebug_debug_fops = {
 
 static int qcom_qcn9224_probe(struct platform_device *pdev)
 {
-	int ret;
 	struct device_node *n, *irqnode = NULL;
 	u32 node_id = 0;
 	struct legacy2virtual_irqdata *lvirq;
@@ -476,9 +475,11 @@ static int qcom_qcn9224_probe(struct platform_device *pdev)
 
 	snprintf(name, sizeof(name), "qcnvic%d", node_id - QCN9224_0);
 	lvirq->irq_root_dentry = debugfs_create_dir(name, 0);
-	if (IS_ERR(lvirq->irq_root_dentry))
-		ret = PTR_ERR(lvirq->irq_root_dentry);
-
+	if (IS_ERR(lvirq->irq_root_dentry)) {
+		pr_err("failed to create debugfs directory(0x%lx)\n",
+			PTR_ERR(lvirq->irq_root_dentry));
+		return (int)PTR_ERR(lvirq->irq_root_dentry);
+	}
 	debugfs_create_file("statdebug", 0600, lvirq->irq_root_dentry, lvirq,
 			    &cnss_statdebug_debug_fops);
 

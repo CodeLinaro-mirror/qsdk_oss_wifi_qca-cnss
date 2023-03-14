@@ -2859,9 +2859,15 @@ int cnss_wlfw_device_info_send_sync(struct cnss_plat_data *plat_priv)
 	plat_priv->tgt_data.bar_addr_pa = resp->bar_addr;
 	plat_priv->tgt_data.bar_size = resp->bar_size;
 
+#ifdef CONFIG_CNSS2_KERNEL_5_15
+	plat_priv->tgt_data.bar_addr_va =
+		ioremap(plat_priv->tgt_data.bar_addr_pa,
+			plat_priv->tgt_data.bar_size);
+#else
 	plat_priv->tgt_data.bar_addr_va =
 		ioremap_nocache(plat_priv->tgt_data.bar_addr_pa,
 				plat_priv->tgt_data.bar_size);
+#endif
 
 	if (!plat_priv->tgt_data.bar_addr_va) {
 		cnss_pr_err("Ioremap failed for bar address\n");

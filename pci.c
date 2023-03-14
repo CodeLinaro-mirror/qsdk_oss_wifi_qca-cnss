@@ -19,7 +19,6 @@
 #include <linux/of.h>
 #include <linux/pm_runtime.h>
 #include <linux/completion.h>
-#include <soc/qcom/ramdump.h>
 #include <linux/of_address.h>
 #include <linux/of_reserved_mem.h>
 #ifdef CONFIG_CNSS2_DMA_ALLOC
@@ -37,6 +36,12 @@
 #include "pci.h"
 #include "bus.h"
 #include "legacyirq/legacyirq.h"
+#ifdef CONFIG_CNSS2_KERNEL_5_15
+#include <linux/devcoredump.h>
+#include <linux/elf.h>
+#else
+#include <soc/qcom/ramdump.h>
+#endif
 
 /* pciX_num_msi_bmap needs to be defined in format of 0xDPCEQM
  * where 0xDP denotes the number of MSIs available for DP, 0xCE denotes
@@ -399,7 +404,7 @@ static struct cnss_pci_reg qdss_csr[] = {
 	{ NULL },
 };
 
-#ifdef CONFIG_CNSS2_KERNEL_IPQ
+#if defined(CONFIG_CNSS2_KERNEL_IPQ) || defined(CONFIG_CNSS2_KERNEL_5_15)
 static struct mhi_channel_config cnss_pci_mhi_channels[] = {
 	{
 		.num = 0,
@@ -414,7 +419,9 @@ static struct mhi_channel_config cnss_pci_mhi_channels[] = {
 		.offload_channel = false,
 		.doorbell_mode_switch = false,
 		.auto_queue = false,
+#ifndef CONFIG_CNSS2_KERNEL_5_15
 		.auto_start = false,
+#endif
 	},
 	{
 		.num = 1,
@@ -429,7 +436,9 @@ static struct mhi_channel_config cnss_pci_mhi_channels[] = {
 		.offload_channel = false,
 		.doorbell_mode_switch = false,
 		.auto_queue = false,
+#ifndef CONFIG_CNSS2_KERNEL_5_15
 		.auto_start = false,
+#endif
 	},
 	{
 		.num = 4,
@@ -444,7 +453,9 @@ static struct mhi_channel_config cnss_pci_mhi_channels[] = {
 		.offload_channel = false,
 		.doorbell_mode_switch = false,
 		.auto_queue = false,
+#ifndef CONFIG_CNSS2_KERNEL_5_15
 		.auto_start = false,
+#endif
 	},
 	{
 		.num = 5,
@@ -459,7 +470,9 @@ static struct mhi_channel_config cnss_pci_mhi_channels[] = {
 		.offload_channel = false,
 		.doorbell_mode_switch = false,
 		.auto_queue = false,
+#ifndef CONFIG_CNSS2_KERNEL_5_15
 		.auto_start = false,
+#endif
 	},
 	{
 		.num = 20,
@@ -474,7 +487,9 @@ static struct mhi_channel_config cnss_pci_mhi_channels[] = {
 		.offload_channel = false,
 		.doorbell_mode_switch = false,
 		.auto_queue = false,
+#ifndef CONFIG_CNSS2_KERNEL_5_15
 		.auto_start = true,
+#endif
 	},
 	{
 		.num = 21,
@@ -489,7 +504,9 @@ static struct mhi_channel_config cnss_pci_mhi_channels[] = {
 		.offload_channel = false,
 		.doorbell_mode_switch = false,
 		.auto_queue = true,
+#ifndef CONFIG_CNSS2_KERNEL_5_15
 		.auto_start = true,
+#endif
 	},
 };
 
@@ -2059,6 +2076,7 @@ static void cnss_qca6174_crash_shutdown(struct cnss_pci_data *pci_priv)
 		pci_priv->driver_ops->crash_shutdown(pci_priv->pci_dev);
 }
 
+#ifndef CONFIG_CNSS2_KERNEL_5_15
 static int cnss_qca6174_ramdump(struct cnss_pci_data *pci_priv)
 {
 	int ret = 0;
@@ -2074,9 +2092,14 @@ static int cnss_qca6174_ramdump(struct cnss_pci_data *pci_priv)
 	segment.v_address = ramdump_info->ramdump_va;
 	segment.size = ramdump_info->ramdump_size;
 	ret = do_ramdump(ramdump_info->ramdump_dev, &segment, 1);
-
 	return ret;
 }
+#else
+static int cnss_qca6174_ramdump(struct cnss_pci_data *pci_priv)
+{
+	return 0;
+}
+#endif
 
 static int cnss_qcn9000_powerup(struct cnss_pci_data *pci_priv)
 {
@@ -2205,6 +2228,7 @@ static void cnss_qcn9000_crash_shutdown(struct cnss_pci_data *pci_priv)
 	cnss_pci_collect_dump_info(pci_priv, true);
 }
 
+#ifndef CONFIG_CNSS2_KERNEL_5_15
 static int cnss_qcn9000_ramdump(struct cnss_pci_data *pci_priv)
 {
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
@@ -2296,6 +2320,259 @@ clear_dump_info:
 
 	return ret;
 }
+#else
+int cnss_do_ramdump(struct cnss_plat_data *plat_priv)
+{
+	return 0;
+}
+
+/* Using completion event inside dynamically allocated ramdump_desc
+ * may result a race between freeing the event after setting it to
+ * complete inside dev coredump free callback and the thread that is
+ * waiting for completion.
+ */
+DECLARE_COMPLETION(dump_done);
+#define TIMEOUT_SAVE_DUMP_MS 30000
+
+#define SIZEOF_ELF_STRUCT(__xhdr)					\
+static inline size_t sizeof_elf_##__xhdr(unsigned char class)		\
+{									\
+	if (class == ELFCLASS32)					\
+		return sizeof(struct elf32_##__xhdr);			\
+	else								\
+		return sizeof(struct elf64_##__xhdr);			\
+}
+
+SIZEOF_ELF_STRUCT(phdr)
+SIZEOF_ELF_STRUCT(hdr)
+
+#define set_xhdr_property(__xhdr, arg, class, member, value)		\
+do {									\
+	if (class == ELFCLASS32)					\
+		((struct elf32_##__xhdr *)arg)->member = value;		\
+	else								\
+		((struct elf64_##__xhdr *)arg)->member = value;		\
+} while (0)
+
+#define set_ehdr_property(arg, class, member, value) \
+	set_xhdr_property(hdr, arg, class, member, value)
+#define set_phdr_property(arg, class, member, value) \
+	set_xhdr_property(phdr, arg, class, member, value)
+
+/* These replace qcom_ramdump driver APIs called from common API
+ * cnss_do_elf_dump() by the ones defined here.
+ */
+#define qcom_dump_segment cnss_qcom_dump_segment
+#define qcom_elf_dump cnss_qcom_elf_dump
+
+struct cnss_qcom_dump_segment {
+	struct list_head node;
+	dma_addr_t da;
+	void *va;
+	size_t size;
+};
+
+struct cnss_qcom_ramdump_desc {
+	void *data;
+	struct completion dump_done;
+};
+
+static ssize_t cnss_qcom_devcd_readv(char *buffer, loff_t offset, size_t count,
+				     void *data, size_t datalen)
+{
+	struct cnss_qcom_ramdump_desc *desc = data;
+
+	return memory_read_from_buffer(buffer, count, &offset, desc->data,
+				       datalen);
+}
+
+static void cnss_qcom_devcd_freev(void *data)
+{
+	struct cnss_qcom_ramdump_desc *desc = data;
+
+	cnss_pr_vdbg("Free dump data for dev coredump\n");
+
+	complete(&dump_done);
+	vfree(desc->data);
+	kfree(desc);
+}
+static int cnss_qcom_devcd_dump(struct device *dev, void *data, size_t datalen,
+				gfp_t gfp)
+{
+	struct cnss_qcom_ramdump_desc *desc;
+	unsigned int timeout = TIMEOUT_SAVE_DUMP_MS;
+	int ret;
+	struct cnss_plat_data *plat_priv = NULL;
+
+	desc = kmalloc(sizeof(*desc), GFP_KERNEL);
+	if (!desc)
+		return -ENOMEM;
+
+	desc->data = data;
+	reinit_completion(&dump_done);
+
+	dev_coredumpm(dev, NULL, desc, datalen, gfp,
+		      cnss_qcom_devcd_readv, cnss_qcom_devcd_freev);
+
+	ret = wait_for_completion_timeout(&dump_done,
+					  msecs_to_jiffies(timeout));
+	if (!ret)
+		cnss_pr_err("Timeout waiting (%dms) for saving dump to file system\n",
+			    timeout);
+
+	kfree(desc);
+
+	return ret ? 0 : -ETIMEDOUT;
+}
+/* Since the elf32 and elf64 identification is identical apart from
+ * the class, use elf32 by default.
+ */
+static void init_elf_identification(struct elf32_hdr *ehdr, unsigned char class)
+{
+	memcpy(ehdr->e_ident, ELFMAG, SELFMAG);
+	ehdr->e_ident[EI_CLASS] = class;
+	ehdr->e_ident[EI_DATA] = ELFDATA2LSB;
+	ehdr->e_ident[EI_VERSION] = EV_CURRENT;
+	ehdr->e_ident[EI_OSABI] = ELFOSABI_NONE;
+}
+
+int cnss_qcom_elf_dump(struct list_head *segs, struct device *dev,
+		       unsigned char class)
+{
+	struct cnss_qcom_dump_segment *segment = NULL;
+	void *phdr, *ehdr = NULL;
+	size_t data_size = 0, offset = 0;
+	int phnum = 0;
+	void *data = NULL;
+	void __iomem *ptr = NULL;
+
+	if (!segs || list_empty(segs))
+		return -EINVAL;
+
+	data_size = sizeof_elf_hdr(class);
+	list_for_each_entry(segment, segs, node) {
+		data_size += sizeof_elf_phdr(class) + segment->size;
+		phnum++;
+	}
+	data = vmalloc(data_size);
+	if (!data)
+		return -ENOMEM;
+
+	cnss_pr_vdbg("Creating ELF file with size %lu\n", data_size);
+
+	ehdr = data;
+	memset(ehdr, 0, sizeof_elf_hdr(class));
+	init_elf_identification(ehdr, class);
+	set_ehdr_property(ehdr, class, e_type, ET_CORE);
+	set_ehdr_property(ehdr, class, e_machine, EM_NONE);
+	set_ehdr_property(ehdr, class, e_version, EV_CURRENT);
+	set_ehdr_property(ehdr, class, e_phoff, sizeof_elf_hdr(class));
+	set_ehdr_property(ehdr, class, e_ehsize, sizeof_elf_hdr(class));
+	set_ehdr_property(ehdr, class, e_phentsize, sizeof_elf_phdr(class));
+	set_ehdr_property(ehdr, class, e_phnum, phnum);
+
+	phdr = data + sizeof_elf_hdr(class);
+	offset = sizeof_elf_hdr(class) + sizeof_elf_phdr(class) * phnum;
+	list_for_each_entry(segment, segs, node) {
+		memset(phdr, 0, sizeof_elf_phdr(class));
+		set_phdr_property(phdr, class, p_type, PT_LOAD);
+		set_phdr_property(phdr, class, p_offset, offset);
+		set_phdr_property(phdr, class, p_vaddr, segment->da);
+		set_phdr_property(phdr, class, p_paddr, segment->da);
+		set_phdr_property(phdr, class, p_filesz, segment->size);
+		set_phdr_property(phdr, class, p_memsz, segment->size);
+		set_phdr_property(phdr, class, p_flags, PF_R | PF_W | PF_X);
+		set_phdr_property(phdr, class, p_align, 0);
+
+		if (segment->va) {
+			memcpy(data + offset, segment->va, segment->size);
+		} else {
+			ptr = devm_ioremap(dev, segment->da, segment->size);
+			if (!ptr) {
+				cnss_pr_vdbg("Invalid coredump segment (%pad, %zu)\n",
+					    &segment->da, segment->size);
+				memset(data + offset, 0xff, segment->size);
+			} else {
+				memcpy_fromio(data + offset, ptr,
+					      segment->size);
+			}
+		}
+
+		offset += segment->size;
+		phdr += sizeof_elf_phdr(class);
+	}
+
+	return cnss_qcom_devcd_dump(dev, data, data_size, GFP_KERNEL);
+}
+
+int cnss_qcn9000_ramdump(struct  cnss_pci_data *pci_priv)
+{
+	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
+	struct cnss_ramdump_info_v2 *info_v2 = &plat_priv->ramdump_info_v2;
+	struct cnss_dump_data *dump_data = &info_v2->dump_data;
+	struct cnss_dump_seg *dump_seg = info_v2->dump_data_vaddr;
+	struct qcom_dump_segment *seg;
+	struct cnss_dump_meta_info meta_info = {0};
+	struct list_head head;
+	int i, ret = 0;
+
+	if (!info_v2->dump_data_valid ||
+		dump_data->nentries == 0) {
+		cnss_pr_info("Dump collection is not enabled\n");
+		return ret;
+	}
+
+	INIT_LIST_HEAD(&head);
+	for (i = 0; i < dump_data->nentries; i++) {
+		if (dump_seg->type >= CNSS_FW_DUMP_TYPE_MAX) {
+			cnss_pr_err("Unsupported dump type: %d",
+				    dump_seg->type);
+			continue;
+		}
+
+		seg = kcalloc(1, sizeof(*seg), GFP_KERNEL);
+		if (!seg) {
+			ret = -ENOMEM;
+			goto free_seg_list;
+		}
+
+		if (meta_info.entry[dump_seg->type].entry_start == 0) {
+			meta_info.entry[dump_seg->type].type = dump_seg->type;
+			meta_info.entry[dump_seg->type].entry_start = i + 1;
+		}
+		meta_info.entry[dump_seg->type].entry_num++;
+		seg->da = dump_seg->address;
+		seg->va = dump_seg->v_address;
+		seg->size = dump_seg->size;
+		list_add_tail(&seg->node, &head);
+		dump_seg++;
+	}
+
+	seg = kcalloc(1, sizeof(*seg), GFP_KERNEL);
+	if (!seg) {
+		ret = -ENOMEM;
+		goto free_seg_list;
+	}
+
+	meta_info.magic = CNSS_RAMDUMP_MAGIC;
+	meta_info.version = CNSS_RAMDUMP_VERSION_V2;
+	meta_info.chipset = plat_priv->device_id;
+	meta_info.total_entries = CNSS_FW_DUMP_TYPE_MAX;
+	seg->va = &meta_info;
+	seg->size = sizeof(meta_info);
+	list_add(&seg->node, &head);
+
+	ret = qcom_elf_dump(&head, info_v2->ramdump_dev, ELF_CLASS);
+free_seg_list:
+	while (!list_empty(&head)) {
+		seg = list_first_entry(&head, struct qcom_dump_segment, node);
+		list_del(&seg->node);
+		kfree(seg);
+	}
+
+	return ret;
+}
+#endif
 
 int cnss_pci_dev_powerup(struct cnss_pci_data *pci_priv)
 {
@@ -2410,7 +2687,9 @@ int cnss_pci_dev_ramdump(struct cnss_pci_data *pci_priv)
 		if (ret)
 			cnss_pr_err("Failed to collect ramdump for %s\n",
 				    plat_priv->device_name);
-
+#ifdef CONFIG_CNSS2_KERNEL_5_15
+		cnss_pci_clear_dump_info(pci_priv);
+#endif
 		/* Shutdown was skipped in cnss_qcn9000_shutdown path
 		 * earlier in target assert case to finish the ramdump
 		 * collection.
@@ -5088,6 +5367,11 @@ struct qgic2_msi *cnss_qgic2_enable_msi(struct cnss_plat_data *plat_priv)
 
 	msi_desc = first_msi_entry(dev);
 	irq_data = irq_desc_get_irq_data(irq_to_desc(msi_desc->irq));
+	if (!irq_data) {
+		cnss_pr_err("irq_desc_get_irq_data failed.\n");
+		platform_msi_domain_free_irqs(&plat_priv->plat_dev->dev);
+		return NULL;
+	}
 
 	/* For multi-pd device, to retrieve msi base address and irq data,
 	 * request a dummy irq  store the base address and data in qgic
@@ -5135,7 +5419,7 @@ int cnss_get_user_msi_assignment(struct device *dev, char *user_name,
 	u32 msi_ep_base_data = 0;
 	struct pci_dev *pci_dev = NULL;
 	struct cnss_pci_data *pci_priv = NULL;
-	struct cnss_msi_config *msi_config;
+	struct cnss_msi_config *msi_config = NULL;
 	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
 #ifdef CONFIG_CNSS2_QGIC2M
 	struct qgic2_msi *qgic2_msi = NULL;
@@ -5380,7 +5664,7 @@ static int cnss_pci_enable_bus(struct cnss_pci_data *pci_priv)
 		goto disable_device;
 	}
 
-#ifdef CONFIG_CNSS2_KERNEL_MSM
+#if defined(CONFIG_CNSS2_KERNEL_MSM) || defined(CONFIG_CNSS2_KERNEL_5_15)
 	pci_priv->dma_bit_mask = PCI_DMA_MASK_36_BIT;
 #else
 	pci_priv->dma_bit_mask = PCI_DMA_MASK_64_BIT;
@@ -5424,12 +5708,13 @@ out:
 	return ret;
 }
 
+#ifndef CONFIG_CNSS2_KERNEL_5_15
 void cnss_pci_global_reset(struct cnss_pci_data *pci_priv)
 {
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 	int resetcount = 0, tx_count = 0;
 	u32 errdbg1 = 0;
-#ifdef CONFIG_CNSS2_KERNEL_MSM
+#if defined(CONFIG_CNSS2_KERNEL_MSM)
 	int current_ee;
 #else
 	enum mhi_ee_type current_ee;
@@ -5467,8 +5752,47 @@ void cnss_pci_global_reset(struct cnss_pci_data *pci_priv)
 		cnss_pr_warn("SOC_GLOBAL_RESET at rst cnt %d tx_cnt %d\n",
 			     resetcount, tx_count);
 }
+#else
+#define PCIE_SOC_GLOBAL_RESET                   0x3008
+#define PCIE_SOC_GLOBAL_RESET_V                1
+void cnss_pci_global_reset(struct cnss_pci_data *pci_priv)
+{
+	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
+	u32 val, delay, iRet = 0;
 
-#ifdef CONFIG_CNSS2_KERNEL_MSM
+	iRet = cnss_pci_reg_read(pci_priv, PCIE_SOC_GLOBAL_RESET, &val);
+	if (iRet != 0)
+		cnss_pr_err("Error(%d): %s failed.\n", iRet, __func__);
+
+	val |= PCIE_SOC_GLOBAL_RESET_V;
+
+	iRet = cnss_pci_reg_write(pci_priv, PCIE_SOC_GLOBAL_RESET, val);
+	if (iRet != 0)
+		cnss_pr_err("Error(%d): %s failed.\n", iRet, __func__);
+
+	/* TODO: exact time to sleep is uncertain */
+	delay = 10;
+	mdelay(delay);
+
+	/* Need to toggle V bit back otherwise stuck in reset status */
+	val &= ~PCIE_SOC_GLOBAL_RESET_V;
+
+	iRet = cnss_pci_reg_write(pci_priv, PCIE_SOC_GLOBAL_RESET, val);
+	if (iRet != 0)
+		cnss_pr_err("Error(%d): %s failed.\n", iRet, __func__);
+
+	mdelay(delay);
+
+	iRet = cnss_pci_reg_read(pci_priv, PCIE_SOC_GLOBAL_RESET, &val);
+	if (iRet != 0)
+		cnss_pr_err("Error(%d): %s failed.\n", iRet, __func__);
+
+	if (val == 0xffffffff)
+		cnss_pr_warn("link down error during global reset\n");
+}
+#endif
+
+#if defined(ONFIG_CNSS2_KERNEL_MSM) || defined(CONFIG_CNSS2_KERNEL_5_15)
 static void cnss_reset_mhi_state(struct cnss_pci_data *pci_priv)
 {
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
@@ -5491,7 +5815,7 @@ static void cnss_pci_disable_bus(struct cnss_pci_data *pci_priv)
 	/* On SOC_GLOBAL_RESET, target waits in PBL for host to set the
 	 * MHI_RESET bit to 1.
 	 */
-#ifdef CONFIG_CNSS2_KERNEL_MSM
+#if defined(ONFIG_CNSS2_KERNEL_MSM) || defined(CONFIG_CNSS2_KERNEL_5_15)
 	cnss_reset_mhi_state(pci_priv);
 #else
 	mhi_set_mhi_state(pci_priv->mhi_ctrl, MHI_STATE_RESET);
@@ -5817,7 +6141,7 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 		return;
 	}
 
-#ifdef CONFIG_CNSS2_KERNEL_MSM
+#if defined(CONFIG_CNSS2_KERNEL_MSM) || defined(CONFIG_CNSS2_KERNEL_5_15)
 	cnss_get_crash_reason(pci_priv);
 #endif
 
@@ -6014,7 +6338,6 @@ static int cnss_mhi_pm_runtime_get(struct mhi_controller *mhi_ctrl)
 }
 #endif
 
-
 #ifdef CONFIG_CNSS2_KERNEL_MSM
 static void cnss_mhi_pm_runtime_put_noidle(struct mhi_controller *mhi_ctrl,
 					   void *priv)
@@ -6162,7 +6485,7 @@ static void cnss_mhi_notify_status(struct mhi_controller *mhi_ctrl,
 	cnss_schedule_recovery(&pci_priv->pci_dev->dev, cnss_reason);
 }
 
-#ifdef CONFIG_CNSS2_KERNEL_IPQ
+#if defined(CONFIG_CNSS2_KERNEL_IPQ) || defined(CONFIG_CNSS2_KERNEL_5_15)
 #define CNSS_PCI_INVALID_READ(val) (val == U32_MAX)
 static int __must_check cnss_mhi_read_reg(struct mhi_controller *mhi_cntrl,
 					  void __iomem *addr, u32 *out)
@@ -6334,8 +6657,9 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 	}
 
 	pci_priv->mhi_ctrl = mhi_ctrl;
+#ifndef CONFIG_CNSS2_KERNEL_5_15
 	mhi_ctrl->dev_id = pci_priv->device_id;
-
+#endif
 #ifdef CONFIG_CNSS2_KERNEL_MSM
 	mhi_ctrl->priv_data = pci_priv;
 	mhi_ctrl->dev = &pci_dev->dev;
@@ -6348,8 +6672,10 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 
 	mhi_ctrl->link_status = cnss_mhi_link_status;
 	mhi_ctrl->rddm_supported = true;
-#else /* CONFIG_CNSS2_KERNEL_IPQ */
+#else
+#ifndef CONFIG_CNSS2_KERNEL_5_15
 	dev_set_drvdata(&pci_dev->dev, pci_priv);
+#endif
 	mhi_ctrl->cntrl_dev = &pci_dev->dev;
 	mhi_ctrl->read_reg = cnss_mhi_read_reg;
 	mhi_ctrl->write_reg = cnss_mhi_write_reg;
@@ -6358,6 +6684,9 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 
 	mhi_ctrl->fw_image = plat_priv->firmware_name;
 	mhi_ctrl->regs = pci_priv->bar;
+#ifdef CONFIG_CNSS2_KERNEL_5_15
+	mhi_ctrl->reg_len = pci_resource_len(pci_priv->pci_dev, PCI_BAR_NUM);
+#endif
 	cnss_pr_dbg("BAR starts at %pa\n",
 		    &pci_resource_start(pci_priv->pci_dev, PCI_BAR_NUM));
 
@@ -6687,7 +7016,11 @@ unregister_ramdump:
 #endif
 	cnss_unregister_ramdump(plat_priv);
 unregister_subsys:
+#ifndef CONFIG_CNSS2_KERNEL_5_15
 	cnss_unregister_subsys(plat_priv);
+#else
+	cnss_bus_dev_shutdown(plat_priv);
+#endif
 	plat_priv->bus_priv = NULL;
 out:
 	return ret;
@@ -6883,7 +7216,7 @@ struct pci_driver cnss_pci_driver = {
 int cnss_pci_init(struct cnss_plat_data *plat_priv)
 {
 	int ret = 0;
-#ifdef CONFIG_CNSS2_PCI_MSM
+#if defined(CONFIG_CNSS2_PCI_MSM) || defined(CONFIG_CNSS2_KERNEL_5_15)
 	struct device *dev = &plat_priv->plat_dev->dev;
 	u32 rc_num;
 
@@ -6902,6 +7235,7 @@ int cnss_pci_init(struct cnss_plat_data *plat_priv)
 #endif
 	if ((plat_priv && plat_priv->pci_dev) || cnss_pci_registered)
 		return 0;
+
 	ret = pci_register_driver(&cnss_pci_driver);
 	if (ret) {
 		cnss_pr_err("Failed to register to PCI framework, err = %d\n",
