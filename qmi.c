@@ -49,6 +49,7 @@
 #define CAL_FILE_NAME_PREFIX		"caldata.b"
 #define DEFAULT_CAL_FILE_PREFIX         "caldata_"
 #define DEFAULT_CAL_FILE_SUFFIX         ".bin"
+#define FTM_CONF_FILE_PATH		"/ini/ftm.conf"
 
 #define QMI_WLFW_TIMEOUT_MS		(plat_priv->ctrl_params.qmi_timeout)
 
@@ -141,6 +142,24 @@ static char *cnss_qmi_mode_to_str(enum cnss_driver_mode mode)
 		return "UNKNOWN";
 	}
 };
+
+static bool cnss_check_path_exists(const char *path)
+{
+	struct file *filp = NULL;
+	struct cnss_plat_data *plat_priv = NULL;
+
+	if (!path)
+		return false;
+
+	filp = filp_open(path, O_RDONLY, 00644);
+	if (IS_ERR(filp)) {
+		cnss_pr_err("Path %s doesn't exist", path);
+		return false;
+	}
+
+	filp_close(filp, NULL);
+	return true;
+}
 
 static int cnss_wlfw_ind_register_send_sync(struct cnss_plat_data *plat_priv)
 {
@@ -398,6 +417,14 @@ static int cnss_wlfw_host_cap_send_sync(struct cnss_plat_data *plat_priv)
 
 	cnss_pr_dbg("Sending host capability message, state: 0x%lx\n",
 		    plat_priv->driver_state);
+
+	if (plat_priv->ctrl_params.board_id) {
+		plat_priv->board_info.board_id_override =
+				plat_priv->ctrl_params.board_id;
+
+		if (cnss_set_fw_type_and_name(plat_priv))
+			return -ENODEV;
+	}
 
 	req = kzalloc(sizeof(*req), GFP_KERNEL);
 	if (!req)
@@ -1031,6 +1058,7 @@ int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv,
 	int ret = 0;
 	int resp_error_msg = 0;
 	u8 fw_bdf_type = BDF_TYPE_GOLDEN;
+	uint32_t board_id = 0;
 
 	cnss_pr_dbg("Sending BDF download message, state: 0x%lx, type: %d\n",
 		    plat_priv->driver_state, bdf_type);
@@ -1087,23 +1115,45 @@ int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv,
 		break;
 	case CNSS_CALDATA_WIN:
 		fw_bdf_type = BDF_TYPE_CALDATA;
-		if (plat_priv->bus_type == CNSS_BUS_PCI)
-			snprintf(filename, sizeof(filename),
-				 "%s" DEFAULT_CAL_FILE_PREFIX
-				 "%d" DEFAULT_CAL_FILE_SUFFIX,
-				 cnss_get_fw_path(plat_priv),
-				 (plat_priv->pci_slot_id + 1));
-		else if (plat_priv->device_id == QCN6122_DEVICE_ID ||
-			 plat_priv->device_id == QCN9160_DEVICE_ID)
+		/* If the ftm.conf is not found,
+		 * download caldata_x.bin which is the default file.
+		 */
+		if (plat_priv->ctrl_params.board_id)
+			board_id = plat_priv->ctrl_params.board_id;
+		else if (plat_priv->board_info.board_id_override)
+			board_id = plat_priv->board_info.board_id_override;
+		else
+			board_id = plat_priv->board_info.board_id;
+
+		if (plat_priv->bus_type == CNSS_BUS_PCI) {
+			snprintf(filename, sizeof(filename), "%s",
+				 FTM_CONF_FILE_PATH);
+			if (cnss_check_path_exists(FTM_CONF_FILE_PATH)) {
+				snprintf(filename, sizeof(filename),
+					 "%s" DEFAULT_CAL_FILE_PREFIX
+				"%d.b%.*x", cnss_get_fw_path(plat_priv),
+				(plat_priv->pci_slot_id + 1),
+				(plat_priv->board_info.num_bytes * 2),
+				board_id);
+			} else {
+				snprintf(filename, sizeof(filename),
+					 "%s" DEFAULT_CAL_FILE_PREFIX
+					 "%d" DEFAULT_CAL_FILE_SUFFIX,
+					 cnss_get_fw_path(plat_priv),
+					 (plat_priv->pci_slot_id + 1));
+			}
+		} else if (plat_priv->device_id == QCN6122_DEVICE_ID ||
+			 plat_priv->device_id == QCN9160_DEVICE_ID) {
 			snprintf(filename, sizeof(filename),
 				 "%s" DEFAULT_CAL_FILE_PREFIX
 				 "%d" DEFAULT_CAL_FILE_SUFFIX,
 				 cnss_get_fw_path(plat_priv),
 				 plat_priv->userpd_id);
-		else
+		} else {
 			snprintf(filename, sizeof(filename),
 				 "%s" DEFAULT_CAL_FILE_NAME,
 				 cnss_get_fw_path(plat_priv));
+		}
 
 		if (plat_priv->bdf_dnld_method == WLFW_DIRECT_BDF_COPY_V01) {
 			cnss_pr_dbg("Caldata download through direct copy\n");

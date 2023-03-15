@@ -1251,6 +1251,7 @@ int cnss_set_mlo_config(struct cnss_module_param *modparam,
 	int i, j, k;
 	int prev_dual_count = 0;
 	int link_id = 0;
+	u32 board_id = 0;
 
 	if (!enable_mlo_support) {
 		cnss_pr_info("%s: MLO is disabled\n", __func__);
@@ -1298,6 +1299,15 @@ int cnss_set_mlo_config(struct cnss_module_param *modparam,
 
 			if (!(mlo_config->soc_chip_bitmap & (1 << j)))
 				continue;
+
+			if (plat_priv->ctrl_params.board_id)
+				board_id = plat_priv->ctrl_params.board_id;
+			else
+				board_id =
+					plat_priv->board_info.board_id_override;
+			plat_priv->firmware_type =
+				(board_id & CNSS_FW_TYPE_MASK) >>
+						CNSS_FW_TYPE_SHIFT;
 
 			chip_info = &mlo_group_info->chip_info[num_chip];
 			chip_info->group_id = i;
@@ -1637,6 +1647,7 @@ void cnss_set_default_mlo_config(void)
 	int grp_chip_id[CNSS_MAX_MLO_GROUPS] = {0};
 	int grp_link_id[CNSS_MAX_MLO_GROUPS] = {0};
 	int k = 0;
+	u32 board_id = 0;
 
 	if (!enable_mlo_support)
 		return;
@@ -1662,6 +1673,14 @@ void cnss_set_default_mlo_config(void)
 				    group_id);
 			return;
 		}
+
+		if (plat_priv->ctrl_params.board_id)
+			board_id = plat_priv->ctrl_params.board_id;
+		else
+			board_id = plat_priv->board_info.board_id_override;
+		plat_priv->firmware_type =
+			(board_id & CNSS_FW_TYPE_MASK) >> CNSS_FW_TYPE_SHIFT;
+
 		mlo_group_info[group_id].group_id = group_id;
 		mlo_group_info[group_id].max_num_peers = 256;
 		if (mlo_chip_bitmask & (1 << i)) {
@@ -5175,6 +5194,11 @@ static void cnss_init_control_params(struct cnss_plat_data *plat_priv)
 
 	plat_priv->ctrl_params.bdf_type = 0;
 	plat_priv->ctrl_params.time_sync_period = CNSS_TIME_SYNC_PERIOD_DEFAULT;
+	if (plat_priv->bus_type == CNSS_BUS_PCI)
+		plat_priv->ctrl_params.board_id =
+				plat_priv->board_info.board_id_override;
+	else
+		plat_priv->ctrl_params.board_id = 0;
 }
 
 static const struct platform_device_id cnss_platform_id_table[] = {
@@ -5729,7 +5753,7 @@ static void cnss_set_board_id(struct cnss_plat_data *plat_priv)
 		    plat_priv->device_name);
 }
 
-static int cnss_set_fw_type_and_name(struct cnss_plat_data *plat_priv)
+int cnss_set_fw_type_and_name(struct cnss_plat_data *plat_priv)
 {
 	const char *firmware_name = NULL;
 	struct device *dev = &plat_priv->plat_dev->dev;
@@ -5768,9 +5792,14 @@ static int cnss_set_fw_type_and_name(struct cnss_plat_data *plat_priv)
 		return -EINVAL;
 	}
 
-	plat_priv->firmware_name = kzalloc(firmware_name_len + 1, GFP_KERNEL);
-	if (!plat_priv->firmware_name)
-		return -ENOMEM;
+	if (!plat_priv->firmware_name) {
+		plat_priv->firmware_name =
+				kzalloc(firmware_name_len + 1, GFP_KERNEL);
+		if (!plat_priv->firmware_name)
+			return -ENOMEM;
+	} else {
+		memset(plat_priv->firmware_name, 0, firmware_name_len + 1);
+	}
 
 	snprintf(plat_priv->firmware_name, firmware_name_len + 1,
 		 "%s%s", cnss_get_fw_path(plat_priv), firmware_name);
