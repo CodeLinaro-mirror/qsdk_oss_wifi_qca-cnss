@@ -2226,14 +2226,13 @@ static int cnss_qca8074_notifier_atomic_nb(struct notifier_block *nb,
 			    cnss_get_plat_env_index_from_plat_priv(plat_priv));
 		plat_priv->target_asserted = 1;
 		plat_priv->target_assert_timestamp = ktime_to_ms(ktime_get());
-		if (plat_priv->recovery_enabled)
-			cnss_bus_update_status(plat_priv, CNSS_FW_DOWN);
-		cnss_reason = CNSS_REASON_FATAL_SHUTDOWN;
-		if (plat_priv->mlo_support) {
-			rproc = subsys_info->subsys_handle;
-			rproc_stop(rproc, true);
+		rproc = subsys_info->subsys_handle;
+		if (rproc) {
+			rproc->state = RPROC_CRASHED;
+			cnss_reason = CNSS_REASON_FATAL_SHUTDOWN;
+			cnss_schedule_recovery(&plat_priv->plat_dev->dev,
+						cnss_reason);
 		}
-		cnss_schedule_recovery(&plat_priv->plat_dev->dev, cnss_reason);
 	}
 
 	return NOTIFY_OK;
