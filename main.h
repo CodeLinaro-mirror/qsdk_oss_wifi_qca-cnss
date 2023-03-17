@@ -53,6 +53,12 @@
 #define CNSS_FW_TYPE_MASK		0xF000
 #define CNSS_FW_TYPE_SHIFT		12
 
+#ifdef CONFIG_CNSS2_KERNEL_5_15
+typedef void ramdump_device_t;
+#else
+typedef struct ramdump_device ramdump_device_t;
+#endif
+
 enum cnss_cal_db_op {
 	CNSS_CAL_DB_UPLOAD,
 	CNSS_CAL_DB_DOWNLOAD,
@@ -232,13 +238,15 @@ struct subsys_desc {
 
 struct cnss_subsys_info {
 	struct subsys_device *subsys_device;
+#ifndef CONFIG_CNSS2_KERNEL_5_15
 	struct subsys_desc subsys_desc;
+#endif
 	void *subsys_handle;
 	bool subsystem_put_in_progress;
 };
 
 struct cnss_ramdump_info {
-	struct ramdump_device *ramdump_dev;
+	ramdump_device_t *ramdump_dev;
 	unsigned long ramdump_size;
 	void *ramdump_va;
 	phys_addr_t ramdump_pa;
@@ -262,7 +270,7 @@ struct cnss_dump_data {
 };
 
 struct cnss_ramdump_info_v2 {
-	struct ramdump_device *ramdump_dev;
+	ramdump_device_t *ramdump_dev;
 	unsigned long ramdump_size;
 	void *dump_data_vaddr;
 	u8 dump_data_valid;
@@ -687,6 +695,9 @@ struct cnss_plat_data {
 	bool mlo_default_cfg;
 	struct cnss_mlo_chip_info *adj_mlo_chip_info[CNSS_MAX_ADJ_CHIPS];
 	enum cnss_recovery_reason reason;
+#ifdef CONFIG_CNSS2_KERNEL_5_15
+	struct work_struct crash_work;
+#endif
 };
 
 #ifdef CONFIG_ARCH_QCOM
