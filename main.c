@@ -6245,5 +6245,6 @@ static void __exit cnss_exit(void)
 module_init(cnss_initialize);
 module_exit(cnss_exit);
 
+MODULE_IMPORT_NS(VFS_internal_I_am_really_a_filesystem_and_am_NOT_a_driver);
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("CNSS2 Platform Driver");
