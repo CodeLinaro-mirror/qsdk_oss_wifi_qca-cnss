@@ -5071,6 +5071,14 @@ static void cnss_pci_unregister_mhi(struct cnss_pci_data *pci_priv)
 	kfree(mhi_ctrl->irq);
 }
 
+static void cnss_pci_free_mhi_controller(struct cnss_pci_data *pci_priv)
+{
+	struct mhi_controller *mhi_ctrl = pci_priv->mhi_ctrl;
+
+	mhi_free_controller(mhi_ctrl);
+	pci_priv->mhi_ctrl = NULL;
+}
+
 static void cnss_boot_debug_timeout_hdlr(struct timer_list *timer)
 {
 	struct cnss_plat_data *plat_priv = NULL;
@@ -5291,7 +5299,7 @@ void cnss_pci_remove(struct pci_dev *pci_dev)
 		break;
 	}
 
-	pci_load_and_free_saved_state(pci_dev, &pci_priv->saved_state);
+	pci_load_and_free_saved_state(pci_dev, &pci_priv->default_state);
 
 	cnss_pci_disable_bus(pci_priv);
 #ifdef CONFIG_CNSS2_PCI_MSM
@@ -5304,6 +5312,9 @@ void cnss_pci_remove(struct pci_dev *pci_dev)
 #ifdef CONFIG_CNSS2_KERNEL_IPQ
 	cnss_unregister_ramdump(plat_priv);
 #endif
+	cnss_pci_free_mhi_controller(pci_priv);
+	devm_kfree(&pci_dev->dev, pci_priv);
+	cnss_set_pci_priv(pci_dev, NULL);
 	plat_priv->bus_priv = NULL;
 }
 EXPORT_SYMBOL(cnss_pci_remove);
