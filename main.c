@@ -2506,6 +2506,7 @@ void *cnss_register_qca8074_cb(struct cnss_plat_data *plat_priv)
 int cnss_unregister_qca8074_cb(struct cnss_plat_data *plat_priv)
 {
 	int ret = 0;
+	struct rproc *rproc_rpd;
 
 	if (plat_priv->modem_nb.notifier_call) {
 		ret = rproc_unregister_subsys_notifier(
@@ -2521,6 +2522,26 @@ int cnss_unregister_qca8074_cb(struct cnss_plat_data *plat_priv)
 		memset(&plat_priv->modem_atomic_nb, 0,
 		       sizeof(struct notifier_block));
 	}
+
+	rproc_rpd = plat_priv->rproc_rpd_handle;
+	if (rproc_rpd) {
+		if (plat_priv->rpd_nb.notifier_call) {
+			ret = rproc_unregister_subsys_notifier(
+					rproc_rpd->name,
+					&plat_priv->rpd_nb,
+					&plat_priv->rpd_atomic_nb);
+			if (ret) {
+				cnss_pr_err("%s: failed to unregister rootpd ret %d\n",
+						__func__, ret);
+				return ret;
+			}
+			memset(&plat_priv->rpd_nb, 0,
+					sizeof(struct notifier_block));
+			memset(&plat_priv->rpd_atomic_nb, 0,
+					sizeof(struct notifier_block));
+		}
+	}
+
 	return 0;
 }
 
