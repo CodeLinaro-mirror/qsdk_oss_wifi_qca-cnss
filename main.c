@@ -2541,8 +2541,8 @@ static int cnss_qca8074_rpd_notifier_atomic_nb(struct notifier_block *nb,
 		return NOTIFY_OK;
 
 	if (event_code == CNSS_PREPARE_FOR_FATAL_SHUTDOWN) {
-		cnss_pr_err("XXX RPD TARGET ASSERTED XXX\n");
-		cnss_pr_err("XXX RPD TARGET %s instance_id 0x%x plat_env idx %d XXX\n",
+		cnss_pr_err("XXX TARGET ASSERTED XXX\n");
+		cnss_pr_err("XXX TARGET %s instance_id 0x%x plat_env idx %d XXX\n",
 			    plat_priv->device_name,
 			    plat_priv->wlfw_service_instance_id,
 			    cnss_get_plat_env_index_from_plat_priv(plat_priv));
