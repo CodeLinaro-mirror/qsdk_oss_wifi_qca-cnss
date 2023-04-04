@@ -19,7 +19,9 @@ ipq_cnss2-objs += bus.o
 ipq_cnss2-objs += genl.o
 ipq_cnss2-objs += cnss_plat_ipc_qmi.o
 ipq_cnss2-objs += cnss_plat_ipc_service_v01.o
+ifneq ($(CONFIG_BUILD_OWRT),y)
 ipq_cnss2-objs += legacyirq/legacyirq.o
+endif
 ipq_cnss2_stream-objs := stream.o
 
 CNSS2_INCLUDE = -I$(obj)
@@ -44,6 +46,7 @@ else
 	ccflags-y += -DCONFIG_CNSS2_KERNEL_IPQ
 	ccflags-y += -DCONFIG_CNSS2_QGIC2M
 	ccflags-y += -DCONFIG_CNSS2_KERNEL_RPROC_FRAMEWORK
+	ccflags-y += -DCONFIG_CNSS2_LEGACY_IRQ
 endif
 
 all:

@@ -35,7 +35,9 @@
 #ifdef KERNEL_SUPPORTS_QGIC2M
 #include <soc/qcom/qgic2m.h>
 #endif
+#ifdef CONFIG_CNSS2_LEGACY_IRQ
 #include "legacyirq/legacyirq.h"
+#endif
 
 #include "main.h"
 #include "debug.h"
@@ -2861,6 +2863,7 @@ reset_ctx:
 }
 EXPORT_SYMBOL(cnss_wlan_probe_driver);
 
+#ifdef CONFIG_CNSS2_LEGACY_IRQ
 static int cnss_assign_lvirq(struct cnss_plat_data *plat_priv)
 {
 	plat_priv->lvirq = cnss_get_lvirq_by_qrtr_id(plat_priv->qrtr_node_id);
@@ -2871,6 +2874,7 @@ static int cnss_assign_lvirq(struct cnss_plat_data *plat_priv)
 	}
 	return 0;
 }
+#endif
 
 int cnss_wlan_register_driver_ops(struct cnss_wlan_driver *driver_ops)
 {
@@ -2891,10 +2895,12 @@ int cnss_wlan_register_driver_ops(struct cnss_wlan_driver *driver_ops)
 		case CNSS_BUS_PCI:
 			if (strcmp(driver_ops->name, "pld_pcie") == 0) {
 				plat_priv->driver_ops = driver_ops;
+#ifdef CONFIG_CNSS2_LEGACY_IRQ
 				if (plat_priv->enable_intx) {
 					if (cnss_assign_lvirq(plat_priv))
 						return -EINVAL;
 				}
+#endif
 			}
 			break;
 		default:
@@ -6024,6 +6030,7 @@ static void cnss_fill_probe_order(struct cnss_plat_data *plat_priv)
 	}
 }
 
+#ifdef CONFIG_CNSS2_LEGACY_IRQ
 static void cnss_get_legacy_intx_support(struct cnss_plat_data *plat_priv)
 {
 	int enable_intx;
@@ -6040,7 +6047,7 @@ static void cnss_get_legacy_intx_support(struct cnss_plat_data *plat_priv)
 		plat_priv->enable_intx = false;
 	}
 }
-
+#endif
 static u32 cnss_get_bdf_mod_param(int slot_id)
 {
 	u32 ret = 0;
@@ -6409,7 +6416,9 @@ static int cnss_probe(struct platform_device *plat_dev)
 	 * till it is initialized.
 	 */
 	cnss_fill_probe_order(plat_priv);
+#ifdef CONFIG_CNSS2_LEGACY_IRQ
 	cnss_get_legacy_intx_support(plat_priv);
+#endif
 	cnss_set_mod_param_feature_support(plat_priv, CALDATA);
 	cnss_set_mod_param_feature_support(plat_priv, REGDB);
 	platform_set_drvdata(plat_dev, plat_priv);
@@ -6627,12 +6636,14 @@ static int __init cnss_initialize(void)
 		cnss_debug_deinit();
 		return ret;
 	}
+#ifdef CONFIG_CNSS2_LEGACY_IRQ
 	ret = cnss_legacy_irq_init();
 	if (ret) {
 		platform_driver_unregister(&cnss_platform_driver);
 		cnss_debug_deinit();
 		return ret;
 	}
+#endif
 #ifndef CONFIG_CNSS2_KERNEL_5_15
 	cnss_bus_init_by_type(CNSS_BUS_PCI);
 #endif
@@ -6648,7 +6659,9 @@ static void __exit cnss_exit(void)
 {
 	cnss_plat_ipc_unregister(CNSS_PLAT_IPC_DAEMON_QMI_CLIENT_V01, NULL);
 	cnss_plat_ipc_qmi_svc_exit();
+#ifdef CONFIG_CNSS2_LEGACY_IRQ
 	cnss_legacy_irq_deinit();
+#endif
 	platform_driver_unregister(&cnss_platform_driver);
 	cnss_debug_deinit();
 }

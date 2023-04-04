@@ -5770,9 +5770,10 @@ static int cnss_pci_enable_bus(struct cnss_pci_data *pci_priv)
 		goto clear_master;
 	}
 
+#ifdef CONFIG_CNSS2_LEGACY_IRQ
 	if (plat_priv->enable_intx)
 		set_lvirq_bar(plat_priv->lvirq, pci_priv->bar);
-
+#endif
 	return 0;
 
 clear_master:
@@ -5884,7 +5885,9 @@ static void cnss_reset_mhi_state(struct cnss_pci_data *pci_priv)
 static void cnss_pci_disable_bus(struct cnss_pci_data *pci_priv)
 {
 	struct pci_dev *pci_dev = pci_priv->pci_dev;
+#ifdef CONFIG_CNSS2_LEGACY_IRQ
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
+#endif
 
 	/* Call global reset here */
 	cnss_pci_global_reset(pci_priv);
@@ -5901,8 +5904,10 @@ static void cnss_pci_disable_bus(struct cnss_pci_data *pci_priv)
 		pci_iounmap(pci_dev, pci_priv->bar);
 		pci_priv->bar = NULL;
 	}
+#ifdef CONFIG_CNSS2_LEGACY_IRQ
 	if (plat_priv->enable_intx)
 		clear_lvirq_bar(plat_priv->lvirq);
+#endif
 
 	pci_clear_master(pci_dev);
 	pci_release_region(pci_dev, PCI_BAR_NUM);
@@ -6984,6 +6989,7 @@ int cnss_pci_probe(struct pci_dev *pci_dev,
 	plat_priv->device_id = pci_dev->device;
 	plat_priv->bus_priv = pci_priv;
 
+#ifdef CONFIG_CNSS2_LEGACY_IRQ
 	if (plat_priv->enable_intx) {
 		pci_priv->os_legacy_irq =
 			platform_get_irq_byname(plat_priv->plat_dev, "inta");
@@ -6999,6 +7005,7 @@ int cnss_pci_probe(struct pci_dev *pci_dev,
 			return -EINVAL;
 		}
 	}
+#endif
 
 	ret = cnss_register_ramdump(plat_priv);
 	if (ret)
@@ -7058,8 +7065,10 @@ int cnss_pci_probe(struct pci_dev *pci_dev,
 			ret = cnss_pci_enable_msi(pci_priv);
 			if (ret)
 				goto disable_bus;
+#ifdef CONFIG_CNSS2_LEGACY_IRQ
 		} else {
 			cnss_pci_enable_legacy_intx(pci_priv->bar, pci_dev);
+#endif
 		}
 
 		ret = cnss_pci_register_mhi(pci_priv);
@@ -7147,10 +7156,12 @@ void cnss_pci_remove(struct pci_dev *pci_dev)
 	pci_load_and_free_saved_state(pci_dev, &pci_priv->default_state);
 
 	cnss_pci_disable_bus(pci_priv);
+#ifdef CONFIG_CNSS2_LEGACY_IRQ
 	if (plat_priv->enable_intx) {
 		qcn9224_unregister_legacy_irq(plat_priv->lvirq,
 					      pci_priv->os_legacy_irq);
 	}
+#endif
 #ifdef CONFIG_CNSS2_PCI_MSM
 	cnss_dereg_pci_event(pci_priv);
 #endif
