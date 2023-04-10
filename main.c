@@ -3696,9 +3696,8 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 
 		set_bit(CNSS_RECOVERY_WAIT_FOR_DRIVER,
 			&plat_priv->driver_state);
-		cnss_driver_event_post(plat_priv,
-				       CNSS_DRIVER_EVENT_RAMDUMP_DONE,
-				       0, NULL);
+		cnss_qcn9000_notifier_nb(&plat_priv->modem_nb,
+				CNSS_RAMDUMP_DONE, NULL);
 #endif
 	} else {
 #ifdef CONFIG_CNSS2_KERNEL_5_15
