@@ -242,9 +242,6 @@ struct cnss_driver_event {
 static int m3_dump_major;
 static struct class *m3_dump_class;
 
-uint8_t rddm_dump_all;
-uint8_t rddm_count;
-
 atomic_t cal_in_progress_count;
 
 static int cnss_get_event(unsigned long subsys_event,
@@ -3375,6 +3372,7 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 		&plat_priv->subsys_info;
 	unsigned long rddm_lock;
 	struct cnss_pci_data *pci_priv = NULL;
+	struct cnss_mlo_group_info *group_info = plat_priv->mlo_group_info;
 	int ret = 0;
 
 	plat_priv->recovery_count++;
@@ -3397,9 +3395,10 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 	case CNSS_REASON_FATAL_SHUTDOWN:
 		if (plat_priv->bus_type == CNSS_BUS_PCI)
 			cnss_bus_collect_dump_info(plat_priv, false);
-		if (plat_priv->mlo_support && !plat_priv->recovery_enabled) {
+		if (plat_priv->mlo_support && !plat_priv->recovery_enabled &&
+				group_info != NULL) {
 			spin_lock_irqsave(&rddm_spinlock, rddm_lock);
-			rddm_dump_all++;
+			group_info->rddm_dump_all++;
 			spin_unlock_irqrestore(&rddm_spinlock, rddm_lock);
 		}
 		break;
@@ -3424,9 +3423,10 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 		 */
 		if (ramdump_enabled)
 			cnss_bus_dev_ramdump(plat_priv);
-		if (plat_priv->mlo_support && rddm_count != rddm_dump_all)
-			return 0;
-
+		if (plat_priv->mlo_support && group_info != NULL) {
+			if (group_info->num_chips != group_info->rddm_dump_all)
+				return 0;
+		}
 		ret = cnss_bus_update_status(plat_priv, CNSS_FW_DOWN);
 		if (ret) {
 			/* Call CNSS_ASSERT if fatal call is missed in down
@@ -3572,11 +3572,6 @@ void cnss_schedule_recovery(struct device *dev,
 		CNSS_ASSERT(0);
 		return;
 	}
-
-	if (plat_priv->mlo_support &&  ((reason == CNSS_REASON_RDDM) ||
-				(reason == CNSS_REASON_FATAL_SHUTDOWN)) &&
-				!plat_priv->recovery_enabled)
-		rddm_count++;
 
 	plat_priv->reason = reason;
 	queue_work(plat_priv->recovery_wq, &plat_priv->recovery_work);
