@@ -1900,6 +1900,31 @@ int cnss_pci_call_driver_modem_status(struct cnss_pci_data *pci_priv,
 	return 0;
 }
 
+int cnss_ahb_update_status(struct cnss_plat_data *plat_priv,
+			   enum cnss_driver_status status)
+{
+	struct cnss_wlan_driver *driver_ops;
+
+	if (!plat_priv) {
+		cnss_pr_err("%s: plat_priv is NULL", __func__);
+		return -ENODEV;
+	}
+
+	driver_ops = plat_priv->driver_ops;
+	if (!driver_ops || !driver_ops->update_status) {
+		cnss_pr_err("%s: driver_ops is NULL", __func__);
+		return -EINVAL;
+	}
+
+	cnss_pr_dbg("Update driver status: %d\n", status);
+
+	if (status == CNSS_FW_DOWN)
+		driver_ops->fatal((struct pci_dev *)plat_priv->plat_dev,
+				  (const struct pci_device_id *)
+				  plat_priv->plat_dev_id);
+
+	return 0;
+}
 int cnss_pci_update_status(struct cnss_pci_data *pci_priv,
 			   enum cnss_driver_status status)
 {
@@ -1913,8 +1938,10 @@ int cnss_pci_update_status(struct cnss_pci_data *pci_priv,
 
 	plat_priv = pci_priv->plat_priv;
 	driver_ops = pci_priv->driver_ops;
-	if (!driver_ops || !driver_ops->update_status)
+	if (!driver_ops || !driver_ops->update_status) {
+		cnss_pr_err("%s: driver_ops is NULL", __func__);
 		return -EINVAL;
+	}
 
 	cnss_pr_dbg("Update driver status: %d\n", status);
 
@@ -3875,7 +3902,7 @@ int cnss_pci_alloc_fw_mem(struct cnss_plat_data *plat_priv)
 			fw_mem[i].pa = mlo_mem->base;
 			if (!mlo_global_mem[group_id])
 				mlo_global_mem[group_id] =
-					ioremap(fw_mem[i].pa, fw_mem[i].size);
+					ioremap(fw_mem[i].pa, mlo_mem->size);
 			fw_mem[i].va = mlo_global_mem[group_id];
 
 			if (!mlo_global_mem[group_id]) {
@@ -3888,7 +3915,7 @@ int cnss_pci_alloc_fw_mem(struct cnss_plat_data *plat_priv)
 					      &plat_priv->driver_state)) {
 					memset_io(mlo_global_mem[group_id],
 					      0,
-					      fw_mem[i].size);
+					      mlo_mem->size);
 				}
 			}
 			break;

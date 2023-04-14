@@ -193,6 +193,7 @@ enum cnss_recovery_reason {
 	CNSS_REASON_LINK_DOWN,
 	CNSS_REASON_RDDM,
 	CNSS_REASON_TIMEOUT,
+	CNSS_REASON_FATAL_SHUTDOWN
 };
 
 struct cnss_mlo_chip_info {
