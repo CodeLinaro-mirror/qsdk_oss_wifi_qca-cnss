@@ -2454,8 +2454,6 @@ static int cnss_qcom_devcd_dump(struct device *dev, void *data, size_t datalen,
 		cnss_pr_err("Timeout waiting (%dms) for saving dump to file system\n",
 			    timeout);
 
-	kfree(desc);
-
 	return ret ? 0 : -ETIMEDOUT;
 }
 /* Since the elf32 and elf64 identification is identical apart from
