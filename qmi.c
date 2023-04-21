@@ -3500,22 +3500,25 @@ static void cnss_wlfw_qdss_trace_req_mem_ind_cb(struct qmi_handle *qmi_wlfw,
 	}
 
 	if (plat_priv->qdss_mem_seg_len) {
-		cnss_pr_err("Ignore double allocation for QDSS trace, current len %u\n",
+		cnss_pr_err("Ignore double allocation for QDSS trace, "
+			    "current len %u\n",
 			    plat_priv->qdss_mem_seg_len);
-		return;
-	}
-	plat_priv->qdss_mem_seg_len = ind_msg->mem_seg_len;
-	if (ind_msg->mem_seg_len > 1) {
-		cnss_pr_dbg("%s: FW requests %d segments, overwriting it with 1",
-			    __func__, ind_msg->mem_seg_len);
-		plat_priv->qdss_mem_seg_len = 1;
-	}
+	} else {
+		plat_priv->qdss_mem_seg_len = ind_msg->mem_seg_len;
+		if (ind_msg->mem_seg_len > 1) {
+			cnss_pr_dbg("%s: FW requests %d segments, "
+				    "overwriting it with 1",
+				    __func__, ind_msg->mem_seg_len);
+			plat_priv->qdss_mem_seg_len = 1;
+		}
 
-	for (i = 0; i < plat_priv->qdss_mem_seg_len; i++) {
-		cnss_pr_dbg("QDSS requests for memory, size: 0x%x, type: %u\n",
-			    ind_msg->mem_seg[i].size, ind_msg->mem_seg[i].type);
-		plat_priv->qdss_mem[i].type = ind_msg->mem_seg[i].type;
-		plat_priv->qdss_mem[i].size = ind_msg->mem_seg[i].size;
+		for (i = 0; i < plat_priv->qdss_mem_seg_len; i++) {
+			cnss_pr_dbg("QDSS requests for memory, size: 0x%x, "
+				    "type: %u\n", ind_msg->mem_seg[i].size,
+				    ind_msg->mem_seg[i].type);
+			plat_priv->qdss_mem[i].type = ind_msg->mem_seg[i].type;
+			plat_priv->qdss_mem[i].size = ind_msg->mem_seg[i].size;
+		}
 	}
 
 	cnss_driver_event_post(plat_priv, CNSS_DRIVER_EVENT_QDSS_TRACE_REQ_MEM,
