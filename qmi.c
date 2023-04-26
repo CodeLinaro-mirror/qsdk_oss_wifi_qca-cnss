@@ -3275,20 +3275,10 @@ static void cnss_wlfw_request_mem_ind_cb(struct qmi_handle *qmi_wlfw,
 			       0, NULL);
 }
 
-static void cnss_wlfw_fw_mem_ready_ind_cb(struct qmi_handle *qmi_wlfw,
-					  struct sockaddr_qrtr *sq,
-					  struct qmi_txn *txn, const void *data)
+#ifndef CONFIG_CNSS2_KERNEL_6_1
+static void cnss_cal_report_download(struct cnss_plat_data *plat_priv)
 {
-	struct cnss_plat_data *plat_priv =
-		container_of(qmi_wlfw, struct cnss_plat_data, qmi_wlfw);
 	u32 cal_file_size = 0;
-
-	cnss_pr_dbg("Received QMI WLFW FW memory ready indication\n");
-
-	if (!txn) {
-		cnss_pr_err("Spurious indication\n");
-		return;
-	}
 
 	if (is_ipc_qmi_client_connected(CNSS_PLAT_IPC_DAEMON_QMI_CLIENT_V01,
 					0)) {
@@ -3301,6 +3291,28 @@ static void cnss_wlfw_fw_mem_ready_ind_cb(struct qmi_handle *qmi_wlfw,
 				    __func__, plat_priv->cal_file_size);
 		}
 	}
+}
+#else
+static void cnss_cal_report_download(struct cnss_plat_data *plat_priv)
+{
+}
+#endif
+
+static void cnss_wlfw_fw_mem_ready_ind_cb(struct qmi_handle *qmi_wlfw,
+					  struct sockaddr_qrtr *sq,
+					  struct qmi_txn *txn, const void *data)
+{
+	struct cnss_plat_data *plat_priv =
+		container_of(qmi_wlfw, struct cnss_plat_data, qmi_wlfw);
+
+	cnss_pr_dbg("Received QMI WLFW FW memory ready indication\n");
+
+	if (!txn) {
+		cnss_pr_err("Spurious indication\n");
+		return;
+	}
+
+	cnss_cal_report_download(plat_priv);
 
 	qmi_record(plat_priv->wlfw_service_instance_id,
 		   QMI_WLFW_FW_MEM_READY_IND_V01, 0, 0);
