@@ -74,6 +74,9 @@
 #define QMI_WLFW_PAGEABLE_MEM_V01	0x9
 #define AFC_REGION_TYPE			0xA
 
+#define MODE_0_RECOVERY_MODE		1
+#define MODE_1_RECOVERY_MODE		2
+
 #define CNSS_ETR_SG_ENT(phys_pte)	(((phys_pte >> PAGE_SHIFT) << 4) | 0x2)
 #define CNSS_ETR_SG_NXT_TBL(phys_pte)	(((phys_pte >> PAGE_SHIFT) << 4) | 0x3)
 #define CNSS_ETR_SG_LST_ENT(phys_pte)	(((phys_pte >> PAGE_SHIFT) << 4) | 0x1)
@@ -305,6 +308,7 @@ void cnss_free_soc_info(struct cnss_plat_data *plat_priv);
 void cnss_dump_ce_reg(struct cnss_plat_data *plat_priv, enum cnss_ce_index ce,
 		      struct cnss_ce_base_addr *ce_object);
 struct cnss_ce_base_addr *register_ce_object(struct cnss_plat_data *plat_priv);
+void cnss_do_mlo_global_memset(struct cnss_plat_data *plat_priv, u64 mem_size);
 #ifdef CONFIG_CNSS2_QGIC2M
 struct qgic2_msi *cnss_qgic2_enable_msi(struct cnss_plat_data *plat_priv);
 void cnss_qgic2_disable_msi(struct cnss_plat_data *plat_priv);

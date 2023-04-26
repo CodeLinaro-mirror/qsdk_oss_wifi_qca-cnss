@@ -604,6 +604,7 @@ struct cnss_plat_data {
 	struct cnss_wlan_driver *driver_ops;
 	enum cnss_driver_status driver_status;
 	u32 recovery_count;
+	u8 recovery_mode;
 	unsigned long driver_state;
 	struct list_head event_list;
 	spinlock_t event_lock; /* spinlock for driver work event handling */
