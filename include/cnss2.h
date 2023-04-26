@@ -216,6 +216,7 @@ struct cnss_mlo_group_info {
 	u8 wsi_order_bitmap;
 	u8 skip_soc_chip_bitmap;
 	struct cnss_mlo_chip_info chip_info[CNSS_MAX_MLO_CHIPS];
+	u16 rddm_dump_all;
 };
 
 struct cnss_module_param {
