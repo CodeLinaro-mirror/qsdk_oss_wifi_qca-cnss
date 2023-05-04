@@ -757,6 +757,87 @@ static int cnss_pci_reg_write(struct cnss_pci_data *pci_priv, u32 addr,
 	return 0;
 }
 
+static void cnss_pci_remote_select_window(struct cnss_plat_data *plat_priv, u32 addr)
+{
+	u32 window = (addr >> WINDOW_SHIFT) & WINDOW_VALUE_MASK;
+	u32 prev_window = 0, curr_window = 0, prev_cleared_window = 0;
+	volatile u32 write_val, read_val = 0;
+	void *bar = plat_priv->tgt_data.bar_addr_va;
+	int retry = 0;
+
+	prev_window = readl_relaxed(bar + QCN9000_PCIE_REMAP_BAR_CTRL_OFFSET);
+
+	/* Clear out last 6 bits of window register */
+	prev_cleared_window = prev_window & ~(0x3f);
+
+	/* Write the new last 6 bits of window register. Only window 1 values
+	 * are changed. Window 2 and 3 are unaffected.
+	 */
+	curr_window = prev_cleared_window | window;
+
+	/* Skip writing into window register if the read value
+	 * is same as calculated value.
+	 */
+	if (curr_window == prev_window)
+		return;
+
+	write_val = WINDOW_ENABLE_BIT | curr_window;
+	writel_relaxed(write_val, bar + QCN9000_PCIE_REMAP_BAR_CTRL_OFFSET);
+
+	read_val = readl_relaxed(bar + QCN9000_PCIE_REMAP_BAR_CTRL_OFFSET);
+
+	/* If value written is not yet reflected, wait till it is reflected */
+	while ((read_val != write_val) && (retry < 10)) {
+		mdelay(1);
+		read_val = readl_relaxed(bar +
+					 QCN9000_PCIE_REMAP_BAR_CTRL_OFFSET);
+		retry++;
+	}
+	cnss_pr_dbg("%s: retry count: %d", __func__, retry);
+}
+
+
+static int cnss_pci_remote_reg_read(struct cnss_plat_data *plat_priv,
+			     u32 addr, u32 *val)
+{
+	unsigned long flags;
+	void *bar = plat_priv->tgt_data.bar_addr_va;
+
+	if (addr < MAX_UNWINDOWED_ADDRESS) {
+		*val = readl_relaxed(bar + addr);
+		return 0;
+	}
+
+	spin_lock_irqsave(&pci_reg_window_lock, flags);
+	cnss_pci_remote_select_window(plat_priv, addr);
+
+	*val = readl_relaxed(bar + WINDOW_START +
+			     (addr & WINDOW_RANGE_MASK));
+	spin_unlock_irqrestore(&pci_reg_window_lock, flags);
+
+	return 0;
+}
+static int cnss_pci_remote_reg_write(struct cnss_plat_data *plat_priv, u32 addr,
+			      u32 val)
+{
+	unsigned long flags;
+	void *bar = plat_priv->tgt_data.bar_addr_va;
+
+	if (addr < MAX_UNWINDOWED_ADDRESS) {
+		writel_relaxed(val, bar + addr);
+		return 0;
+	}
+
+	spin_lock_irqsave(&pci_reg_window_lock, flags);
+	cnss_pci_remote_select_window(plat_priv, addr);
+
+	writel_relaxed(val, bar + WINDOW_START +
+		       (addr & WINDOW_RANGE_MASK));
+	spin_unlock_irqrestore(&pci_reg_window_lock, flags);
+
+	return 0;
+}
+
 int cnss_reg_read(struct device *dev, u32 addr, u32 *val, void __iomem *base)
 {
 	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
@@ -777,6 +858,8 @@ int cnss_reg_read(struct device *dev, u32 addr, u32 *val, void __iomem *base)
 		}
 		return cnss_pci_reg_read(pci_priv, addr, val);
 	case CNSS_BUS_AHB:
+		if (plat_priv->device_id == QCN6432_DEVICE_ID)
+                        return cnss_pci_remote_reg_read(plat_priv, addr, val);
 		if (base)
 			*val = readl_relaxed(addr + base);
 		else
@@ -811,6 +894,8 @@ int cnss_reg_write(struct device *dev, u32 addr, u32 val, void __iomem *base)
 
 		return cnss_pci_reg_write(pci_priv, addr, val);
 	case CNSS_BUS_AHB:
+		if (plat_priv->device_id == QCN6432_DEVICE_ID)
+			return cnss_pci_remote_reg_write(plat_priv, addr, val);
 		writel_relaxed(val, addr + base);
 		return 0;
 	default:
