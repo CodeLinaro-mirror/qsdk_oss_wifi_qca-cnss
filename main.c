@@ -380,7 +380,6 @@ struct cnss_plat_data *cnss_get_plat_priv(struct platform_device
 
 	if (!plat_dev)
 		return NULL;
-
 	for (i = 0; i < plat_env_index; i++) {
 		if (plat_env[i]->plat_dev == plat_dev)
 			return plat_env[i];
@@ -6103,9 +6102,14 @@ static void cnss_set_board_id(struct cnss_plat_data *plat_priv)
 		break;
 	case QCN9160_DEVICE_ID:
 	case QCN6122_DEVICE_ID:
-	case QCN6432_DEVICE_ID:
-		board_id_str = "qcom,board_id";
 		board_info->num_bytes = 1;
+		board_id_str = "qcom,board_id";
+		board_info->board_id_override =
+			cnss_get_bdf_mod_param(plat_priv->userpd_id - 1);
+		break;
+	case QCN6432_DEVICE_ID:
+		board_info->num_bytes = 2;
+		board_id_str = "qcom,board_id";
 		board_info->board_id_override =
 			cnss_get_bdf_mod_param(plat_priv->userpd_id - 1);
 		break;
