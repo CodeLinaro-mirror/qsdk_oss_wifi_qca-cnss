@@ -194,7 +194,7 @@ static int soc_version_major;
 module_param(soc_version_major, int, 0444);
 MODULE_PARM_DESC(soc_version_major, "SOC Major Version");
 
-static unsigned int enable_mlo_support = 1;
+static unsigned int enable_mlo_support = 0;
 module_param(enable_mlo_support, uint, 0600);
 MODULE_PARM_DESC(enable_mlo_support, "enable_mlo_support");
 
