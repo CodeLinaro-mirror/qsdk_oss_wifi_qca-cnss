@@ -6185,7 +6185,7 @@ int cnss_dump_all_ce_reg(struct cnss_plat_data *plat_priv)
 }
 EXPORT_SYMBOL(cnss_dump_all_ce_reg);
 
-#ifdef CONFIG_CNSS2_KERNEL_MSM
+#if defined(CONFIG_CNSS2_KERNEL_MSM) || defined(CONFIG_CNSS2_KERNEL_5_15)
 #define MAX_RAMDUMP_TABLE_SIZE	6
 #define COREDUMP_DESC		"Q6-COREDUMP"
 #define Q6_SFR_DESC		"Q6-SFR"
@@ -6214,14 +6214,15 @@ void cnss_get_crash_reason(struct cnss_pci_data *pci_priv)
 	struct cnss_ramdump_header *ramdump_header;
 	struct cnss_ramdump_entry *ramdump_table;
 	char *msg = ERR_PTR(-EPROBE_DEFER);
+	struct pci_dev *pci_dev = plat_priv->pci_dev;
 
 	mhi_cntrl = pci_priv->mhi_ctrl;
 	rddm_image = mhi_cntrl->rddm_image;
 	mhi_buf = rddm_image->mhi_buf;
 
 	cnss_pr_err("CRASHED - [DID:DOMAIN:BUS:SLOT] - %x:%04u:%02u:%02u\n",
-		    mhi_cntrl->dev_id, mhi_cntrl->domain, mhi_cntrl->bus,
-		    mhi_cntrl->slot);
+		    pci_dev->device, pci_dev->bus->domain_nr,
+		    pci_dev->bus->number, PCI_SLOT(pci_dev->devfn));
 
 	/* Get RDDM header size */
 	ramdump_header = (struct cnss_ramdump_header *)mhi_buf[0].buf;
