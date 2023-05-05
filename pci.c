@@ -4022,7 +4022,7 @@ int cnss_ahb_alloc_fw_mem(struct cnss_plat_data *plat_priv)
 				cnss_pr_err("WARNING: Host DDR remap failed\n");
 			} else {
 				chip_id = cnss_get_mlo_chip_id(dev);
-				if (chip_id == 0)
+				if (chip_id == MLO_GROUP_MASTER_CHIP)
 					cnss_do_mlo_global_memset(plat_priv,
 							fw_mem[i].size);
 			}
@@ -4266,7 +4266,7 @@ int cnss_pci_alloc_fw_mem(struct cnss_plat_data *plat_priv)
 			} else {
 				pci_bus_dev = &pci_priv->pci_dev->dev;
 				chip_id = cnss_get_mlo_chip_id(pci_bus_dev);
-				if (chip_id == 0)
+				if (chip_id == MLO_GROUP_MASTER_CHIP)
 					cnss_do_mlo_global_memset(plat_priv,
 							mlo_mem->size);
 			}
