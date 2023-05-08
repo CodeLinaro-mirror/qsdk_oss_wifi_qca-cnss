@@ -20,8 +20,10 @@
 #include "pci.h"
 #define CNSS_IPC_LOG_PAGES		32
 
+#if IS_ENABLED(CONFIG_IPC_LOGGING)
 void *cnss_ipc_log_context;
 void *cnss_ipc_log_long_context;
+#endif
 extern void cnss_dump_qmi_history(void);
 struct dentry *cnss_root_dentry = NULL;
 
@@ -1045,6 +1047,7 @@ void cnss_debugfs_destroy(struct cnss_plat_data *plat_priv)
 	plat_priv->root_dentry = NULL;
 }
 
+#if IS_ENABLED(CONFIG_IPC_LOGGING)
 int cnss_debug_init(void)
 {
 	struct cnss_plat_data *plat_priv = NULL;
@@ -1079,6 +1082,13 @@ void cnss_debug_deinit(void)
 		cnss_ipc_log_context = NULL;
 	}
 }
+#else
+int cnss_debug_init(void)
+{
+	return 0;
+}
+void cnss_debug_deinit(void) {}
+#endif
 
 bool cnss_wait_for_rddm_complete(struct cnss_plat_data *plat_priv)
 {
