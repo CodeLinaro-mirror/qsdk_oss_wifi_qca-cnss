@@ -555,6 +555,30 @@ static struct mhi_controller_config cnss_pci_mhi_config = {
 };
 #endif
 
+#if IS_ENABLED(CONFIG_MHI_BUS_MISC)
+static void cnss_mhi_debug_reg_dump(struct cnss_pci_data *pci_priv)
+{
+	mhi_debug_reg_dump(pci_priv->mhi_ctrl);
+}
+
+static bool cnss_mhi_scan_rddm_cookie(struct cnss_pci_data *pci_priv,
+				      u32 cookie)
+{
+	return mhi_scan_rddm_cookie(pci_priv->mhi_ctrl, cookie);
+}
+#else
+static void cnss_mhi_debug_reg_dump(struct cnss_pci_data *pci_priv)
+{
+}
+
+static bool cnss_mhi_scan_rddm_cookie(struct cnss_pci_data *pci_priv,
+				      u32 cookie)
+{
+	return false;
+}
+#endif /* CONFIG_MHI_BUS_MISC */
+
+
 static int cnss_pci_check_link_status(struct cnss_pci_data *pci_priv)
 {
 #ifdef CONFIG_PCI_SUSPENDRESUME
@@ -1671,7 +1695,7 @@ out:
 		 * mode and is able to do RDDM, RDDM cookie would be set.
 		 * Dump SBL SRAM memory only if RDDM cookie is not set.
 		 */
-		if (!mhi_scan_rddm_cookie(pci_priv->mhi_ctrl,
+		if (!cnss_mhi_scan_rddm_cookie(pci_priv,
 					  DEVICE_RDDM_COOKIE))
 			cnss_pci_dump_bl_sram_mem(pci_priv);
 	}
@@ -7001,14 +7025,14 @@ static void cnss_boot_debug_timeout_hdlr(struct timer_list *timer)
 	if (test_bit(CNSS_MHI_POWER_ON, &pci_priv->mhi_state))
 		return;
 
-	if (mhi_scan_rddm_cookie(pci_priv->mhi_ctrl,
+	if (cnss_mhi_scan_rddm_cookie(pci_priv,
 				 DEVICE_RDDM_COOKIE))
 		return;
 
 	cnss_pr_dbg("Dump MHI/PBL/SBL debug data every %ds during MHI power on\n",
 		    BOOT_DEBUG_TIMEOUT_MS / 1000);
 
-	mhi_debug_reg_dump(pci_priv->mhi_ctrl);
+	cnss_mhi_debug_reg_dump(pci_priv);
 	cnss_pci_dump_bl_sram_mem(pci_priv);
 
 	mod_timer(&pci_priv->boot_debug_timer,
