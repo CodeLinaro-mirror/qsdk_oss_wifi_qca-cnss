@@ -5554,7 +5554,7 @@ struct qgic2_msi *cnss_qgic2_enable_msi(struct cnss_plat_data *plat_priv)
 		plat_priv->tgt_data.qgic2_msi = qgic;
 
 	msi_desc = first_msi_entry(dev);
-	irq_data = irq_desc_get_irq_data(irq_to_desc(msi_desc->irq));
+	irq_data = irq_get_irq_data(msi_desc->irq);
 	if (!irq_data) {
 		cnss_pr_err("irq_desc_get_irq_data failed.\n");
 		platform_msi_domain_free_irqs(&plat_priv->plat_dev->dev);
