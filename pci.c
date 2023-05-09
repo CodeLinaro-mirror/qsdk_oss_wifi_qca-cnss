@@ -36,7 +36,7 @@
 #include "pci.h"
 #include "bus.h"
 #include "legacyirq/legacyirq.h"
-#ifdef CONFIG_CNSS2_KERNEL_5_15
+#if (KERNEL_VERSION(5, 15, 0) <= LINUX_VERSION_CODE)
 #include <linux/devcoredump.h>
 #include <linux/elf.h>
 #else
@@ -270,7 +270,7 @@ static struct mhi_channel_config cnss_pci_mhi_channels[] = {
 		.offload_channel = false,
 		.doorbell_mode_switch = false,
 		.auto_queue = false,
-#ifndef CONFIG_CNSS2_KERNEL_5_15
+#if (KERNEL_VERSION(5, 11, 0) > LINUX_VERSION_CODE)
 		.auto_start = false,
 #endif
 	},
@@ -287,7 +287,7 @@ static struct mhi_channel_config cnss_pci_mhi_channels[] = {
 		.offload_channel = false,
 		.doorbell_mode_switch = false,
 		.auto_queue = false,
-#ifndef CONFIG_CNSS2_KERNEL_5_15
+#if (KERNEL_VERSION(5, 11, 0) > LINUX_VERSION_CODE)
 		.auto_start = false,
 #endif
 	},
@@ -304,7 +304,7 @@ static struct mhi_channel_config cnss_pci_mhi_channels[] = {
 		.offload_channel = false,
 		.doorbell_mode_switch = false,
 		.auto_queue = false,
-#ifndef CONFIG_CNSS2_KERNEL_5_15
+#if (KERNEL_VERSION(5, 11, 0) > LINUX_VERSION_CODE)
 		.auto_start = false,
 #endif
 	},
@@ -321,7 +321,7 @@ static struct mhi_channel_config cnss_pci_mhi_channels[] = {
 		.offload_channel = false,
 		.doorbell_mode_switch = false,
 		.auto_queue = false,
-#ifndef CONFIG_CNSS2_KERNEL_5_15
+#if (KERNEL_VERSION(5, 11, 0) > LINUX_VERSION_CODE)
 		.auto_start = false,
 #endif
 	},
@@ -338,7 +338,7 @@ static struct mhi_channel_config cnss_pci_mhi_channels[] = {
 		.offload_channel = false,
 		.doorbell_mode_switch = false,
 		.auto_queue = false,
-#ifndef CONFIG_CNSS2_KERNEL_5_15
+#if (KERNEL_VERSION(5, 11, 0) > LINUX_VERSION_CODE)
 		.auto_start = true,
 #endif
 	},
@@ -355,7 +355,7 @@ static struct mhi_channel_config cnss_pci_mhi_channels[] = {
 		.offload_channel = false,
 		.doorbell_mode_switch = false,
 		.auto_queue = true,
-#ifndef CONFIG_CNSS2_KERNEL_5_15
+#if (KERNEL_VERSION(5, 11, 0) > LINUX_VERSION_CODE)
 		.auto_start = true,
 #endif
 	},
@@ -1888,7 +1888,7 @@ static void cnss_qca6174_crash_shutdown(struct cnss_pci_data *pci_priv)
 		pci_priv->driver_ops->crash_shutdown(pci_priv->pci_dev);
 }
 
-#ifndef CONFIG_CNSS2_KERNEL_5_15
+#if (KERNEL_VERSION(5, 15, 0) > LINUX_VERSION_CODE)
 static int cnss_qca6174_ramdump(struct cnss_pci_data *pci_priv)
 {
 	int ret = 0;
@@ -2040,7 +2040,7 @@ static void cnss_qcn9000_crash_shutdown(struct cnss_pci_data *pci_priv)
 	cnss_pci_collect_dump_info(pci_priv, true);
 }
 
-#ifndef CONFIG_CNSS2_KERNEL_5_15
+#if (KERNEL_VERSION(5, 15, 0) > LINUX_VERSION_CODE)
 static int cnss_qcn9000_ramdump(struct cnss_pci_data *pci_priv)
 {
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
@@ -5158,7 +5158,11 @@ struct qgic2_msi *cnss_qgic2_enable_msi(struct cnss_plat_data *plat_priv)
 	    plat_priv->device_id == QCN6432_DEVICE_ID)
 		plat_priv->tgt_data.qgic2_msi = qgic;
 
+#if (KERNEL_VERSION(5, 17, 0) <= LINUX_VERSION_CODE)
+	msi_desc = msi_first_desc(dev, MSI_DESC_ALL);
+#else
 	msi_desc = first_msi_entry(dev);
+#endif
 	irq_data = irq_get_irq_data(msi_desc->irq);
 	if (!irq_data) {
 		cnss_pr_err("irq_desc_get_irq_data failed.\n");
@@ -5469,14 +5473,22 @@ static int cnss_pci_enable_bus(struct cnss_pci_data *pci_priv)
 	pci_priv->dma_bit_mask = PCI_DMA_MASK_64_BIT;
 #endif
 
+#if (KERNEL_VERSION(5, 18, 0) <= LINUX_VERSION_CODE)
+	ret = dma_set_mask(&pci_dev->dev, pci_priv->dma_bit_mask);
+#else
 	ret = pci_set_dma_mask(pci_dev, pci_priv->dma_bit_mask);
+#endif
 	if (ret) {
 		cnss_pr_err("Failed to set PCI DMA mask (%lld), err = %d\n",
 			    pci_priv->dma_bit_mask, ret);
 		goto release_region;
 	}
 
+#if (KERNEL_VERSION(5, 18, 0) <= LINUX_VERSION_CODE)
+	ret = dma_set_coherent_mask(&pci_dev->dev, pci_priv->dma_bit_mask);
+#else
 	ret = pci_set_consistent_dma_mask(pci_dev, pci_priv->dma_bit_mask);
+#endif
 	if (ret) {
 		cnss_pr_err("Failed to set PCI consistent DMA mask (%lld), err = %d\n",
 			    pci_priv->dma_bit_mask, ret);
@@ -5508,7 +5520,7 @@ out:
 	return ret;
 }
 
-#ifndef CONFIG_CNSS2_KERNEL_5_15
+#if (KERNEL_VERSION(5, 15, 0) > LINUX_VERSION_CODE)
 void cnss_pci_global_reset(struct cnss_pci_data *pci_priv)
 {
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
@@ -5596,7 +5608,7 @@ void cnss_pci_global_reset(struct cnss_pci_data *pci_priv)
 	if (iRet != 0)
 		cnss_pr_err("Error(%d): %s failed.\n", iRet, __func__);
 
-	/* TODO: exact time to sleep is uncertain */
+	/* exact time to sleep is uncertain */
 	delay = 10;
 	mdelay(delay);
 
@@ -5618,7 +5630,7 @@ void cnss_pci_global_reset(struct cnss_pci_data *pci_priv)
 }
 #endif
 
-#if defined(ONFIG_CNSS2_KERNEL_MSM) || defined(CONFIG_CNSS2_KERNEL_5_15)
+#if defined(ONFIG_CNSS2_KERNEL_MSM) || (KERNEL_VERSION(5, 7, 0) <= LINUX_VERSION_CODE)
 static void cnss_reset_mhi_state(struct cnss_pci_data *pci_priv)
 {
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
@@ -5643,7 +5655,7 @@ static void cnss_pci_disable_bus(struct cnss_pci_data *pci_priv)
 	/* On SOC_GLOBAL_RESET, target waits in PBL for host to set the
 	 * MHI_RESET bit to 1.
 	 */
-#if defined(ONFIG_CNSS2_KERNEL_MSM) || defined(CONFIG_CNSS2_KERNEL_5_15)
+#if defined(ONFIG_CNSS2_KERNEL_MSM) || (KERNEL_VERSION(5, 7, 0) <= LINUX_VERSION_CODE)
 	cnss_reset_mhi_state(pci_priv);
 #else
 	mhi_set_mhi_state(pci_priv->mhi_ctrl, MHI_STATE_RESET);
@@ -5739,7 +5751,7 @@ int cnss_bus_reg_read(struct cnss_plat_data *plat_priv, u32 reg_offset,
 	return 0;
 }
 
-#if defined(CONFIG_CNSS2_KERNEL_MSM) || (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
+#if defined(CONFIG_CNSS2_KERNEL_MSM) || (KERNEL_VERSION(5, 15, 0) <= LINUX_VERSION_CODE)
 #define MAX_RAMDUMP_TABLE_SIZE	6
 #define COREDUMP_DESC		"Q6-COREDUMP"
 #define Q6_SFR_DESC		"Q6-SFR"
@@ -5869,7 +5881,7 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 		return;
 	}
 
-#if defined(CONFIG_CNSS2_KERNEL_MSM) || (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
+#if defined(CONFIG_CNSS2_KERNEL_MSM) || (KERNEL_VERSION(5, 15, 0) <= LINUX_VERSION_CODE)
 	cnss_get_crash_reason(pci_priv);
 #endif
 
@@ -6387,7 +6399,7 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 	}
 
 	pci_priv->mhi_ctrl = mhi_ctrl;
-#ifndef CONFIG_CNSS2_KERNEL_5_15
+#if (KERNEL_VERSION(5, 15, 0) > LINUX_VERSION_CODE)
 	mhi_ctrl->dev_id = pci_priv->device_id;
 #endif
 #ifdef CONFIG_CNSS2_KERNEL_MSM
@@ -6414,7 +6426,7 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 
 	mhi_ctrl->fw_image = plat_priv->firmware_name;
 	mhi_ctrl->regs = pci_priv->bar;
-#ifdef CONFIG_CNSS2_KERNEL_5_15
+#if (KERNEL_VERSION(5, 15, 0) <= LINUX_VERSION_CODE)
 	mhi_ctrl->reg_len = pci_resource_len(pci_priv->pci_dev, PCI_BAR_NUM);
 #endif
 	cnss_pr_dbg("BAR starts at %pa\n",
@@ -6750,7 +6762,7 @@ unregister_ramdump:
 #endif
 	cnss_unregister_ramdump(plat_priv);
 unregister_subsys:
-#ifndef CONFIG_CNSS2_KERNEL_5_15
+#if !defined(CONFIG_CNSS2_KERNEL_5_15)  && !defined(CONFIG_CNSS2_KERNEL_6_1)
 	cnss_unregister_subsys(plat_priv);
 #else
 	cnss_bus_dev_shutdown(plat_priv);
