@@ -25,7 +25,7 @@
 #include <linux/coresight.h>
 #include <linux/remoteproc.h>
 #include <linux/of_address.h>
-#ifndef CONFIG_QCOM_SOCINFO
+#ifdef CONFIG_QCOM_SOCINFO
 #include <soc/qcom/socinfo.h>
 #endif
 #include <linux/firmware.h>
@@ -4920,7 +4920,7 @@ void cnss_unregister_ramdump(struct cnss_plat_data *plat_priv)
 #else /* !CONFIG_CNSS2_KERNEL_5_15 */
 static int cnss_init_dump_entry(struct cnss_plat_data *plat_priv)
 {
-#ifndef CONFIG_QTI_MEMORY_DUMP_V2
+#ifdef CONFIG_QTI_MEMORY_DUMP_V2
 	struct cnss_ramdump_info *ramdump_info;
 	struct msm_dump_entry dump_entry;
 
@@ -5014,7 +5014,7 @@ static void cnss_unregister_ramdump_v1(struct cnss_plat_data *plat_priv)
 				  ramdump_info->ramdump_pa);
 }
 
-#ifndef CONFIG_QTI_MEMORY_DUMP_V2
+#ifdef CONFIG_QTI_MEMORY_DUMP_V2
 static u32 cnss_get_dump_desc_size(struct cnss_plat_data *plat_priv)
 {
 	u32 descriptor_size = 0;
@@ -5036,7 +5036,7 @@ static u32 cnss_get_dump_desc_size(struct cnss_plat_data *plat_priv)
 static int cnss_register_ramdump_v2(struct cnss_plat_data *plat_priv)
 {
 	int ret = 0;
-#ifndef CONFIG_QTI_MEMORY_DUMP_V2
+#ifdef CONFIG_QTI_MEMORY_DUMP_V2
 	struct cnss_subsys_info *subsys_info;
 	struct cnss_ramdump_info_v2 *info_v2;
 	struct cnss_dump_data *dump_data;
@@ -6258,7 +6258,7 @@ static int cnss_probe(struct platform_device *plat_dev)
 		ret = -ENODEV;
 		goto out;
 	}
-#ifndef CONFIG_QCOM_SOCINFO
+#ifdef CONFIG_QCOM_SOCINFO
 #ifdef CONFIG_CNSS2_KERNEL_IPQ
 	/* Check for QCA9574 here and skip probe accordingly */
 	if (device_id->driver_data == QCA9574_DEVICE_ID &&

@@ -19,7 +19,7 @@
 #include <linux/pm_qos.h>
 #include <linux/platform_device.h>
 #include <cnss2.h>
-#ifndef CONFIG_QTI_MEMORY_DUMP_V2
+#ifdef CONFIG_QTI_MEMORY_DUMP_V2
 #include <soc/qcom/memory_dump.h>
 #endif
 
@@ -252,7 +252,7 @@ struct cnss_ramdump_info {
 	unsigned long ramdump_size;
 	void *ramdump_va;
 	phys_addr_t ramdump_pa;
-#ifndef CONFIG_QTI_MEMORY_DUMP_V2
+#ifdef CONFIG_QTI_MEMORY_DUMP_V2
 	struct msm_dump_data dump_data;
 #endif
 };
