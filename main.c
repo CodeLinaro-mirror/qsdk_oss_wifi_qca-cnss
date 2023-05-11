@@ -6341,9 +6341,11 @@ static int cnss_probe(struct platform_device *plat_dev)
 		plat_priv->wlfw_service_instance_id =
 			WLFW_SERVICE_INS_ID_V01_QCA8074;
 		break;
+	case QCN6432_DEVICE_ID:
+		plat_priv->mlo_support = !!enable_mlo_support;
+		/* Fall Through */
 	case QCN6122_DEVICE_ID:
 	case QCN9160_DEVICE_ID:
-	case QCN6432_DEVICE_ID:
 		plat_priv->bus_type = CNSS_BUS_AHB;
 		plat_priv->bdf_dnld_method = WLFW_DIRECT_BDF_COPY_V01;
 		plat_priv->userpd_id = userpd_id;
