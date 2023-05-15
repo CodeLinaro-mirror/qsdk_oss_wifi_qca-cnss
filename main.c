@@ -337,6 +337,19 @@ struct cnss_plat_data *cnss_get_plat_priv_by_instance_id(int instance_id)
 }
 EXPORT_SYMBOL(cnss_get_plat_priv_by_instance_id);
 
+void cnss_set_recovery_mode(struct device *dev, u8 recovery_mode)
+{
+	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
+
+	if (!plat_priv)
+		return;
+
+	cnss_pr_dbg("The recovery mode is %d\n", recovery_mode);
+	plat_priv->recovery_mode = recovery_mode;
+
+}
+EXPORT_SYMBOL(cnss_set_recovery_mode);
+
 struct cnss_plat_data *cnss_get_plat_priv_by_device_id(int id)
 {
 	int i;

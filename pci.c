@@ -3448,6 +3448,21 @@ err:
 }
 EXPORT_SYMBOL(cnss_reset_afcmem);
 
+void cnss_do_mlo_global_memset(struct cnss_plat_data *plat_priv, u64 mem_size)
+{
+	switch (plat_priv->recovery_mode) {
+	case MODE_1_RECOVERY_MODE:
+		break;
+	case MODE_0_RECOVERY_MODE:
+	default:
+		if (!test_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state)) {
+			memset_io(mlo_global_mem[
+					   plat_priv->mlo_group_info->group_id],
+					   0, mem_size);
+		}
+	}
+
+}
 int cnss_ahb_alloc_fw_mem(struct cnss_plat_data *plat_priv)
 {
 	struct cnss_fw_mem *fw_mem = plat_priv->fw_mem;
@@ -3693,12 +3708,9 @@ int cnss_ahb_alloc_fw_mem(struct cnss_plat_data *plat_priv)
 				cnss_pr_err("WARNING: Host DDR remap failed\n");
 			} else {
 				chip_id = cnss_get_mlo_chip_id(dev);
-				if (chip_id == 0 &&
-				    !test_bit(CNSS_DRIVER_RECOVERY,
-					      &plat_priv->driver_state)) {
-					memset_io(mlo_global_mem[group_id], 0,
-						  fw_mem[i].size);
-				}
+				if (chip_id == 0)
+					cnss_do_mlo_global_memset(plat_priv,
+							fw_mem[i].size);
 			}
 			idx++;
 			break;
@@ -3940,13 +3952,9 @@ int cnss_pci_alloc_fw_mem(struct cnss_plat_data *plat_priv)
 			} else {
 				pci_bus_dev = &pci_priv->pci_dev->dev;
 				chip_id = cnss_get_mlo_chip_id(pci_bus_dev);
-				if (chip_id == 0 &&
-				    !test_bit(CNSS_DRIVER_RECOVERY,
-					      &plat_priv->driver_state)) {
-					memset_io(mlo_global_mem[group_id],
-					      0,
-					      mlo_mem->size);
-				}
+				if (chip_id == 0)
+					cnss_do_mlo_global_memset(plat_priv,
+							mlo_mem->size);
 			}
 			break;
 		default:
