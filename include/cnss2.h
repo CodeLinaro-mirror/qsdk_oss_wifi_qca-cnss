@@ -522,6 +522,10 @@ static inline int cnss_get_mlo_group_id(struct device *dev)
 {
 	return -EINVAL;
 }
+static inline void cnss_set_recovery_mode(struct device *dev, u8 recovery_mode)
+{
+	return -EINVAL;
+}
 #else
 extern int cnss_wlan_register_driver_ops(struct cnss_wlan_driver *driver);
 extern int cnss_wlan_probe_driver(void);
@@ -637,5 +641,6 @@ int cnss_get_num_mlo_groups(void);
 bool cnss_get_mlo_group_info(uint8_t grp_id,
 			struct cnss_mlo_group_info *grp_info);
 int cnss_get_mlo_group_id(struct device *dev);
+void cnss_set_recovery_mode(struct device *dev, u8 recovery_mode);
 #endif
 #endif /* _NET_CNSS2_H */
