@@ -574,6 +574,11 @@ struct qdss_stream_data {
 	atomic_t                completed_seq_no;
 };
 
+enum cnss_recovery_type {
+	CNSS_ASYNC_RECOVERY, /* asynchronous recovery */
+	CNSS_SYNC_RECOVERY, /* synchronous recovery */
+};
+
 struct cnss_plat_data {
 	void *wlan_priv;
 	struct platform_device *plat_dev;
@@ -595,6 +600,7 @@ struct cnss_plat_data {
 	struct cnss_pinctrl_info pinctrl_info;
 	struct cnss_subsys_info subsys_info;
 	bool recovery_enabled;
+	enum cnss_recovery_type recovery_type;
 	struct cnss_ramdump_info ramdump_info;
 	struct cnss_ramdump_info_v2 ramdump_info_v2;
 	struct cnss_esoc_info esoc_info;
