@@ -216,6 +216,7 @@ struct cnss_mlo_group_info {
 	u8 wsi_order_bitmap;
 	u8 skip_soc_chip_bitmap;
 	struct cnss_mlo_chip_info chip_info[CNSS_MAX_MLO_CHIPS];
+	u16 rddm_dump_all;
 };
 
 struct cnss_module_param {
@@ -521,6 +522,10 @@ static inline int cnss_get_mlo_group_id(struct device *dev)
 {
 	return -EINVAL;
 }
+static inline void cnss_set_recovery_mode(struct device *dev, u8 recovery_mode)
+{
+	return -EINVAL;
+}
 #else
 extern int cnss_wlan_register_driver_ops(struct cnss_wlan_driver *driver);
 extern int cnss_wlan_probe_driver(void);
@@ -554,8 +559,10 @@ extern int cnss_power_up(struct device *dev);
 extern int cnss_power_down(struct device *dev);
 extern int cnss_idle_restart(struct device *dev);
 extern int cnss_idle_shutdown(struct device *dev);
+#ifndef CONFIG_CNSS2_KERNEL_5_15
 extern void cnss_request_pm_qos(struct device *dev, u32 qos_val);
 extern void cnss_remove_pm_qos(struct device *dev);
+#endif
 extern void cnss_lock_pm_sem(struct device *dev);
 extern void cnss_release_pm_sem(struct device *dev);
 extern int cnss_wlan_pm_control(struct device *dev, bool vote);
@@ -634,5 +641,6 @@ int cnss_get_num_mlo_groups(void);
 bool cnss_get_mlo_group_info(uint8_t grp_id,
 			struct cnss_mlo_group_info *grp_info);
 int cnss_get_mlo_group_id(struct device *dev);
+void cnss_set_recovery_mode(struct device *dev, u8 recovery_mode);
 #endif
 #endif /* _NET_CNSS2_H */
