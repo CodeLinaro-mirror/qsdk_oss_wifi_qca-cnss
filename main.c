@@ -4779,16 +4779,17 @@ int cnss_register_subsys(struct cnss_plat_data *plat_priv)
 				return -EINVAL;
 			}
 
-			of_property_read_u32(dev->of_node, "qcom,rproc_rpd",
-						 &rproc_rpd_node);
-			plat_priv->rproc_rpd_handle =
-				rproc_get_by_phandle(rproc_rpd_node);
-			if (IS_ERR_OR_NULL(plat_priv->rproc_rpd_handle)) {
-				cnss_pr_err("%s: Failed to get rproc handle \
-					    %ld for device %s\n", __func__,
-					    PTR_ERR(
-					    plat_priv->rproc_rpd_handle),
-					    plat_priv->device_name);
+			if (!of_property_read_u32(dev->of_node,
+						 "qcom,rproc_rpd",
+						 &rproc_rpd_node)) {
+				plat_priv->rproc_rpd_handle =
+					rproc_get_by_phandle(rproc_rpd_node);
+				if (IS_ERR_OR_NULL(plat_priv->rproc_rpd_handle)) {
+					cnss_pr_err("%s: Failed to get rproc handle %ld for device %s\n",
+						    __func__, PTR_ERR(
+						    plat_priv->rproc_rpd_handle),
+						    plat_priv->device_name);
+				}
 			}
 		}
 
