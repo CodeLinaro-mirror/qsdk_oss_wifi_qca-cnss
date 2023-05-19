@@ -122,6 +122,8 @@ static struct device_name_string device_name_table[] = {
 	{ "QCN6122_1", USERPD_1+WLFW_SERVICE_INS_ID_V01_QCN6122 },
 	{ "QCN9160_0", USERPD_0+WLFW_SERVICE_INS_ID_V01_QCN9160 },
 	{ "QCN9160_1", USERPD_1+WLFW_SERVICE_INS_ID_V01_QCN9160 },
+	{ "QCN6432_0", USERPD_0+WLFW_SERVICE_INS_ID_V01_QCN6432 },
+	{ "QCN6432_1", USERPD_1+WLFW_SERVICE_INS_ID_V01_QCN6432 },
 	{ "UNKNOWN", 0 },
 };
 
@@ -1147,13 +1149,19 @@ static int cnss_wlfw_load_bdf(struct wlfw_bdf_download_req_msg_v01 *req,
 		break;
 	case BDF_TYPE_CALDATA:
 		if (plat_priv->device_id == QCN6122_DEVICE_ID ||
-		    plat_priv->device_id == QCN9160_DEVICE_ID ||
-		    plat_priv->device_id == QCN6432_DEVICE_ID) {
+		    plat_priv->device_id == QCN9160_DEVICE_ID) {
 			snprintf(filename, sizeof(filename),
 				 "%s" DEFAULT_CAL_FILE_PREFIX
 				 "%d" DEFAULT_CAL_FILE_SUFFIX,
 				 cnss_get_fw_path(plat_priv),
 				 plat_priv->userpd_id);
+		} else if (plat_priv->device_id == QCN6432_DEVICE_ID) {
+			snprintf(filename, sizeof(filename),
+				"%s" DEFAULT_CAL_FILE_PREFIX
+				"%d.b%.*x", cnss_get_fw_path(plat_priv),
+				(plat_priv->userpd_id),
+				(plat_priv->board_info.num_bytes * 2),
+				plat_priv->board_info.board_id);
 		} else {
 			snprintf(filename, sizeof(filename),
 				 "%s" DEFAULT_CAL_FILE_NAME,
@@ -1327,13 +1335,29 @@ int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv,
 					 (plat_priv->pci_slot_id + 1));
 			}
 		} else if (plat_priv->device_id == QCN6122_DEVICE_ID ||
-			 plat_priv->device_id == QCN9160_DEVICE_ID ||
-			 plat_priv->device_id == QCN6432_DEVICE_ID) {
+			 plat_priv->device_id == QCN9160_DEVICE_ID) {
 			snprintf(filename, sizeof(filename),
 				 "%s" DEFAULT_CAL_FILE_PREFIX
 				 "%d" DEFAULT_CAL_FILE_SUFFIX,
 				 cnss_get_fw_path(plat_priv),
 				 plat_priv->userpd_id);
+		} else if (plat_priv->device_id == QCN6432_DEVICE_ID) {
+			snprintf(filename, sizeof(filename), "%s",
+				FTM_CONF_FILE_PATH);
+			if (cnss_check_path_exists(FTM_CONF_FILE_PATH)) {
+				snprintf(filename, sizeof(filename),
+					"%s" DEFAULT_CAL_FILE_PREFIX
+				"%d.b%.*x", cnss_get_fw_path(plat_priv),
+				(plat_priv->userpd_id),
+				(plat_priv->board_info.num_bytes * 2),
+				board_id);
+			} else {
+				snprintf(filename, sizeof(filename),
+					"%s" DEFAULT_CAL_FILE_PREFIX
+					"%d" DEFAULT_CAL_FILE_SUFFIX,
+					cnss_get_fw_path(plat_priv),
+					plat_priv->userpd_id);
+			}
 		} else {
 			snprintf(filename, sizeof(filename),
 				 "%s" DEFAULT_CAL_FILE_NAME,
