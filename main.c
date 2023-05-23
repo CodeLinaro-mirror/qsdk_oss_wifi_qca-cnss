@@ -2353,6 +2353,28 @@ static void cnss_put_resources(struct cnss_plat_data *plat_priv)
 #endif
 }
 
+static int cnss_set_ssr_recovery_type(struct cnss_plat_data *plat_priv)
+{
+	if (!plat_priv)
+		return -ENODEV;
+
+	switch (plat_priv->device_id) {
+	case QCA8074_DEVICE_ID:
+	case QCA8074V2_DEVICE_ID:
+	case QCA6018_DEVICE_ID:
+	case QCA5018_DEVICE_ID:
+	case QCN6122_DEVICE_ID:
+	case QCA9574_DEVICE_ID:
+	case QCN9000_DEVICE_ID:
+		plat_priv->recovery_type = CNSS_ASYNC_RECOVERY;
+		break;
+	default:
+		plat_priv->recovery_type = CNSS_SYNC_RECOVERY;
+	}
+
+	return 0;
+}
+
 #ifdef CONFIG_CNSS2_KERNEL_IPQ
 static int cnss_qcn9000_notifier_atomic_nb(struct notifier_block *nb,
 					   unsigned long code,
@@ -2388,12 +2410,18 @@ static int cnss_qca8074_notifier_atomic_nb(struct notifier_block *nb,
 			    cnss_get_plat_env_index_from_plat_priv(plat_priv));
 		plat_priv->target_asserted = 1;
 		plat_priv->target_assert_timestamp = ktime_to_ms(ktime_get());
-		rproc = subsys_info->subsys_handle;
-		if (rproc) {
-			rproc->state = RPROC_CRASHED;
-			cnss_reason = CNSS_REASON_FATAL_SHUTDOWN;
-			cnss_schedule_recovery(&plat_priv->plat_dev->dev,
-						cnss_reason);
+		if (plat_priv->recovery_type == CNSS_SYNC_RECOVERY) {
+			rproc = subsys_info->subsys_handle;
+			if (rproc) {
+				rproc->state = RPROC_CRASHED;
+				cnss_reason = CNSS_REASON_FATAL_SHUTDOWN;
+			       cnss_schedule_recovery(&plat_priv->plat_dev->dev,
+							cnss_reason);
+			}
+		} else {
+			driver_ops->fatal((struct pci_dev *)plat_priv->plat_dev,
+					  (const struct pci_device_id *)
+					  plat_priv->plat_dev_id);
 		}
 	}
 
@@ -6354,6 +6382,7 @@ static int cnss_probe(struct platform_device *plat_dev)
 	ret = cnss_set_fw_type_and_name(plat_priv);
 	if (ret)
 		return -ENODEV;
+	cnss_set_ssr_recovery_type(plat_priv);
 
 #ifdef CONFIG_CNSS2_KERNEL_RPROC_FRAMEWORK
 	ret = cnss_rproc_register(plat_priv);
