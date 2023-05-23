@@ -6770,7 +6770,7 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 
 		mhi_ctrl->iova_start = (dma_addr_t)memory.start;
 		mhi_ctrl->iova_stop = (dma_addr_t)(memory.start +
-						   resource_size(&memory));
+						  (resource_size(&memory) - 1));
 	} else {
 		/* No Memory DT node, assign full 32-bit region as iova */
 		mhi_ctrl->iova_start = 0;
