@@ -3160,12 +3160,17 @@ static int cnss_rproc_start(struct cnss_plat_data *plat_priv)
 void  *__cnss_subsystem_get(struct cnss_plat_data *plat_priv)
 {
 	struct cnss_subsys_info *subsys_info = &plat_priv->subsys_info;
+	bool boot_after_recovery = false;
 
 	plat_priv->target_asserted = 0;
 	plat_priv->target_assert_timestamp = 0;
 
 	cnss_pr_info("%s: driver_state: 0x%lx\n", __func__,
 		     plat_priv->driver_state);
+
+	if (test_bit(CNSS_RECOVERY_WAIT_FOR_DRIVER, &plat_priv->driver_state))
+		boot_after_recovery = true;
+
 	if (subsys_info->subsys_handle &&
 	    !test_bit(CNSS_RECOVERY_WAIT_FOR_DRIVER,
 		      &plat_priv->driver_state)) {
@@ -3194,8 +3199,14 @@ void  *__cnss_subsystem_get(struct cnss_plat_data *plat_priv)
 	}
 
 #ifndef CONFIG_CNSS2_KERNEL_5_15
-	if (plat_priv->recovery_enabled &&
-			plat_priv->bus_type == CNSS_BUS_AHB) {
+	if (plat_priv->recovery_enabled && boot_after_recovery &&
+	    (plat_priv->recovery_type == CNSS_SYNC_RECOVERY) &&
+	    (plat_priv->bus_type == CNSS_BUS_AHB)) {
+		/* In this case, rproc_stop was done and not rproc_shutdown,
+		 * hence rproc_start has to be done after SSR recovery
+		 * instead of rproc_boot. This would be applicable for AHB
+		 * radios from IPQ53xx onwards.
+		 */
 		cnss_rproc_start(plat_priv);
 
 	} else {
