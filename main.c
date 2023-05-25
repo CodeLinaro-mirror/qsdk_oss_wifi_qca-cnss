@@ -3697,7 +3697,8 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 		 */
 		if (ramdump_enabled)
 			cnss_bus_dev_ramdump(plat_priv);
-		if (plat_priv->mlo_support && group_info != NULL) {
+		if (plat_priv->mlo_support && group_info != NULL &&
+		    plat_priv->recovery_mode != MODE_1_RECOVERY_MODE) {
 			if (group_info->num_chips != group_info->rddm_dump_all)
 				return 0;
 		}
