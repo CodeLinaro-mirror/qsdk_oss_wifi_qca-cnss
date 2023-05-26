@@ -15,18 +15,6 @@
 
 #include "main.h"
 
-#define QCA6174_VENDOR_ID		0x168C
-#define QCA6174_DEVICE_ID		0x003E
-#define QCA6174_REV_ID_OFFSET		0x08
-#define QCA6174_REV3_VERSION		0x5020000
-#define QCA6174_REV3_2_VERSION		0x5030000
-#define QCN9000_VENDOR_ID		0x17CB
-#define QCN9000_DEVICE_ID		0x1104
-#define QCA6390_VENDOR_ID		0x17CB
-#define QCA6390_DEVICE_ID		0x1101
-#define QCA6490_VENDOR_ID		0x17CB
-#define QCA6490_DEVICE_ID		0x1103
-
 enum cnss_dev_bus_type cnss_get_bus_type(unsigned long device_id);
 void *cnss_bus_dev_to_bus_priv(struct device *dev);
 struct cnss_plat_data *cnss_bus_dev_to_plat_priv(struct device *dev);

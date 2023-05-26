@@ -1,7 +1,6 @@
 config CNSS2
-	tristate "CNSS2 Platform Driver for Wi-Fi Module"
-	depends on !CNSS && PCI_MSM
-	select CNSS_UTILS
+	bool "CNSS2 Platform Driver for Wi-Fi Module"
+	depends on !(ARCH_IPQ40XX || ARCH_IPQ806x)
 	---help---
 	  This module adds the support for Connectivity Subsystem (CNSS) used
 	  for PCIe based Wi-Fi devices with QCA6174/QCN9000 chipsets.
@@ -16,17 +15,6 @@ config CNSS2_DEBUG
 	  primarily includes providing additional verbose logs for certain
 	  features, enabling kernel panic for certain cases to aid the
 	  debugging, and enabling any other debug mechanisms.
-
-config CNSS2_QMI
-	bool "CNSS2 Platform Driver QMI support"
-	select CNSS_QMI_SVC
-	depends on CNSS2
-	---help---
-	  CNSS2 platform driver uses QMI framework to communicate with WLAN
-	  firmware. It sends and receives boot handshake messages to WLAN
-	  firmware, which includes hardware and software capabilities and
-	  configurations. It also sends WLAN on/off control message to
-	  firmware over QMI channel.
 
 config CNSS2_PM
 	bool "CNSS2 power save support"

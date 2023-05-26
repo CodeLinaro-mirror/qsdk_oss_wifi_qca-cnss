@@ -1,5 +1,5 @@
 /* Copyright (c) 2016-2018, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -26,32 +26,63 @@
 #include <linux/dma-direction.h>
 #include <linux/slab.h>
 #include <linux/mhi.h>
+#ifdef CONFIG_PCI_MSM
 #include <linux/msm_pcie.h>
+#endif
 #include <linux/pci.h>
+#if IS_ENABLED(CONFIG_MHI_BUS_MISC)
+#include <linux/mhi_misc.h>
+#endif
 
 #include "main.h"
 
-#define QCA6174_VENDOR_ID		0x168C
+#define QCATHR_VENDOR_ID		0x168C
+#define QCN_VENDOR_ID			0x17CB
 #define QCA6174_DEVICE_ID		0x003E
 #define QCA6174_REV_ID_OFFSET		0x08
 #define QCA6174_REV3_VERSION		0x5020000
 #define QCA6174_REV3_2_VERSION		0x5030000
-#define QCN9000_VENDOR_ID		0x17CB
-#define QCN9000_DEVICE_ID		0x1104
-#define QCN9000_EMULATION_VENDOR_ID	0x168C
 #define QCN9000_EMULATION_DEVICE_ID	0xABCD
 #define QCA8074_DEVICE_ID               0xFFFF
 #define QCA8074V2_DEVICE_ID             0xFFFE
 #define QCA6018_DEVICE_ID               0xFFFD
 #define QCA5018_DEVICE_ID               0xFFFC
-#define QCN9100_DEVICE_ID		0xFFFB
-#define QCN9100_DEVICE_BAR_SIZE		0x200000
+#define QCN6122_DEVICE_ID		0xFFFB
+#define QCA9574_DEVICE_ID		0xFFFA
+#define QCA5332_DEVICE_ID		0xFFF9
+#define QCN9160_DEVICE_ID		0xFFF8
+#define QCN6432_DEVICE_ID		0xFFF7
+#define QCA6174_DEVICE_ID		0x003E
+#define QCA6390_DEVICE_ID		0x1101
+#define QCA6490_DEVICE_ID		0x1103
+#define QCN9000_DEVICE_ID		0x1104
+#define QCN9224_DEVICE_ID		0x1109
+#define QCN6122_DEVICE_BAR_SIZE		0x200000
+#define QCN6122_ETR_DEV_NODE_PREFIX	"q6_qcn6122_etr"
+#define QCN9160_ETR_DEV_NODE_PREFIX	"q6_qcn9160_etr"
+#define QCN6432_ETR_DEV_NODE_PREFIX	"q6_qcn6432_etr"
+#define ETR_DEV_NODE_LEN		17
+#define QCN6122_M3_DUMP_PREFIX		"m3_dump_qcn6122"
+#define QCN9160_M3_DUMP_PREFIX		"m3_dump_qcn9160"
+#define QCN6432_M3_DUMP_PREFIX		"m3_dump_qcn6432"
+#define M3_DUMP_NODE_LEN		18
 #define HOST_DDR_REGION_TYPE		0x1
 #define BDF_MEM_REGION_TYPE		0x2
 #define M3_DUMP_REGION_TYPE		0x3
 #define CALDB_MEM_REGION_TYPE		0x4
 #define QDSS_ETR_MEM_REGION_TYPE	0x6
+#define QMI_WLFW_PAGEABLE_MEM_V01	0x9
+#define AFC_REGION_TYPE			0xA
 
+#define MLO_GROUP_MASTER_CHIP		0
+#define MODE_0_RECOVERY_MODE		1
+#define MODE_1_RECOVERY_MODE		2
+
+#define CNSS_ETR_SG_ENT(phys_pte)	(((phys_pte >> PAGE_SHIFT) << 4) | 0x2)
+#define CNSS_ETR_SG_NXT_TBL(phys_pte)	(((phys_pte >> PAGE_SHIFT) << 4) | 0x3)
+#define CNSS_ETR_SG_LST_ENT(phys_pte)	(((phys_pte >> PAGE_SHIFT) << 4) | 0x1)
+#define CNSS_ETR_SG_ENT_TO_BLK(phys_pte) (((phys_addr_t)phys_pte >> 4)   \
+					 << PAGE_SHIFT)
 enum cnss_mhi_state {
 	CNSS_MHI_INIT,
 	CNSS_MHI_DEINIT,
@@ -93,18 +124,28 @@ struct cnss_pci_debug_reg {
 	u32 val;
 };
 
+struct cnss_ce_base_addr {
+	u32 src_base;
+	u32 dst_base;
+	u32 common_base;
+	u32 max_ce_count;
+};
+
 struct cnss_pci_data {
 	struct cnss_plat_data *plat_priv;
 	struct pci_dev *pci_dev;
 	const struct pci_device_id *pci_device_id;
 	u32 device_id;
 	u16 revision_id;
+	u64 dma_bit_mask;
 	struct cnss_wlan_driver *driver_ops;
 	u8 pci_link_state;
 	u8 pci_link_down_ind;
 	struct pci_saved_state *saved_state;
 	struct pci_saved_state *default_state;
+#ifdef CONFIG_PCI_MSM
 	struct msm_pcie_register_event msm_pci_event;
+#endif
 	atomic_t auto_suspended;
 	atomic_t drv_connected;
 	u8 drv_connected_last;
@@ -127,14 +168,34 @@ struct cnss_pci_data {
 	unsigned long mhi_state;
 	u32 remap_window;
 	struct timer_list dev_rddm_timer;
+	struct timer_list boot_debug_timer;
 	struct delayed_work time_sync_work;
 	u8 disable_pc;
 	struct cnss_pci_debug_reg *debug_reg;
+	int os_legacy_irq;
+	u16 otp_board_id;
+	int qdss_irq;
 };
 
 struct paging_header {
 	u64 version;   /* dump version */
 	u64 seg_num;   /* paging seg num */
+};
+
+struct pbl_reg_addr {
+	u32 pbl_log_sram_start;
+	u32 pbl_log_sram_max_size;
+	u32 tcsr_pbl_logging_reg;
+	u32 pbl_wlan_boot_cfg;
+	u32 pbl_bootstrap_status;
+};
+
+struct sbl_reg_addr {
+	u32 sbl_sram_start;
+	u32 sbl_sram_end;
+	u32 sbl_log_start_reg;
+	u32 sbl_log_size_reg;
+	u32 sbl_log_size_shift;
 };
 
 static inline void cnss_set_pci_priv(struct pci_dev *pci_dev, void *data)
@@ -200,6 +261,7 @@ int cnss_suspend_pci_link(struct cnss_pci_data *pci_priv);
 int cnss_resume_pci_link(struct cnss_pci_data *pci_priv);
 int cnss_pci_init(struct cnss_plat_data *plat_priv);
 void cnss_pci_deinit(struct cnss_plat_data *plat_priv);
+int cnss_ahb_alloc_fw_mem(struct cnss_plat_data *plat_priv);
 int cnss_pci_alloc_fw_mem(struct cnss_plat_data *plat_priv);
 void cnss_pci_free_fw_mem(struct cnss_plat_data *plat_priv);
 int cnss_pci_alloc_qdss_mem(struct cnss_pci_data *pci_priv);
@@ -240,8 +302,16 @@ void cnss_pci_pm_runtime_put_noidle(struct cnss_pci_data *pci_priv);
 void cnss_pci_pm_runtime_mark_last_busy(struct cnss_pci_data *pci_priv);
 int cnss_pci_update_status(struct cnss_pci_data *pci_priv,
 			   enum cnss_driver_status status);
+int cnss_ahb_update_status(struct cnss_plat_data *plat_priv,
+			   enum cnss_driver_status status);
 void cnss_pci_global_reset(struct cnss_pci_data *pci_priv);
-
-void cnss_pci_dump_qca6390_sram_mem(struct cnss_pci_data *pci_priv);
-void cnss_pci_dump_bl_sram_mem(struct cnss_pci_data *pci_priv);
+void cnss_free_soc_info(struct cnss_plat_data *plat_priv);
+void cnss_dump_ce_reg(struct cnss_plat_data *plat_priv, enum cnss_ce_index ce,
+		      struct cnss_ce_base_addr *ce_object);
+struct cnss_ce_base_addr *register_ce_object(struct cnss_plat_data *plat_priv);
+void cnss_do_mlo_global_memset(struct cnss_plat_data *plat_priv, u64 mem_size);
+#ifdef CONFIG_CNSS2_QGIC2M
+struct qgic2_msi *cnss_qgic2_enable_msi(struct cnss_plat_data *plat_priv);
+void cnss_qgic2_disable_msi(struct cnss_plat_data *plat_priv);
+#endif
 #endif /* _CNSS_PCI_H */

@@ -1,5 +1,5 @@
 /* Copyright (c) 2016-2018, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -18,12 +18,18 @@
 
 #define CNSS_MAX_FILE_NAME		20
 #define CNSS_MAX_TIMESTAMP_LEN		32
+#define CNSS_MAX_DEV_MEM_NUM		4
 
 /*
  * Temporary change for compilation, will be removed
  * after WLAN host driver switched to use new APIs
  */
 #define CNSS_API_WITH_DEV
+
+#define CNSS_MAX_LINKS_PER_CHIP		2
+#define CNSS_MAX_MLO_CHIPS		4
+#define CNSS_MAX_MLO_GROUPS		2
+#define CNSS_MAX_ADJ_CHIPS		2
 
 enum cnss_bus_width_type {
 	CNSS_BUS_WIDTH_NONE,
@@ -32,6 +38,22 @@ enum cnss_bus_width_type {
 	CNSS_BUS_WIDTH_MEDIUM,
 	CNSS_BUS_WIDTH_HIGH,
 	CNSS_BUS_WIDTH_VERY_HIGH
+};
+
+enum cnss_notif_type {
+	CNSS_BEFORE_SHUTDOWN,
+	CNSS_AFTER_SHUTDOWN,
+	CNSS_BEFORE_POWERUP,
+	CNSS_AFTER_POWERUP,
+	CNSS_RAMDUMP_NOTIFICATION,
+	CNSS_POWERUP_FAILURE,
+	CNSS_PROXY_VOTE,
+	CNSS_PROXY_UNVOTE,
+	CNSS_SOC_RESET,
+	CNSS_PREPARE_FOR_FATAL_SHUTDOWN,
+	CNSS_RAMDUMP_DONE,
+	/* The below event should be the last event for all devices */
+	CNSS_NOTIF_TYPE_MAX
 };
 
 enum cnss_platform_cap_flag {
@@ -60,6 +82,11 @@ struct cnss_device_version {
 	u32 minor_version;
 };
 
+struct cnss_dev_mem_info {
+	u64 start;
+	u64 size;
+};
+
 struct cnss_soc_info {
 	void __iomem *va;
 	phys_addr_t pa;
@@ -70,6 +97,7 @@ struct cnss_soc_info {
 	uint32_t fw_version;
 	char fw_build_timestamp[CNSS_MAX_TIMESTAMP_LEN + 1];
 	struct cnss_device_version device_version;
+	struct cnss_dev_mem_info dev_mem_info[CNSS_MAX_DEV_MEM_NUM];
 };
 
 struct cnss_wlan_runtime_ops {
@@ -165,9 +193,342 @@ enum cnss_recovery_reason {
 	CNSS_REASON_LINK_DOWN,
 	CNSS_REASON_RDDM,
 	CNSS_REASON_TIMEOUT,
+	CNSS_REASON_FATAL_SHUTDOWN
 };
 
-extern int cnss_wlan_register_driver(struct cnss_wlan_driver *driver);
+struct cnss_mlo_chip_info {
+	u8 group_id;
+	u8 soc_id;
+	u8 chip_id;
+	u8 num_local_links;
+	u8 num_adj_chips;
+	u8 adj_chip_ids[CNSS_MAX_LINKS_PER_CHIP];
+	u8 hw_link_ids[CNSS_MAX_LINKS_PER_CHIP];
+	u8 valid_link_ids[CNSS_MAX_LINKS_PER_CHIP];
+};
+
+struct cnss_mlo_group_info {
+	u8 group_id;
+	u8 num_chips;
+	u16 max_num_peers;
+	u8 num_wsi_chips;
+	u8 soc_chip_bitmap;
+	u8 wsi_order_bitmap;
+	u8 skip_soc_chip_bitmap;
+	struct cnss_mlo_chip_info chip_info[CNSS_MAX_MLO_CHIPS];
+	u16 rddm_dump_all;
+};
+
+struct cnss_module_param {
+	u8 mlo_max_groups;
+	u8 mlo_max_chips;
+	bool mlo_default_cfg;
+};
+
+struct cnss_plat_data;
+
+/* Function prototypes for CNSS2 APIs used from wifi driver
+ * are defined here.
+ * Please add Stubs also for any API added here to handle case
+ * for targets that don't support CNSS2
+ */
+#if defined(CONFIG_ARCH_IPQ40XX) || defined(CONFIG_ARCH_IPQ806x)
+static inline void cnss_wlan_unregister_driver(struct cnss_wlan_driver *driver)
+{
+}
+
+static inline void cnss_device_crashed(struct device *dev)
+{
+}
+
+static inline int cnss_pci_link_down(struct device *dev)
+{
+	return -EINVAL;
+}
+
+static inline void cnss_schedule_recovery(struct device *dev,
+					  enum cnss_recovery_reason reason)
+{
+}
+
+static inline int cnss_self_recovery(struct device *dev,
+				     enum cnss_recovery_reason reason)
+{
+	return -EINVAL;
+}
+
+static inline int cnss_get_fw_files_for_target(struct device *dev,
+					       struct cnss_fw_files *pfw_files,
+					       u32 target_type,
+					       u32 target_version)
+{
+	return -EINVAL;
+}
+
+static inline int cnss_get_platform_cap(struct device *dev,
+					struct cnss_platform_cap *cap)
+{
+	return -EINVAL;
+}
+
+static inline int cnss_get_soc_info(struct device *dev,
+				    struct cnss_soc_info *info)
+{
+	return -EINVAL;
+}
+
+static inline int cnss_power_on_device(struct cnss_plat_data *plat_priv,
+				       int device_id)
+{
+	return -EINVAL;
+}
+
+static inline int cnss_power_off_device(struct cnss_plat_data *plat_priv,
+					int device_id)
+{
+	return -EINVAL;
+}
+
+static inline int cnss_wlan_pm_control(struct device *dev, bool vote)
+{
+	return -EINVAL;
+}
+
+static inline int cnss_get_user_msi_assignment(struct device *dev,
+					       char *user_name,
+					       int *num_vectors,
+					       uint32_t *user_base_data,
+					       uint32_t *base_vector)
+{
+	return -EINVAL;
+}
+
+static inline int cnss_get_msi_irq(struct device *dev, unsigned int vector)
+{
+	return -EINVAL;
+}
+
+static inline int cnss_get_pci_slot(struct device *dev)
+{
+	return 0;
+}
+
+static inline void cnss_get_msi_address(struct device *dev,
+					uint32_t *msi_addr_low,
+					uint32_t *msi_addr_high)
+{
+}
+
+static inline int cnss_wlan_enable(struct device *dev,
+				   struct cnss_wlan_enable_cfg *config,
+				   enum cnss_driver_mode mode,
+				   const char *host_version)
+{
+	return 0;
+}
+
+static inline int cnss_wlan_disable(struct device *dev,
+				    enum cnss_driver_mode mode)
+{
+	return 0;
+}
+
+static inline void cnss_wait_for_fw_ready(struct device *dev)
+{
+}
+
+static inline void cnss_set_ramdump_enabled(struct device *dev, bool enabled)
+{
+}
+
+static inline void cnss_set_recovery_enabled(struct device *dev, bool enabled)
+{
+}
+
+static inline void *cnss_subsystem_get(struct device *dev, int device_id)
+{
+	return NULL;
+}
+
+static inline void cnss_subsystem_put(struct device *dev)
+{
+}
+
+static inline int cnss_pcie_rescan(void)
+{
+	return -EINVAL;
+}
+
+static inline void cnss_pcie_remove_bus(void)
+{
+}
+
+static inline void *cnss_get_pci_dev_by_device_id(int device_id)
+{
+	return NULL;
+}
+
+static inline void *cnss_get_pci_dev_from_plat_dev(void *pdev)
+{
+	return NULL;
+}
+
+static inline void *cnss_get_pci_dev_id_from_plat_dev(void *pdev)
+{
+	return NULL;
+}
+
+static inline int cnss_athdiag_read(struct device *dev, uint32_t offset,
+				    uint32_t mem_type, uint32_t data_len,
+				    uint8_t *output)
+{
+	return -EINVAL;
+}
+
+static inline int cnss_athdiag_write(struct device *dev, uint32_t offset,
+				     uint32_t mem_type, uint32_t data_len,
+				     uint8_t *input)
+{
+	return -EINVAL;
+}
+
+static inline bool cnss_is_dev_initialized(struct device *dev)
+{
+	return false;
+}
+
+static inline u64 cnss_get_q6_time(struct device *dev)
+{
+	return 0;
+}
+
+static inline void cnss_dump_qmi_history(void)
+{
+}
+
+static inline void cnss_get_ramdump_device_name(struct device *dev,
+						char *ramdump_dev_name,
+						size_t ramdump_dev_name_len)
+{
+}
+static inline unsigned int cnss_get_driver_mode(void)
+{
+	return CNSS_MISSION;
+}
+static inline int cnss_set_driver_mode(unsigned int mode)
+{
+	return -EINVAL;
+}
+static inline
+int cnss_send_buffer_to_afcmem(struct device *dev, char *afcdb, uint32_t len,
+			       uint8_t slotid)
+{
+	return -EINVAL;
+}
+static inline int cnss_reset_afcmem(struct device *dev, uint8_t slotid)
+{
+}
+static inline int cnss_get_mlo_chip_id(struct device *dev)
+{
+	return -EINVAL;
+}
+static inline bool cnss_get_mlo_capable(struct device *dev)
+{
+	return false;
+}
+static inline bool cnss_is_mlo_default_cfg_enabled(struct device *dev)
+{
+	return false;
+}
+static inline int cnss_get_mlo_global_config_region_info(struct device *dev,
+							 void **bar,
+							 int *num_bytes)
+{
+	return 0;
+}
+static inline int cnss_get_num_mlo_links(struct device *dev)
+{
+	return -EINVAL;
+}
+static inline int cnss_get_mlo_chip_info(struct device *dev,
+					 struct cnss_mlo_chip_info **chip_info)
+{
+	return -EINVAL;
+}
+static inline int cnss_get_num_mlo_capable_devices(unsigned int *device_id,
+						   int num_elements)
+{
+	return -EINVAL;
+}
+static inline int cnss_get_dev_link_ids(struct device *dev, u8 *link_ids,
+					int max_elements)
+{
+	return -EINVAL;
+}
+static inline int cnss_reg_read(struct device *dev, u32 addr, u32 *val,
+				void __iomem *base)
+{
+	return -EINVAL;
+}
+static inline int cnss_reg_write(struct device *dev, u32 addr, u32 val,
+				 void __iomem *base)
+{
+	return -EINVAL;
+}
+static inline int cnss_wlan_register_driver_ops(struct cnss_wlan_driver *driver)
+{
+	return 0;
+}
+static inline int cnss_wlan_probe_driver(void)
+{
+	return 0;
+}
+static inline int cnss_set_bar_addr(struct device *dev, void __iomem *mem)
+{
+	return -EINVAL;
+}
+static inline int cnss_set_mlo_config(struct cnss_module_param *modparam,
+				      struct cnss_mlo_group_info *group_info)
+{
+	return 0;
+}
+static inline void cnss_set_default_mlo_config(void)
+{
+}
+static inline void cnss_reset_mlo_config(void)
+{
+}
+static inline void cnss_print_mlo_config(void)
+{
+}
+static inline void cnss_set_led_gpio(int led_gpio, unsigned int value,
+				     unsigned int flags)
+{
+}
+static bool cnss_get_enable_intx(struct device *dev)
+{
+	return false;
+}
+static int cnss_get_num_mlo_groups(void)
+{
+	return 0;
+}
+static bool cnss_get_mlo_group_info(uint8_t grp_id,
+			struct cnss_mlo_group_info *grp_info)
+{
+	return false;
+}
+static inline int cnss_get_mlo_group_id(struct device *dev)
+{
+	return -EINVAL;
+}
+static inline void cnss_set_recovery_mode(struct device *dev, u8 recovery_mode)
+{
+	return -EINVAL;
+}
+#else
+extern int cnss_wlan_register_driver_ops(struct cnss_wlan_driver *driver);
+extern int cnss_wlan_probe_driver(void);
 extern void cnss_wlan_unregister_driver(struct cnss_wlan_driver *driver);
 extern void cnss_device_crashed(struct device *dev);
 extern int cnss_pci_link_down(struct device *dev);
@@ -198,8 +559,10 @@ extern int cnss_power_up(struct device *dev);
 extern int cnss_power_down(struct device *dev);
 extern int cnss_idle_restart(struct device *dev);
 extern int cnss_idle_shutdown(struct device *dev);
+#ifndef CONFIG_CNSS2_KERNEL_5_15
 extern void cnss_request_pm_qos(struct device *dev, u32 qos_val);
 extern void cnss_remove_pm_qos(struct device *dev);
+#endif
 extern void cnss_lock_pm_sem(struct device *dev);
 extern void cnss_release_pm_sem(struct device *dev);
 extern int cnss_wlan_pm_control(struct device *dev, bool vote);
@@ -214,6 +577,7 @@ extern int cnss_get_user_msi_assignment(struct device *dev, char *user_name,
 					uint32_t *user_base_data,
 					uint32_t *base_vector);
 extern int cnss_get_msi_irq(struct device *dev, unsigned int vector);
+extern int cnss_get_pci_slot(struct device *dev);
 extern void cnss_get_msi_address(struct device *dev, uint32_t *msi_addr_low,
 				 uint32_t *msi_addr_high);
 extern int cnss_wlan_enable(struct device *dev,
@@ -223,7 +587,6 @@ extern int cnss_wlan_enable(struct device *dev,
 extern int cnss_wlan_disable(struct device *dev, enum cnss_driver_mode mode);
 extern unsigned int cnss_get_boot_timeout(struct device *dev);
 void cnss_wait_for_fw_ready(struct device *dev);
-void cnss_wait_for_cold_boot_cal_done(struct device *dev);
 void cnss_set_ramdump_enabled(struct device *dev, bool enabled);
 void cnss_set_recovery_enabled(struct device *dev, bool enabled);
 void *cnss_subsystem_get(struct device *dev, int device_id);
@@ -233,6 +596,7 @@ void cnss_pcie_remove_bus(void);
 void *cnss_get_pci_dev_by_device_id(int device_id);
 void *cnss_get_pci_dev_from_plat_dev(void *pdev);
 void *cnss_get_pci_dev_id_from_plat_dev(void *pdev);
+int cnss_dump_all_ce_reg(struct cnss_plat_data *plat_priv);
 extern unsigned int cnss_get_qmi_timeout(struct cnss_plat_data *plat_priv);
 extern int cnss_athdiag_read(struct device *dev, uint32_t offset,
 			     uint32_t mem_type, uint32_t data_len,
@@ -240,7 +604,6 @@ extern int cnss_athdiag_read(struct device *dev, uint32_t offset,
 extern int cnss_athdiag_write(struct device *dev, uint32_t offset,
 			      uint32_t mem_type, uint32_t data_len,
 			      uint8_t *input);
-extern int cnss_set_fw_log_mode(struct device *dev, uint8_t fw_log_mode);
 bool cnss_is_dev_initialized(struct device *dev);
 u64 cnss_get_q6_time(struct device *dev);
 extern void cnss_dump_qmi_history(void);
@@ -249,4 +612,35 @@ void cnss_get_ramdump_device_name(struct device *dev,
 				  size_t ramdump_dev_name_len);
 unsigned int cnss_get_driver_mode(void);
 int cnss_set_driver_mode(unsigned int mode);
+int cnss_send_buffer_to_afcmem(struct device *dev, char *afcdb, uint32_t len,
+			    uint8_t slotid);
+int cnss_reset_afcmem(struct device *dev, uint8_t slotid);
+int cnss_get_mlo_chip_id(struct device *dev);
+bool cnss_get_mlo_capable(struct device *dev);
+bool cnss_is_mlo_default_cfg_enabled(struct device *dev);
+int cnss_get_mlo_global_config_region_info(struct device *dev, void **bar,
+					   int *num_bytes);
+int cnss_get_num_mlo_links(struct device *dev);
+int cnss_get_mlo_chip_info(struct device *dev,
+			   struct cnss_mlo_chip_info **chip_info);
+int cnss_get_num_mlo_capable_devices(unsigned int *device_id,
+				     int num_elements);
+int cnss_get_dev_link_ids(struct device *dev, u8 *link_ids, int max_elements);
+int cnss_reg_read(struct device *dev, u32 addr, u32 *val, void __iomem *base);
+int cnss_reg_write(struct device *dev, u32 addr, u32 val, void __iomem *base);
+int cnss_set_bar_addr(struct device *dev, void __iomem *mem);
+int cnss_set_mlo_config(struct cnss_module_param *modparam,
+			struct cnss_mlo_group_info *group_info);
+void cnss_set_default_mlo_config(void);
+void cnss_reset_mlo_config(void);
+void cnss_print_mlo_config(void);
+void cnss_set_led_gpio(int led_gpio, unsigned int value, unsigned int flags);
+bool cnss_get_enable_intx(struct device *dev);
+void *cnss_get_plat_dev_by_bus_dev(struct device *dev);
+int cnss_get_num_mlo_groups(void);
+bool cnss_get_mlo_group_info(uint8_t grp_id,
+			struct cnss_mlo_group_info *grp_info);
+int cnss_get_mlo_group_id(struct device *dev);
+void cnss_set_recovery_mode(struct device *dev, u8 recovery_mode);
+#endif
 #endif /* _NET_CNSS2_H */

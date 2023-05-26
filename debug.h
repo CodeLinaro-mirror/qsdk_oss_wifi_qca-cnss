@@ -13,10 +13,13 @@
 #ifndef _CNSS_DEBUG_H
 #define _CNSS_DEBUG_H
 
+#if IS_ENABLED(CONFIG_IPC_LOGGING)
 #include <linux/ipc_logging.h>
+#endif
 #include <linux/printk.h>
 
 #define CNSS_IPC_LOG_PAGES		32
+#define RDDM_DONE_DELAY        100  /* in msecs */
 
 enum cnss_log_level {
 	CNSS_LOG_LEVEL_NONE,
@@ -28,7 +31,9 @@ enum cnss_log_level {
 };
 
 extern int log_level;
+extern int rddm_done_timeout;
 
+#if IS_ENABLED(CONFIG_IPC_LOGGING)
 extern void *cnss_ipc_log_context;
 extern void *cnss_ipc_log_long_context;
 
@@ -41,6 +46,13 @@ extern void *cnss_ipc_log_long_context;
 		if (cnss_ipc_log_long_context)				\
 			ipc_log_string(cnss_ipc_log_long_context, _x);	\
 	} while (0)
+#else
+#define cnss_ipc_log_string(_x...) do {                                        \
+	} while (0)
+
+#define cnss_ipc_log_long_string(_x...) do {                           \
+	} while (0)
+#endif
 
 #define cnss_pr_err(_fmt, ...) do {					\
 		if (plat_priv) {					\
@@ -115,7 +127,9 @@ extern void *cnss_ipc_log_long_context;
 					    wlfw_service_instance_id,	\
 					    ##__VA_ARGS__);		\
 		} else {						\
-			pr_err("cnss: DBG: " _fmt, ##__VA_ARGS__);	\
+			if (log_level >= CNSS_LOG_LEVEL_DEBUG)          \
+				pr_err("cnss: DBG: " _fmt,              \
+				       ##__VA_ARGS__);                  \
 		}							\
 	} while (0)
 
@@ -126,7 +140,8 @@ extern void *cnss_ipc_log_long_context;
 	} while (0)
 
 #define CNSS_ASSERT(_condition) do {					\
-		if (!(_condition)) {					\
+		if (!(_condition) &&					\
+		    cnss_wait_for_rddm_complete(plat_priv)) {		\
 			cnss_dump_qmi_history();			\
 			cnss_pr_err("ASSERT at line %d\n",		\
 				    __LINE__);				\
@@ -144,6 +159,7 @@ extern void *cnss_ipc_log_long_context;
 		}							\
 	} while (0)
 
+bool cnss_wait_for_rddm_complete(struct cnss_plat_data *plat_priv);
 int cnss_debug_init(void);
 void cnss_debug_deinit(void);
 int cnss_debugfs_create(struct cnss_plat_data *plat_priv);

@@ -1,5 +1,5 @@
 /* Copyright (c) 2016-2018, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -11,22 +11,23 @@
  * GNU General Public License for more details.
  */
 
-#include <linux/module.h>
 #include <linux/err.h>
 #include <linux/seq_file.h>
 #include <linux/debugfs.h>
+#include <linux/module.h>
 #include "main.h"
 #include "debug.h"
 #include "pci.h"
 #define CNSS_IPC_LOG_PAGES		32
 
-#define TARGET_MEM_TYPE			0xFF
-
+#if IS_ENABLED(CONFIG_IPC_LOGGING)
 void *cnss_ipc_log_context;
 void *cnss_ipc_log_long_context;
+#endif
 extern void cnss_dump_qmi_history(void);
+struct dentry *cnss_root_dentry = NULL;
 
-int log_level = CNSS_LOG_LEVEL_MAX;
+int log_level = CNSS_LOG_LEVEL_INFO;
 EXPORT_SYMBOL(log_level);
 module_param(log_level, int, 0644);
 MODULE_PARM_DESC(log_level, "CNSS2 Module Log Level");
@@ -127,6 +128,18 @@ static int cnss_stats_show_state(struct seq_file *s,
 		case CNSS_IN_SUSPEND_RESUME:
 			seq_puts(s, "IN_SUSPEND_RESUME");
 			continue;
+		case CNSS_DAEMON_CONNECTED:
+			seq_puts(s, "DAEMON_CONNECTED");
+			continue;
+		case CNSS_QDSS_STARTED:
+			seq_puts(s, "QDSS_STARTED");
+			continue;
+		case CNSS_RECOVERY_WAIT_FOR_DRIVER:
+			seq_puts(s, "CNSS_RECOVERY_WAIT_FOR_DRIVER");
+			continue;
+		case CNSS_RDDM_IN_PROGRESS:
+			seq_puts(s, "RDDM_IN_PROGRESS");
+			continue;
 		}
 
 		seq_printf(s, "UNKNOWN-%d", i);
@@ -158,8 +171,71 @@ static const struct file_operations cnss_stats_fops = {
 	.llseek		= seq_lseek,
 };
 
+static int cnss_debug_probe(struct pci_dev *pdev,
+			     const struct pci_device_id *id)
+{
+	struct platform_device *plat_dev = (struct platform_device *)pdev;
+	struct cnss_plat_data *plat_priv = cnss_get_plat_priv(plat_dev);
+	struct pci_dev *pci_dev = plat_priv->pci_dev;
 
-extern int cnss_resigter_driver_debug(struct cnss_plat_data *plat_priv);
+	cnss_pr_err("%s: %d: plat_priv %pK device %pK\n",
+		    __func__, __LINE__, plat_priv, pci_dev);
+
+	cnss_wait_for_fw_ready(&pci_dev->dev);
+
+	return 0;
+}
+
+static void cnss_debug_remove(struct pci_dev *pdev)
+{
+	struct platform_device *plat_dev = (struct platform_device *)pdev;
+	struct cnss_plat_data *plat_priv = cnss_get_plat_priv(plat_dev);
+
+	cnss_pr_err("%s: %d: plat_priv %pK\n",
+		    __func__, __LINE__, plat_priv);
+}
+
+static void cnss_debug_shutdown(struct pci_dev *pdev)
+{
+	struct platform_device *plat_dev = (struct platform_device *)pdev;
+	struct cnss_plat_data *plat_priv = cnss_get_plat_priv(plat_dev);
+
+	cnss_pr_err("%s: %d: plat_priv %pK\n",
+		    __func__, __LINE__, plat_priv);
+}
+
+static void cnss_debug_update_status(struct pci_dev *pdev,
+				     const struct pci_device_id *id,
+				     int status)
+{
+	struct platform_device *plat_dev = (struct platform_device *)pdev;
+	struct cnss_plat_data *plat_priv = cnss_get_plat_priv(plat_dev);
+
+	cnss_pr_err("%s: %d: plat_priv %pK status %d\n",
+		    __func__, __LINE__, plat_priv, status);
+}
+
+static int  cnss_debug_fatal(struct pci_dev *pdev,
+			     const struct pci_device_id *id)
+{
+	struct platform_device *plat_dev = (struct platform_device *)pdev;
+	struct cnss_plat_data *plat_priv = cnss_get_plat_priv(plat_dev);
+
+	cnss_pr_err("%s: %d: device %x\n",
+		    __func__, __LINE__, id->device);
+
+	return 0;
+}
+
+struct cnss_wlan_driver debug_driver_ops = {
+	.name		= "pld_pcie",
+	.probe		= cnss_debug_probe,
+	.remove		= cnss_debug_remove,
+	.update_status	= cnss_debug_update_status,
+	.fatal		= cnss_debug_fatal,
+	.shutdown	= cnss_debug_shutdown,
+};
+
 static ssize_t cnss_dev_boot_debug_write(struct file *fp,
 					 const char __user *user_buf,
 					 size_t count, loff_t *off)
@@ -168,15 +244,9 @@ static ssize_t cnss_dev_boot_debug_write(struct file *fp,
 		((struct seq_file *)fp->private_data)->private;
 	struct cnss_pci_data *pci_priv;
 	char buf[64];
-	char *cmd = NULL;
+	char *cmd;
 	unsigned int len = 0;
 	int ret = 0;
-
-	if (!plat_priv) {
-		cnss_pr_err("Platform data is NULL\n");
-		return -ENODEV;
-	}
-
 
 	len = min(count, sizeof(buf) - 1);
 	if (copy_from_user(buf, user_buf, len))
@@ -185,11 +255,27 @@ static ssize_t cnss_dev_boot_debug_write(struct file *fp,
 	buf[len] = '\0';
 	cmd = (char *)buf;
 
-	pci_priv = plat_priv->bus_priv;
-	if (!pci_priv && !sysfs_streq("probe", cmd) && !sysfs_streq("probe1", cmd)) {
-		cnss_pr_err("PCI device not enumerated. Only 'probe' is supported.\n");
-		return -ENODEV;
+	if (sysfs_streq("test_driver_load", cmd)) {
+		ret = cnss_wlan_register_driver_ops(&debug_driver_ops);
+		if (ret) {
+			cnss_pr_err("Fail to register driver ops\n");
+			return ret;
+		}
+		ret = cnss_wlan_probe_driver();
+		if (ret) {
+			cnss_pr_err("Fail to register driver probe\n");
+			return ret;
+		}
+		return count;
 	}
+
+	if (!plat_priv)
+		return -ENODEV;
+
+	pci_priv = plat_priv->bus_priv;
+	if (!pci_priv)
+		return -ENODEV;
+
 	if (sysfs_streq("on", cmd)) {
 		ret = cnss_power_on_device(plat_priv, 0);
 	} else if (sysfs_streq("off", cmd)) {
@@ -203,12 +289,6 @@ static ssize_t cnss_dev_boot_debug_write(struct file *fp,
 		ret = cnss_resume_pci_link(pci_priv);
 	} else if (sysfs_streq("linkdown", cmd)) {
 		ret = cnss_suspend_pci_link(pci_priv);
-	} else if (sysfs_streq("probe", cmd)) {
-		ret = cnss_pci_probe(plat_priv->pci_dev,
-				     plat_priv->pci_dev_id,
-				     plat_priv);
-	} else if (sysfs_streq("probe1", cmd)) {
-		ret = cnss_register_subsys(plat_priv);
 	} else if (sysfs_streq("powerup", cmd)) {
 		set_bit(CNSS_DRIVER_DEBUG, &plat_priv->driver_state);
 		ret = cnss_driver_event_post(plat_priv,
@@ -221,8 +301,6 @@ static ssize_t cnss_dev_boot_debug_write(struct file *fp,
 		clear_bit(CNSS_DRIVER_DEBUG, &plat_priv->driver_state);
 	} else if (sysfs_streq("assert", cmd)) {
 		ret = cnss_force_fw_assert(&pci_priv->pci_dev->dev);
-	} else if (sysfs_streq("fw_log", cmd)) {
-		cnss_pci_dump_bl_sram_mem(pci_priv);
 	} else {
 		cnss_pr_err("Device boot debugfs command is invalid\n");
 		ret = -EINVAL;
@@ -293,7 +371,6 @@ static int cnss_reg_read_debug_show(struct seq_file *s, void *data)
 	return 0;
 }
 
-extern void cnss_pci_dump_target_sram_mem(struct cnss_pci_data *pci_priv, u32 start, u32 len);
 static ssize_t cnss_reg_read_debug_write(struct file *fp,
 					 const char __user *user_buf,
 					 size_t count, loff_t *off)
@@ -308,6 +385,11 @@ static ssize_t cnss_reg_read_debug_write(struct file *fp,
 	u8 *reg_buf = NULL;
 	const char *delim = " ";
 	int ret = 0;
+
+	if (!test_bit(CNSS_FW_READY, &plat_priv->driver_state)) {
+		cnss_pr_err("Firmware is not ready yet\n");
+		return -EINVAL;
+	}
 
 	len = min(count, sizeof(buf) - 1);
 	if (copy_from_user(buf, user_buf, len))
@@ -344,19 +426,6 @@ static ssize_t cnss_reg_read_debug_write(struct file *fp,
 		return -EINVAL;
 
 	mutex_lock(&plat_priv->dev_lock);
-	if (mem_type == TARGET_MEM_TYPE) {
-		struct cnss_pci_data *pci_priv;
-		pci_priv = plat_priv->bus_priv;
-		cnss_pci_dump_target_sram_mem(pci_priv, reg_offset, data_len);
-		mutex_unlock(&plat_priv->dev_lock);
-		return count;
-	}
-
-	if (!test_bit(CNSS_FW_READY, &plat_priv->driver_state)) {
-		cnss_pr_err("Firmware is not ready yet\n");
-		return -EINVAL;
-	}
-
 	kfree(plat_priv->diag_reg_read_buf);
 	plat_priv->diag_reg_read_buf = NULL;
 
@@ -604,8 +673,9 @@ static ssize_t cnss_control_params_debug_write(struct file *fp,
 		plat_priv->ctrl_params.bdf_type = val;
 	else if (strcmp(cmd, "time_sync_period") == 0)
 		plat_priv->ctrl_params.time_sync_period = val;
-	else if (strcmp(cmd, "log_level") == 0)
-		log_level = val;
+	else if (strcmp(cmd, "board_id") == 0 &&
+			(plat_priv->bus_type == CNSS_BUS_PCI))
+		plat_priv->ctrl_params.board_id = val;
 	else
 		return -EINVAL;
 
@@ -668,7 +738,7 @@ static int cnss_show_quirks_state(struct seq_file *s,
 
 static int cnss_control_params_debug_show(struct seq_file *s, void *data)
 {
-	struct cnss_plat_data *cnss_priv = s->private;
+	struct cnss_plat_data *plat_priv = s->private;
 
 	seq_puts(s, "\nUsage: echo <params_name> <value> > <debugfs_path>/cnss/control_params\n");
 	seq_puts(s, "<params_name> can be one of below:\n");
@@ -677,15 +747,17 @@ static int cnss_control_params_debug_show(struct seq_file *s, void *data)
 	seq_puts(s, "qmi_timeout: Timeout for QMI message in milliseconds\n");
 	seq_puts(s, "bdf_type: Type of board data file to be downloaded\n");
 	seq_puts(s, "time_sync_period: Time period to do time sync with device in milliseconds\n");
-	seq_puts(s, "log_level: cnss driver debug message level[0~6]\n");
 
 	seq_puts(s, "\nCurrent value:\n");
-	cnss_show_quirks_state(s, cnss_priv);
-	seq_printf(s, "mhi_timeout: %u\n", cnss_priv->ctrl_params.mhi_timeout);
-	seq_printf(s, "qmi_timeout: %u\n", cnss_priv->ctrl_params.qmi_timeout);
-	seq_printf(s, "bdf_type: %u\n", cnss_priv->ctrl_params.bdf_type);
+	cnss_show_quirks_state(s, plat_priv);
+	seq_printf(s, "mhi_timeout: %u\n", plat_priv->ctrl_params.mhi_timeout);
+	seq_printf(s, "qmi_timeout: %u\n", plat_priv->ctrl_params.qmi_timeout);
+	seq_printf(s, "bdf_type: %u\n", plat_priv->ctrl_params.bdf_type);
 	seq_printf(s, "time_sync_period: %u\n",
-		   cnss_priv->ctrl_params.time_sync_period);
+		   plat_priv->ctrl_params.time_sync_period);
+	if (plat_priv->bus_type == CNSS_BUS_PCI)
+		seq_printf(s, "board_id: 0x%x\n",
+			   plat_priv->ctrl_params.board_id);
 
 	return 0;
 }
@@ -701,6 +773,64 @@ static const struct file_operations cnss_control_params_debug_fops = {
 	.read = seq_read,
 	.write = cnss_control_params_debug_write,
 	.open = cnss_control_params_debug_open,
+	.owner = THIS_MODULE,
+	.llseek = seq_lseek,
+};
+
+static ssize_t cnss_ce_reg_info_debug_write(struct file *fp,
+					    const char __user *user_buf,
+					    size_t count, loff_t *off)
+{
+	u64 ce_bitmask;
+	int ret;
+	int ce;
+	struct cnss_ce_base_addr *ce_object;
+	struct cnss_plat_data *plat_priv =
+		((struct seq_file *)fp->private_data)->private;
+
+	ret = kstrtou64_from_user(user_buf, count, 16, &ce_bitmask);
+	if (ret)
+		return ret;
+
+	ce_object = register_ce_object(plat_priv);
+	if (!ce_object) {
+		cnss_pr_err("CE object is null\n");
+		return -1;
+	}
+	if (ce_bitmask >= (1 << ce_object->max_ce_count))
+		return -EINVAL;
+	for (ce = 0; ce < ce_object->max_ce_count; ce++) {
+		/* Each bit represents CEx register. The user can also dump the
+		 * specific CE register(s).
+		 * e.g: echo 0x5 > ce_info will dump CE0 and CE2 registers.
+		 */
+		if (ce_bitmask & (1 << ce))
+			cnss_dump_ce_reg(plat_priv, ce, ce_object);
+	}
+	return count;
+}
+
+static int cnss_ce_reg_info_debug_show(struct seq_file *s, void *data)
+{
+	struct cnss_plat_data *plat_priv = s->private;
+
+	cnss_pr_info("To print specific CEs, echo bitmask > ce_info\n\n");
+	cnss_dump_all_ce_reg(plat_priv);
+
+	return 0;
+}
+
+static int cnss_ce_reg_info_debug_open(struct inode *inode,
+				       struct file *file)
+{
+	return single_open(file, cnss_ce_reg_info_debug_show,
+			   inode->i_private);
+}
+
+static const struct file_operations cnss_ce_reg_debug_fops = {
+	.read = seq_read,
+	.write = cnss_ce_reg_info_debug_write,
+	.open = cnss_ce_reg_info_debug_open,
 	.owner = THIS_MODULE,
 	.llseek = seq_lseek,
 };
@@ -750,6 +880,49 @@ static const struct file_operations cnss_dynamic_feature_fops = {
 	.llseek = seq_lseek,
 };
 
+static ssize_t cnss_hds_support_write(struct file *fp,
+				      const char __user *user_buf,
+				      size_t count, loff_t *off)
+{
+	struct cnss_plat_data *plat_priv =
+		((struct seq_file *)fp->private_data)->private;
+	int ret = 0;
+	u32 val;
+
+	ret = kstrtou32_from_user(user_buf, count, 0, &val);
+	if (ret)
+		return ret;
+
+	plat_priv->hds_support = !!val;
+
+	return count;
+}
+
+static int cnss_hds_support_show(struct seq_file *s, void *data)
+{
+	struct cnss_plat_data *plat_priv = s->private;
+
+	seq_printf(s, "hds_support: %s\n",
+		   plat_priv->hds_support ? "true" : "false");
+
+	return 0;
+}
+
+static int cnss_hds_support_open(struct inode *inode,
+				 struct file *file)
+{
+	return single_open(file, cnss_hds_support_show,
+			   inode->i_private);
+}
+
+static const struct file_operations cnss_hds_support_fops = {
+	.read = seq_read,
+	.write = cnss_hds_support_write,
+	.open = cnss_hds_support_open,
+	.owner = THIS_MODULE,
+	.llseek = seq_lseek,
+};
+
 static ssize_t cnss_qmi_record_debug_write(struct file *fp,
 					   const char __user *user_buf,
 					   size_t count, loff_t *off)
@@ -782,14 +955,31 @@ static const struct file_operations cnss_qmi_record_debug_fops = {
 	.llseek		= seq_lseek,
 };
 
+static int cnss_mlo_config_debug_show(struct seq_file *s, void *data)
+{
+	cnss_print_mlo_config();
+	return 0;
+}
+
+static int cnss_mlo_config_debug_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, cnss_mlo_config_debug_show, inode->i_private);
+}
+
+static const struct file_operations cnss_mlo_config_debug_fops = {
+	.read		= seq_read,
+	.release	= single_release,
+	.open		= cnss_mlo_config_debug_open,
+	.owner		= THIS_MODULE,
+	.llseek		= seq_lseek,
+};
+
 static int cnss_create_debug_only_node(struct cnss_plat_data *plat_priv)
 {
 	struct dentry *root_dentry = plat_priv->root_dentry;
 
 	debugfs_create_file("dev_boot", 0600, root_dentry, plat_priv,
 			    &cnss_dev_boot_debug_fops);
-	debugfs_create_file("qmi_record", 0600, root_dentry, plat_priv,
-			    &cnss_qmi_record_debug_fops);
 	debugfs_create_file("reg_read", 0600, root_dentry, plat_priv,
 			    &cnss_reg_read_debug_fops);
 	debugfs_create_file("reg_write", 0600, root_dentry, plat_priv,
@@ -800,6 +990,10 @@ static int cnss_create_debug_only_node(struct cnss_plat_data *plat_priv)
 			    &cnss_control_params_debug_fops);
 	debugfs_create_file("dynamic_feature", 0600, root_dentry, plat_priv,
 			    &cnss_dynamic_feature_fops);
+	debugfs_create_file("hds_support", 0600, root_dentry, plat_priv,
+			    &cnss_hds_support_fops);
+	debugfs_create_file("ce_info", 0600, root_dentry, plat_priv,
+			    &cnss_ce_reg_debug_fops);
 
 	return 0;
 }
@@ -807,9 +1001,25 @@ static int cnss_create_debug_only_node(struct cnss_plat_data *plat_priv)
 int cnss_debugfs_create(struct cnss_plat_data *plat_priv)
 {
 	int ret = 0;
-	struct dentry *root_dentry;
+	struct dentry *root_dentry = NULL;
 
-	root_dentry = debugfs_create_dir("cnss", 0);
+	if (!cnss_root_dentry) {
+		cnss_root_dentry = debugfs_create_dir("cnss", 0);
+		if (IS_ERR(cnss_root_dentry)) {
+			ret = PTR_ERR(cnss_root_dentry);
+			cnss_pr_err("Unable to create debugfs %d\n", ret);
+			goto out;
+		}
+
+		/* Create qmi_record under /sys/kernel/debug/cnss2/ */
+		debugfs_create_file("qmi_record", 0600, cnss_root_dentry, NULL,
+				    &cnss_qmi_record_debug_fops);
+		debugfs_create_file("mlo_config", 0600, cnss_root_dentry, NULL,
+				    &cnss_mlo_config_debug_fops);
+	}
+
+	root_dentry = debugfs_create_dir((char *)&plat_priv->device_name,
+					 cnss_root_dentry);
 	if (IS_ERR(root_dentry)) {
 		ret = PTR_ERR(root_dentry);
 		cnss_pr_err("Unable to create debugfs %d\n", ret);
@@ -830,22 +1040,29 @@ out:
 
 void cnss_debugfs_destroy(struct cnss_plat_data *plat_priv)
 {
-	debugfs_remove_recursive(plat_priv->root_dentry);
+	if (cnss_root_dentry) {
+		debugfs_remove_recursive(cnss_root_dentry);
+		cnss_root_dentry = NULL;
+	}
+	plat_priv->root_dentry = NULL;
 }
 
+#if IS_ENABLED(CONFIG_IPC_LOGGING)
 int cnss_debug_init(void)
 {
+	struct cnss_plat_data *plat_priv = NULL;
+
 	cnss_ipc_log_context = ipc_log_context_create(CNSS_IPC_LOG_PAGES,
 						      "cnss", 0);
 	if (!cnss_ipc_log_context) {
-		printk(KERN_ERR "Unable to create IPC log context!\n");
+		cnss_pr_info("IPC Logging is disabled!\n");
 		return -EINVAL;
 	}
 
 	cnss_ipc_log_long_context = ipc_log_context_create(CNSS_IPC_LOG_PAGES,
 							   "cnss-long", 0);
 	if (!cnss_ipc_log_long_context) {
-		pr_err("Unable to create IPC long log context\n");
+		cnss_pr_info("IPC long logging is disabled!\n");
 		ipc_log_context_destroy(cnss_ipc_log_context);
 		return -EINVAL;
 	}
@@ -864,4 +1081,37 @@ void cnss_debug_deinit(void)
 		ipc_log_context_destroy(cnss_ipc_log_context);
 		cnss_ipc_log_context = NULL;
 	}
+}
+#else
+int cnss_debug_init(void)
+{
+	return 0;
+}
+void cnss_debug_deinit(void) {}
+#endif
+
+bool cnss_wait_for_rddm_complete(struct cnss_plat_data *plat_priv)
+{
+	int count = 0;
+
+	if (!plat_priv)
+		return true;
+
+	if (test_bit(CNSS_RDDM_IN_PROGRESS, &plat_priv->driver_state)) {
+		cnss_pr_dbg("Waiting for RDDM collection for device 0x%lx\n",
+			      plat_priv->device_id);
+		while (test_bit(CNSS_RDDM_IN_PROGRESS,
+		       &plat_priv->driver_state)) {
+			msleep(RDDM_DONE_DELAY);
+			if (count++ > rddm_done_timeout * 10) {
+				cnss_pr_err("RDDM collection timed-out %d seconds\n",
+					    rddm_done_timeout);
+				CNSS_ASSERT(0);
+			}
+		}
+		cnss_pr_dbg("RDDM collection wait ended for device 0x%lx\n",
+			     plat_priv->device_id);
+	}
+
+	return true;
 }
