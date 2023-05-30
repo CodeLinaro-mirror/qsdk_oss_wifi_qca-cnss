@@ -7427,7 +7427,7 @@ struct pci_driver cnss_pci_driver = {
 int cnss_pci_init(struct cnss_plat_data *plat_priv)
 {
 	int ret = 0;
-#if defined(CONFIG_CNSS2_PCI_MSM) || defined(CONFIG_CNSS2_KERNEL_5_15)
+#ifdef CONFIG_CNSS2_PCI_MSM
 	struct device *dev = &plat_priv->plat_dev->dev;
 	u32 rc_num;
 

@@ -6249,9 +6249,6 @@ static int cnss_probe(struct platform_device *plat_dev)
 	const struct platform_device_id *device_id;
 	u32 node_id = 0, userpd_id = 0, node_id_base;
 	unsigned long flags;
-#ifdef CONFIG_CNSS2_KERNEL_5_15
-	int retry = 0;
-#endif
 #ifdef CONFIG_CNSS2_KERNEL_IPQ
 	const int *soc_version;
 #endif
@@ -6440,18 +6437,6 @@ static int cnss_probe(struct platform_device *plat_dev)
 		return -ENODEV;
 	}
 
-#ifdef CONFIG_CNSS2_KERNEL_5_15
-	cnss_get_pinctrl(plat_priv);
-
-	ret = pinctrl_select_state(plat_priv->pinctrl_info.pinctrl,
-				   plat_priv->pinctrl_info.wlan_en_active);
-	if (ret) {
-		cnss_pr_err("Failed to select wlan_en active state, err = %d\n",
-		       ret);
-		return 0;
-	}
-#endif
-
 	ret = cnss_set_device_name(plat_priv);
 	if (ret)
 		return -ENODEV;
@@ -6553,20 +6538,6 @@ static int cnss_probe(struct platform_device *plat_dev)
 	spin_lock_irqsave(&plat_env_spinlock, flags);
 	plat_env[plat_env_index++] = plat_priv;
 	spin_unlock_irqrestore(&plat_env_spinlock, flags);
-#ifdef CONFIG_CNSS2_KERNEL_5_15
-retry:
-	ret = cnss_bus_init(plat_priv);
-	if (ret) {
-		if ((ret != -EPROBE_DEFER) &&
-		    retry++ < POWER_ON_RETRY_MAX_TIMES) {
-			cnss_pr_dbg("Retry cnss_bus_init #%d\n", retry);
-			msleep(POWER_ON_RETRY_DELAY_MS * retry);
-			goto retry;
-		} else {
-			cnss_pr_err("cnss_bus_init failed.");
-		}
-	}
-#endif
 	cnss_pr_info("Platform driver probed successfully. plat 0x%pK tgt 0x%lx\n",
 		     plat_priv, plat_priv->device_id);
 
@@ -6703,9 +6674,7 @@ static int __init cnss_initialize(void)
 		return ret;
 	}
 #endif
-#ifndef CONFIG_CNSS2_KERNEL_5_15
 	cnss_bus_init_by_type(CNSS_BUS_PCI);
-#endif
 	cnss_plat_ipc_qmi_svc_init();
 	cnss_init_ipc_qmi_cb(&ipc_qmi_callbacks);
 	cnss_plat_ipc_register(CNSS_PLAT_IPC_DAEMON_QMI_CLIENT_V01,
