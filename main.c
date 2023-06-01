@@ -1158,6 +1158,50 @@ out:
 }
 EXPORT_SYMBOL(cnss_athdiag_write);
 
+#ifdef CONFIG_CNSS2_KERNEL_6_1
+/*
+ * Return true if target is a lithium target. else return false
+ */
+bool cnss_check_li_target(struct cnss_plat_data *plat_priv)
+{
+	if (!plat_priv)
+		return false;
+
+	switch (plat_priv->device_id) {
+	case QCA8074_DEVICE_ID:
+	case QCA8074V2_DEVICE_ID:
+	case QCA9574_DEVICE_ID:
+	case QCA6018_DEVICE_ID:
+	case QCA5018_DEVICE_ID:
+	case QCA5332_DEVICE_ID:
+	case QCN9000_DEVICE_ID:
+	case QCN6122_DEVICE_ID:
+	case QCN9160_DEVICE_ID:
+	case QCN9224_DEVICE_ID:
+	case QCN6432_DEVICE_ID:
+		return true;
+	}
+
+	return false;
+}
+
+/* Waikiki is supported for both li and be in the code*/
+bool cnss_check_be_target(struct cnss_plat_data *plat_priv)
+{
+	if (!plat_priv)
+		return false;
+
+	switch (plat_priv->device_id) {
+	case QCN9224_DEVICE_ID:
+	case QCA5332_DEVICE_ID:
+	case QCN6432_DEVICE_ID:
+		return true;
+	}
+
+	return false;
+}
+#endif
+
 /* Return 0 if device is a multi-pd target.
  * Else return -ENODEV.
  */

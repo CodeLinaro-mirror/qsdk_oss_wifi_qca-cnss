@@ -806,4 +806,9 @@ int cnss_set_fw_type_and_name(struct cnss_plat_data *plat_priv);
 #if !defined(CONFIG_CNSS2_KERNEL_5_15) && !defined(CONFIG_CNSS2_KERNEL_6_1)
 void cnss_modify_link_speed(struct cnss_plat_data *plat_priv);
 #endif
+
+#ifdef CONFIG_CNSS2_KERNEL_6_1
+bool cnss_check_li_target(struct cnss_plat_data *plat_priv);
+bool cnss_check_be_target(struct cnss_plat_data *plat_priv);
+#endif
 #endif /* _CNSS_MAIN_H */

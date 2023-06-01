@@ -2682,7 +2682,7 @@ int cnss_wlfw_qdss_dnld_send_sync(struct cnss_plat_data *plat_priv)
 		ret = request_firmware_direct(&fw_entry, default_cfg_file_name,
 					      &plat_priv->plat_dev->dev);
 		if (ret) {
-			cnss_pr_info("Failed to load QDSS Config: %s ret:%d\n",
+			cnss_pr_err("Failed to load QDSS Config: %s ret:%d\n",
 				     default_cfg_file_name, ret);
 			goto err_req_fw;
 		}

@@ -160,6 +160,17 @@
 #define QCN9224_PBL_WLAN_BOOT_CFG		0x1E22B34
 #define QCN9224_PBL_BOOTSTRAP_STATUS		0x1A006D4
 
+#ifdef CONFIG_CNSS2_KERNEL_6_1
+#define QMI_WLANFW_QDSS_STOP_ALL_TRACE_LI 0x3F
+#define QMI_WLANFW_QDSS_STOP_ALL_TRACE_BE 0x01
+
+enum cnss_qdss_ops {
+	CNSS_QDSS_STOP,
+	CNSS_QDSS_START,
+	CNSS_INVALID_OP,
+};
+#endif
+
 struct cnss_pci_data;
 
 enum cnss_log_level {
