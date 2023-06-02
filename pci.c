@@ -7096,11 +7096,17 @@ int cnss_pci_probe(struct pci_dev *pci_dev,
 	cnss_pr_dbg("PCI is probing, vendor ID: 0x%x, device ID: 0x%x\n",
 		    id->vendor, pci_dev->device);
 
-	pci_priv = devm_kzalloc(&pci_dev->dev, sizeof(*pci_priv),
-				GFP_KERNEL);
-	if (!pci_priv) {
-		ret = -ENOMEM;
-		goto out;
+	if (!plat_priv->bus_priv) {
+		pci_priv = devm_kzalloc(&pci_dev->dev, sizeof(*pci_priv),
+					GFP_KERNEL);
+		if (!pci_priv) {
+			ret = -ENOMEM;
+			goto out;
+		}
+		plat_priv->bus_priv = pci_priv;
+	} else {
+		pci_priv = plat_priv->bus_priv;
+		memset(pci_priv, 0, sizeof(*pci_priv));
 	}
 
 #ifdef CONFIG_CNSS2_KERNEL_MSM
@@ -7114,7 +7120,6 @@ int cnss_pci_probe(struct pci_dev *pci_dev,
 	pci_priv->device_id = pci_dev->device;
 	cnss_set_pci_priv(pci_dev, pci_priv);
 	plat_priv->device_id = pci_dev->device;
-	plat_priv->bus_priv = pci_priv;
 
 #ifdef CONFIG_CNSS2_LEGACY_IRQ
 	if (plat_priv->enable_intx) {
@@ -7239,6 +7244,8 @@ unregister_subsys:
 #else
 	cnss_bus_dev_shutdown(plat_priv);
 #endif
+	devm_kfree(&pci_dev->dev, pci_priv);
+	cnss_set_pci_priv(pci_dev, NULL);
 	plat_priv->bus_priv = NULL;
 out:
 	return ret;
@@ -7300,7 +7307,6 @@ void cnss_pci_remove(struct pci_dev *pci_dev)
 	cnss_unregister_ramdump(plat_priv);
 #endif
 	cnss_pci_free_mhi_controller(pci_priv);
-	plat_priv->bus_priv = NULL;
 }
 EXPORT_SYMBOL(cnss_pci_remove);
 
