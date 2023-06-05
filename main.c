@@ -3159,7 +3159,9 @@ static int cnss_rproc_start(struct cnss_plat_data *plat_priv)
 void  *__cnss_subsystem_get(struct cnss_plat_data *plat_priv)
 {
 	struct cnss_subsys_info *subsys_info = &plat_priv->subsys_info;
+#ifndef CONFIG_CNSS2_KERNEL_5_15
 	bool boot_after_recovery = false;
+#endif
 
 	plat_priv->target_asserted = 0;
 	plat_priv->target_assert_timestamp = 0;
@@ -3167,8 +3169,10 @@ void  *__cnss_subsystem_get(struct cnss_plat_data *plat_priv)
 	cnss_pr_info("%s: driver_state: 0x%lx\n", __func__,
 		     plat_priv->driver_state);
 
+#ifndef CONFIG_CNSS2_KERNEL_5_15
 	if (test_bit(CNSS_RECOVERY_WAIT_FOR_DRIVER, &plat_priv->driver_state))
 		boot_after_recovery = true;
+#endif
 
 	if (subsys_info->subsys_handle &&
 	    !test_bit(CNSS_RECOVERY_WAIT_FOR_DRIVER,
