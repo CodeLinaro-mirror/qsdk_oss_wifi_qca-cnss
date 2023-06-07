@@ -5154,8 +5154,10 @@ int cnss_pci_probe(struct pci_dev *pci_dev,
 	cnss_pr_dbg("PCI is probing, vendor ID: 0x%x, device ID: 0x%x\n",
 		    id->vendor, pci_dev->device);
 
-	pci_priv = devm_kzalloc(&pci_dev->dev, sizeof(*pci_priv),
-				GFP_KERNEL);
+	pci_priv = cnss_get_pci_priv(pci_dev);
+	if (!pci_priv)
+		pci_priv = devm_kzalloc(&pci_dev->dev, sizeof(*pci_priv),
+					GFP_KERNEL);
 	if (!pci_priv) {
 		ret = -ENOMEM;
 		goto out;
@@ -5313,8 +5315,6 @@ void cnss_pci_remove(struct pci_dev *pci_dev)
 	cnss_unregister_ramdump(plat_priv);
 #endif
 	cnss_pci_free_mhi_controller(pci_priv);
-	devm_kfree(&pci_dev->dev, pci_priv);
-	cnss_set_pci_priv(pci_dev, NULL);
 	plat_priv->bus_priv = NULL;
 }
 EXPORT_SYMBOL(cnss_pci_remove);
