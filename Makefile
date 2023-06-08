@@ -1,43 +1,45 @@
 M ?= $(shell pwd)
 KERNEL_SRC ?= /lib/modules/$(shell uname -r)/build
 
-obj-m += ipq_cnss2.o
+obj-m += qca-cnss2.o
 
 ifneq ($(QCA_CNSS_STREAM_MOD),)
 ifneq ($(CONFIG_BUILD_OWRT),y)
-obj-m += ipq_cnss2_stream.o
+obj-m += qca-cnss2_stream.o
 endif
 endif
 
-ipq_cnss2-objs := main.o
-ipq_cnss2-objs += debug.o
-ipq_cnss2-objs += pci.o
-ipq_cnss2-objs += power.o
-ipq_cnss2-objs += qmi.o
-ipq_cnss2-objs += wlan_firmware_service_v01.o
-ipq_cnss2-objs += bus.o
-ipq_cnss2-objs += genl.o
-ipq_cnss2-objs += cnss_plat_ipc_qmi.o
-ipq_cnss2-objs += cnss_plat_ipc_service_v01.o
-ifneq ($(CONFIG_BUILD_OWRT),y)
-ipq_cnss2-objs += legacyirq/legacyirq.o
-endif
-ipq_cnss2_stream-objs := stream.o
+qca-cnss2-objs := main.o
+qca-cnss2-objs += debug.o
+qca-cnss2-objs += pci.o
+qca-cnss2-objs += power.o
+qca-cnss2-objs += qmi.o
+qca-cnss2-objs += wlan_firmware_service_v01.o
+qca-cnss2-objs += bus.o
+qca-cnss2-objs += genl.o
+qca-cnss2-objs += cnss_plat_ipc_qmi.o
+qca-cnss2-objs += cnss_plat_ipc_service_v01.o
+qca-cnss2-objs += legacyirq/legacyirq.o
+qca-cnss2_stream-objs := stream.o
 
 CNSS2_INCLUDE = -I$(obj)
 CNSS2_INCLUDE += -I$(obj)/include
 
+ccflags-y += -DCONFIG_CNSS_OUT_OF_TREE
+ccflags-y += -DCONFIG_CNSS2_QMI
+ccflags-y += -DCONFIG_PCI_MSM
+ccflags-y += -DCONFIG_MHI_BUS_MISC
+ccflags-y += -DCONFIG_CNSS2_DEBUG
 ccflags-y += $(CNSS2_INCLUDE)
-ccflags-y += -Wall -Werror -Wno-format-security
+ccflags-y += -Wall -Werror -Wno-format-security -Wno-void-pointer-to-int-cast
 
 ccflags-y += -DCONFIG_CNSS_QCN9000
 ccflags-y += -DCONFIG_CNSS2_GENL
 
 ifeq ($(CONFIG_BUILD_YOCTO),y)
-	ccflags-y += -DCONFIG_CNSS2_KERNEL_MSM
+	ccflags-y += -DCONFIG_CNSS2_KERNEL_5_15
 	ccflags-y += -DCONFIG_CNSS2_DMA_ALLOC
 	ccflags-y += -DCONFIG_CNSS2_SMMU
-	ccflags-y += -DCONFIG_CNSS2_KERNEL_SSR_FRAMEWORK
 else ifeq ($(CONFIG_BUILD_OWRT),y)
 	ccflags-y += -DCONFIG_CNSS2_DMA_ALLOC
 	ccflags-y += -DCONFIG_CNSS2_SMMU
