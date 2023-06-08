@@ -6441,6 +6441,7 @@ static int cnss_probe(struct platform_device *plat_dev)
 	}
 
 #ifdef CONFIG_CNSS2_KERNEL_5_15
+#ifdef CNSS2_NOCLOCK
 	cnss_get_pinctrl(plat_priv);
 
 	ret = pinctrl_select_state(plat_priv->pinctrl_info.pinctrl,
@@ -6450,6 +6451,7 @@ static int cnss_probe(struct platform_device *plat_dev)
 		       ret);
 		return 0;
 	}
+#endif
 #endif
 
 	ret = cnss_set_device_name(plat_priv);
