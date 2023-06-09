@@ -51,6 +51,7 @@
 #ifdef CONFIG_CNSS2_KERNEL_5_15
 #include <linux/devcoredump.h>
 #include <linux/elf.h>
+#include <linux/panic_notifier.h>
 #else
 #include <soc/qcom/ramdump.h>
 #endif
@@ -98,6 +99,10 @@ int plat_env_index;
 struct cnss_mlo_group_info g_mlo_group_info[CNSS_MAX_MLO_GROUPS];
 static DEFINE_SPINLOCK(plat_env_spinlock);
 static DEFINE_SPINLOCK(rddm_spinlock);
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
+static DEFINE_MUTEX(rproc_list_mutex);
+struct notifier_block panic_nb;
+#endif
 
 #ifdef CONFIG_CNSS2_PM
 static DECLARE_RWSEM(cnss_pm_sem);
@@ -6031,6 +6036,39 @@ cnss_check_skip_target_probe(const struct platform_device_id *device_id,
 	return false;
 }
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
+static int cnss_panic_handler(struct notifier_block *this,
+                                unsigned long event, void *ptr)
+{
+	int i;
+	struct cnss_plat_data *plat_priv = NULL;
+
+	mutex_lock(&rproc_list_mutex);
+	for (i = 0; i < plat_env_index; i++) {
+		cnss_pr_dbg("cnss_panic_handler for plat_env %d\n", i);
+		plat_env[i]->target_asserted = 1;
+		cnss_bus_dev_crash_shutdown(plat_env[i]);
+        }
+	mutex_unlock(&rproc_list_mutex);
+
+	return 0;
+}
+
+static void cnss_panic_notifier_register()
+{
+	int ret;
+	struct cnss_plat_data *plat_priv = NULL;
+	panic_nb.notifier_call = cnss_panic_handler;
+	panic_nb.priority = 100;
+
+	ret = atomic_notifier_chain_register(&panic_notifier_list, &panic_nb);
+	if(ret)
+		cnss_pr_err("Err(%d): register panic notifier failed.\n", ret);
+	else
+		cnss_pr_dbg("%s: atomic_notifier_chain_register success.\n", __func__);
+}
+#endif
+
 #ifdef CONFIG_CNSS2_KERNEL_RPROC_FRAMEWORK
 const struct rproc_ops cnss_rproc_ops = {
 	.start = cnss_subsys_powerup,
@@ -6714,6 +6752,9 @@ static int __init cnss_initialize(void)
 	cnss_init_ipc_qmi_cb(&ipc_qmi_callbacks);
 	cnss_plat_ipc_register(CNSS_PLAT_IPC_DAEMON_QMI_CLIENT_V01,
 			       &ipc_qmi_callbacks, NULL);
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
+	cnss_panic_notifier_register();
+#endif
 
 	return ret;
 }
