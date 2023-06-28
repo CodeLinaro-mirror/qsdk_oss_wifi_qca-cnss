@@ -1232,6 +1232,25 @@ void cnss_get_ramdump_device_name(struct device *dev,
 }
 EXPORT_SYMBOL(cnss_get_ramdump_device_name);
 
+bool cnss_get_global_mlo_support(void)
+{
+	struct cnss_plat_data *plat_priv = NULL;
+	int i;
+
+	for (i = 0; i < plat_env_index; i++) {
+		plat_priv = plat_env[i];
+		switch (plat_priv->device_id) {
+		case QCN9224_DEVICE_ID:
+		case QCA5332_DEVICE_ID:
+		case QCN6432_DEVICE_ID:
+			return true;
+		}
+	}
+
+	return false;
+}
+EXPORT_SYMBOL(cnss_get_global_mlo_support);
+
 static void cnss_set_global_mlo_support(bool enable)
 {
 	struct cnss_plat_data *plat_priv = NULL;
