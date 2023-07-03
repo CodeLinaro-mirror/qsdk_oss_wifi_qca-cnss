@@ -47,6 +47,9 @@ else
 	ccflags-y += -DCONFIG_CNSS2_QGIC2M
 	ccflags-y += -DCONFIG_CNSS2_KERNEL_RPROC_FRAMEWORK
 	ccflags-y += -DCONFIG_CNSS2_LEGACY_IRQ
+ifeq ($(QCA_CNSS_KERNEL_DEPENDENCY),y)
+	ccflags-y += -DCONFIG_CNSS2_QCOM_KERNEL_DEPENDENCY
+endif
 endif
 
 all:
