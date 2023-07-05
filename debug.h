@@ -42,6 +42,8 @@
 #define QCN6122_CE_SRC_RING_REG_BASE		0x3B80000
 #define QCN6122_CE_DST_RING_REG_BASE		0x3B81000
 #define QCN6122_CE_COMMON_REG_BASE		0x3B98000
+#define QCN6122_PCI_MHIREGLEN_REG		0x3E0E100
+#define QCN6122_PCI_MHI_REGION_END		0x3E0EFFC
 
 #define QCA5332_CE_SRC_RING_REG_BASE            0x740000
 #define QCA5332_CE_DST_RING_REG_BASE            0x741000
@@ -50,6 +52,8 @@
 #define QCN9160_CE_SRC_RING_REG_BASE            0x3B80000
 #define QCN9160_CE_DST_RING_REG_BASE            0x3B81000
 #define QCN9160_CE_COMMON_REG_BASE              0x3B98000
+#define QCN9160_PCI_MHIREGLEN_REG		0x3E0E100
+#define QCN9160_PCI_MHI_REGION_END		0x3E0EFFC
 
 #define QCN6432_CE_SRC_RING_REG_BASE            0x3B80000
 #define QCN6432_CE_DST_RING_REG_BASE            0x3B81000
@@ -321,7 +325,7 @@ struct sbl_reg_addr {
 struct noc_err_table {
 	char *reg_name;
 	unsigned long reg;
-	int (*reg_handler)(struct cnss_pci_data *pci_priv, u32 addr,
+	int (*reg_handler)(struct cnss_plat_data *plat_priv, u32 addr,
 				     u32 *val);
 };
 

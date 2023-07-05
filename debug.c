@@ -38,6 +38,7 @@ static struct cnss_ce_base_addr ce_base_addr_qca8074 = {
 	.max_ce_count = DEFAULT_CE_COUNT,
 };
 
+/* Bar address is mapped to CE_BASE */
 static struct cnss_ce_base_addr ce_base_addr_qca5018 = {
 	.src_base = QCA5018_CE_SRC_RING_REG_BASE,
 	.dst_base = QCA5018_CE_DST_RING_REG_BASE,
@@ -59,6 +60,7 @@ static struct cnss_ce_base_addr ce_base_addr_qcn9224 = {
 	.max_ce_count = QCN9224_CE_COUNT,
 };
 
+/* Bar address is mapped to CE_BASE */
 static struct cnss_ce_base_addr ce_base_addr_qca5332 = {
 	.src_base = QCA5332_CE_SRC_RING_REG_BASE,
 	.dst_base = QCA5332_CE_DST_RING_REG_BASE,
@@ -217,6 +219,45 @@ struct cnss_ce_base_addr *register_ce_object(struct cnss_plat_data *plat_priv)
 	return ce_object;
 }
 
+static void cnss_get_ce_base(struct cnss_plat_data *plat_priv,
+			     struct cnss_ce_base_addr *ce_object,
+			     u32 *src_base, u32 *dst_base, u32 *common_base)
+{
+	*src_base = ce_object->src_base;
+	*dst_base = ce_object->dst_base;
+	*common_base = ce_object->common_base;
+
+	switch (plat_priv->device_id) {
+	case QCA5018_DEVICE_ID:
+		*src_base -= QCA5018_CE_SRC_RING_REG_BASE;
+		*dst_base -= QCA5018_CE_SRC_RING_REG_BASE;
+		*common_base -= QCA5018_CE_SRC_RING_REG_BASE;
+		break;
+	case QCA5332_DEVICE_ID:
+		*src_base -= QCA5332_CE_SRC_RING_REG_BASE;
+		*dst_base -= QCA5332_CE_SRC_RING_REG_BASE;
+		*common_base -= QCA5332_CE_SRC_RING_REG_BASE;
+		break;
+	default:
+		break;
+	}
+}
+
+static void cnss_get_ce_bar_from_ce_base(struct cnss_plat_data *plat_priv,
+					 u32 *reg_offset)
+{
+	switch (plat_priv->device_id) {
+	case QCA5018_DEVICE_ID:
+		*reg_offset += QCA5018_CE_SRC_RING_REG_BASE;
+		break;
+	case QCA5332_DEVICE_ID:
+		*reg_offset += QCA5332_CE_SRC_RING_REG_BASE;
+		break;
+	default:
+		break;
+	}
+}
+
 static void cnss_dump_ce_reg(struct cnss_plat_data *plat_priv,
 		      enum cnss_ce_index ce,
 		      struct cnss_ce_base_addr *ce_object)
@@ -224,34 +265,42 @@ static void cnss_dump_ce_reg(struct cnss_plat_data *plat_priv,
 	int i;
 	u32 ce_base = ce * PER_CE_REG_SIZE;
 	u32 reg_offset, val;
+	u32 src_base;
+	u32 dst_base;
+	u32 common_base;
 
+	cnss_get_ce_base(plat_priv, ce_object, &src_base,
+			 &dst_base, &common_base);
 	if (ce >= CNSS_CE_00 && ce < ce_object->max_ce_count) {
 		for (i = 0; ce_src[i].name; i++) {
-			reg_offset = ce_object->src_base +
+			reg_offset = src_base +
 				ce_base + ce_src[i].offset;
 
 			if (cnss_bus_reg_read(plat_priv, reg_offset, &val))
 				return;
+			cnss_get_ce_bar_from_ce_base(plat_priv, &reg_offset);
 			cnss_pr_info("CE_%02d_%s[0x%x] = 0x%x\n",
 				     ce, ce_src[i].name, reg_offset, val);
 		}
 
 		for (i = 0; ce_dst[i].name; i++) {
-			reg_offset = ce_object->dst_base +
+			reg_offset = dst_base +
 				ce_base + ce_dst[i].offset;
 
 			if (cnss_bus_reg_read(plat_priv, reg_offset, &val))
 				return;
+			cnss_get_ce_bar_from_ce_base(plat_priv, &reg_offset);
 			cnss_pr_info("CE_%02d_%s[0x%x] = 0x%x\n",
 				     ce, ce_dst[i].name, reg_offset, val);
 		}
 	} else if (ce == CNSS_CE_COMMON) {
 		for (i = 0; ce_cmn[i].name; i++) {
-			reg_offset = ce_object->common_base +
+			reg_offset = common_base +
 				ce_base + ce_cmn[i].offset;
 
 			if (cnss_bus_reg_read(plat_priv, reg_offset, &val))
 				return;
+			cnss_get_ce_bar_from_ce_base(plat_priv, &reg_offset);
 			cnss_pr_info("CE_COMMON_%s[0x%x] = 0x%x\n",
 				     ce_cmn[i].name, reg_offset, val);
 		}
@@ -295,6 +344,14 @@ int cnss_get_mhi_region_len(struct cnss_plat_data *plat_priv,
 		*reg_start = QCN9224_PCI_MHIREGLEN_REG;
 		*reg_end = QCN9224_PCI_MHI_REGION_END;
 		break;
+	case QCN6122_DEVICE_ID:
+		*reg_start = QCN6122_PCI_MHIREGLEN_REG;
+		*reg_end = QCN6122_PCI_MHI_REGION_END;
+		break;
+	case QCN9160_DEVICE_ID:
+		*reg_start = QCN9160_PCI_MHIREGLEN_REG;
+		*reg_end = QCN9160_PCI_MHI_REGION_END;
+		break;
 	default:
 		cnss_pr_err("Unknown device type 0x%lx\n",
 			    plat_priv->device_id);
@@ -322,7 +379,7 @@ static int cnss_dump_sbl_log(struct cnss_pci_data *pci_priv, u32 log_size,
 
 	for (i = 0, j = 0; i < log_size; i += sizeof(u32), j++) {
 		mem_addr = sram_start_reg + i;
-		cnss_pci_reg_read(pci_priv, mem_addr, &buf[j]);
+		cnss_pci_reg_read(pci_priv->plat_priv, mem_addr, &buf[j]);
 		if (buf[j] == 0)
 			break;
 	}
@@ -342,7 +399,7 @@ static void cnss_dump_noc_errors(struct cnss_pci_data *pci_priv)
 	switch (plat_priv->device_id) {
 	case QCN9224_DEVICE_ID:
 		for (i = 0; noc_err_table_list[i].reg_name; i++)
-			noc_err_table_list[i].reg_handler(pci_priv,
+			noc_err_table_list[i].reg_handler(plat_priv,
 				noc_err_table_list[i].reg, &reg_values[i]);
 
 		for (i = 0; noc_err_table_list[i].reg_name; i++)
@@ -437,23 +494,23 @@ void cnss_pci_dump_bl_sram_mem(struct cnss_pci_data *pci_priv)
 	/* cnss_pci_reg_read provides 32bit register values */
 	for (i = 0; i < pbl_data.pbl_log_sram_max_size; i += sizeof(val)) {
 		mem_addr = pbl_data.pbl_log_sram_start + i;
-		if (cnss_pci_reg_read(pci_priv, mem_addr, &val))
+		if (cnss_pci_reg_read(plat_priv, mem_addr, &val))
 			break;
 		cnss_pr_err("SRAM[0x%x] = 0x%x\n", mem_addr, val);
 	}
 	if (plat_priv->device_id == QCN9224_DEVICE_ID) {
-		cnss_pci_reg_read(pci_priv,
+		cnss_pci_reg_read(plat_priv,
 				  QCN9224_PCIE_PCIE_LOCAL_REG_REMAP_BAR_CTRL,
 				  &remap_bar_ctrl);
-		cnss_pci_reg_read(pci_priv,
+		cnss_pci_reg_read(plat_priv,
 				  QCN9224_WLAON_SOC_RESET_CAUSE_SHADOW_REG,
 				  &soc_rc_shadow_reg);
-		cnss_pci_reg_read(pci_priv,
+		cnss_pci_reg_read(plat_priv,
 				  QCN9224_PCIE_PCIE_PARF_LTSSM,
 				  &parf_ltssm);
 		pci_read_config_word(pci_priv->pci_dev, PCI_COMMAND,
 				     &type0_status_cmd_reg);
-		cnss_pci_reg_read(pci_priv,
+		cnss_pci_reg_read(plat_priv,
 				  QCN9224_GCC_RAMSS_CBCR,
 				  &gcc_ramss_cbcr);
 		cnss_pr_err("%s: LOCAL_REG_REMAP_BAR_CTRL: 0x%08x, WLAON_SOC_RESET_CAUSE_SHADOW_REG: 0x%08x, PARF_LTSSM: 0x%08x\n",
@@ -465,14 +522,14 @@ void cnss_pci_dump_bl_sram_mem(struct cnss_pci_data *pci_priv)
 		cnss_dump_noc_errors(pci_priv);
 	}
 
-	if (cnss_pci_reg_read(pci_priv, sbl_data.sbl_log_start_reg,
+	if (cnss_pci_reg_read(plat_priv, sbl_data.sbl_log_start_reg,
 			      &sbl_log_start))
 		goto out;
 
-	cnss_pci_reg_read(pci_priv, pbl_data.tcsr_pbl_logging_reg, &pbl_stage);
-	cnss_pci_reg_read(pci_priv, pbl_data.pbl_wlan_boot_cfg,
+	cnss_pci_reg_read(plat_priv, pbl_data.tcsr_pbl_logging_reg, &pbl_stage);
+	cnss_pci_reg_read(plat_priv, pbl_data.pbl_wlan_boot_cfg,
 			  &pbl_wlan_boot_cfg);
-	cnss_pci_reg_read(pci_priv, pbl_data.pbl_bootstrap_status,
+	cnss_pci_reg_read(plat_priv, pbl_data.pbl_bootstrap_status,
 			  &pbl_bootstrap_status);
 	cnss_pr_err("TCSR_PBL_LOGGING: 0x%08x PCIE_BHI_ERRDBG: Start: 0x%08x\n",
 		    pbl_stage, sbl_log_start);
@@ -483,13 +540,13 @@ void cnss_pci_dump_bl_sram_mem(struct cnss_pci_data *pci_priv)
 	/* cnss_pci_reg_read provides 32bit register values */
 	for (i = 0; i < pbl_data.pbl_log_sram_max_size; i += sizeof(val)) {
 		mem_addr = pbl_data.pbl_log_sram_start + i;
-		if (cnss_pci_reg_read(pci_priv, mem_addr, &val))
+		if (cnss_pci_reg_read(plat_priv, mem_addr, &val))
 			break;
 		cnss_pr_err("SRAM[0x%x] = 0x%x\n", mem_addr, val);
 	}
 	cnss_pr_err("\n");
 
-	if (cnss_pci_reg_read(pci_priv, sbl_data.sbl_log_size_reg,
+	if (cnss_pci_reg_read(plat_priv, sbl_data.sbl_log_size_reg,
 			      &sbl_log_size))
 		goto out;
 

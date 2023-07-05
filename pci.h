@@ -286,7 +286,7 @@ void cnss_free_soc_info(struct cnss_plat_data *plat_priv);
 void cnss_do_mlo_global_memset(struct cnss_plat_data *plat_priv, u64 mem_size);
 int cnss_bus_reg_read(struct cnss_plat_data *plat_priv, u32 reg_offset,
 		      u32 *val);
-int cnss_pci_reg_read(struct cnss_pci_data *pci_priv,
+int cnss_pci_reg_read(struct cnss_plat_data *plat_priv,
 			     u32 addr, u32 *val);
 #ifdef CONFIG_CNSS2_QGIC2M
 struct qgic2_msi *cnss_qgic2_enable_msi(struct cnss_plat_data *plat_priv);

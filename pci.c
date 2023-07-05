@@ -448,15 +448,66 @@ static int cnss_pci_check_link_status(struct cnss_pci_data *pci_priv)
 	return 0;
 }
 
-static void cnss_pci_select_window(struct cnss_pci_data *pci_priv, u32 addr)
+static int cnss_pci_get_bar_addr(struct cnss_plat_data *plat_priv,
+				 void __iomem **bar)
 {
-	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
+	struct cnss_pci_data *pci_priv = NULL;
+
+	if (!plat_priv) {
+		cnss_pr_err("%s: Plat Priv is null\n", __func__);
+		return -ENODEV;
+	}
+
+	switch (plat_priv->bus_type) {
+	case CNSS_BUS_AHB:
+		if (plat_priv->device_id != QCN6122_DEVICE_ID &&
+		    plat_priv->device_id != QCN9160_DEVICE_ID)
+			return -EINVAL;
+
+		if (!plat_priv->bar) {
+			cnss_pr_err("%s: AHB bar is not yet assigned\n",
+				    __func__);
+			return -EINVAL;
+		}
+		*bar = plat_priv->bar;
+		break;
+	case CNSS_BUS_PCI:
+		if (!plat_priv->bus_priv) {
+			cnss_pr_err("PCI Priv is NULL\n");
+			return -ENODEV;
+		}
+
+		pci_priv = plat_priv->bus_priv;
+		if (!pci_priv->bar) {
+			cnss_pr_err("PCI bar is not yet assigned\n");
+			return -EINVAL;
+		}
+		*bar = pci_priv->bar;
+		break;
+	default:
+		cnss_pr_err("Unsupported device id 0x%lx\n",
+			    plat_priv->device_id);
+		return -ENODEV;
+	}
+
+	return 0;
+}
+
+static void cnss_pci_select_window(struct cnss_plat_data *plat_priv, u32 addr)
+{
 	u32 window = (addr >> WINDOW_SHIFT) & WINDOW_VALUE_MASK;
 	u32 prev_window = 0, curr_window = 0, prev_cleared_window = 0;
 	volatile u32 write_val, read_val = 0;
 	int retry = 0;
+	void __iomem *bar = NULL;
 
-	prev_window = readl_relaxed(pci_priv->bar +
+	if (cnss_pci_get_bar_addr(plat_priv, &bar) < 0) {
+		cnss_pr_err("%s: Get bar address failed\n", __func__);
+		return;
+	}
+
+
+	prev_window = readl_relaxed(bar +
 					QCN9000_PCIE_REMAP_BAR_CTRL_OFFSET);
 
 	/* Clear out last 6 bits of window register */
@@ -474,16 +525,16 @@ static void cnss_pci_select_window(struct cnss_pci_data *pci_priv, u32 addr)
 		return;
 
 	write_val = WINDOW_ENABLE_BIT | curr_window;
-	writel_relaxed(write_val, pci_priv->bar +
+	writel_relaxed(write_val, bar +
 		       QCN9000_PCIE_REMAP_BAR_CTRL_OFFSET);
 
-	read_val = readl_relaxed(pci_priv->bar +
+	read_val = readl_relaxed(bar +
 				 QCN9000_PCIE_REMAP_BAR_CTRL_OFFSET);
 
 	/* If value written is not yet reflected, wait till it is reflected */
 	while ((read_val != write_val) && (retry < 10)) {
 		mdelay(1);
-		read_val = readl_relaxed(pci_priv->bar +
+		read_val = readl_relaxed(bar +
 					 QCN9000_PCIE_REMAP_BAR_CTRL_OFFSET);
 		retry++;
 	}
@@ -503,29 +554,44 @@ static int cnss_ahb_reg_read(struct cnss_plat_data *plat_priv,
 	return 0;
 }
 
-int cnss_pci_reg_read(struct cnss_pci_data *pci_priv,
-			     u32 addr, u32 *val)
+int cnss_pci_reg_read(struct cnss_plat_data *plat_priv,
+		      u32 addr, u32 *val)
 {
 	int ret;
 	u32 mhi_region_start_reg = 0;
 	u32 mhi_region_end_reg = 0;
 	unsigned long flags;
-	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
+	struct cnss_pci_data *pci_priv = NULL;
+	void __iomem *bar = NULL;
 
-	ret = cnss_pci_check_link_status(pci_priv);
-	if (ret)
+	if (!plat_priv) {
+		cnss_pr_err("%s: Plat Priv is null\n", __func__);
+		return -ENODEV;
+	}
+
+	ret = cnss_pci_get_bar_addr(plat_priv, &bar);
+	if (ret < 0) {
+		cnss_pr_err("%s: Get bar address failed\n", __func__);
 		return ret;
-
-	if (!pci_priv->bar) {
-		cnss_pr_err("PCI bar is not yet assigned\n");
-		return 0;
 	}
 
-	if (pci_priv->pci_dev->device == QCA6174_DEVICE_ID ||
-	    addr < MAX_UNWINDOWED_ADDRESS) {
-		*val = readl_relaxed(pci_priv->bar + addr);
-		return 0;
+	if (plat_priv->bus_type == CNSS_BUS_PCI) {
+		if (!plat_priv->bus_priv) {
+			cnss_pr_err("PCI Priv is NULL\n");
+			return -ENODEV;
+		}
+		pci_priv = plat_priv->bus_priv;
+		ret = cnss_pci_check_link_status(pci_priv);
+		if (ret)
+			return ret;
+
+		if (pci_priv->pci_dev->device == QCA6174_DEVICE_ID ||
+		    addr < MAX_UNWINDOWED_ADDRESS) {
+			*val = readl_relaxed(bar + addr);
+			return 0;
+		}
 	}
+
 	ret = cnss_get_mhi_region_len(plat_priv, &mhi_region_start_reg,
 				      &mhi_region_end_reg);
 	if (ret) {
@@ -534,17 +600,17 @@ int cnss_pci_reg_read(struct cnss_pci_data *pci_priv,
 	}
 
 	spin_lock_irqsave(&pci_reg_window_lock, flags);
-	cnss_pci_select_window(pci_priv, addr);
+	cnss_pci_select_window(plat_priv, addr);
 
 	if ((addr >= PCIE_LOCAL_REG_BASE && addr <= PCIE_LOCAL_REG_END) ||
 		(addr >= mhi_region_start_reg && addr <= mhi_region_end_reg)) {
 		if (addr >= mhi_region_start_reg && addr <= mhi_region_end_reg)
 			addr = addr - mhi_region_start_reg;
 
-		*val = readl_relaxed(pci_priv->bar +
+		*val = readl_relaxed(bar +
 				     (addr & WINDOW_RANGE_MASK));
 	} else {
-		*val = readl_relaxed(pci_priv->bar + WINDOW_START +
+		*val = readl_relaxed(bar + WINDOW_START +
 				     (addr & WINDOW_RANGE_MASK));
 	}
 	spin_unlock_irqrestore(&pci_reg_window_lock, flags);
@@ -584,7 +650,7 @@ static int cnss_pci_reg_write(struct cnss_pci_data *pci_priv, u32 addr,
 	}
 
 	spin_lock_irqsave(&pci_reg_window_lock, flags);
-	cnss_pci_select_window(pci_priv, addr);
+	cnss_pci_select_window(plat_priv, addr);
 
 	if ((addr >= PCIE_LOCAL_REG_BASE && addr <= PCIE_LOCAL_REG_END) ||
 		(addr >= mhi_region_start_reg && addr <= mhi_region_end_reg)) {
@@ -701,7 +767,7 @@ int cnss_reg_read(struct device *dev, u32 addr, u32 *val, void __iomem *base)
 			cnss_pr_err("Pci Priv is null\n");
 			return -ENODEV;
 		}
-		return cnss_pci_reg_read(pci_priv, addr, val);
+		return cnss_pci_reg_read(plat_priv, addr, val);
 	case CNSS_BUS_AHB:
 		if (plat_priv->device_id == QCN6432_DEVICE_ID)
                         return cnss_pci_remote_reg_read(plat_priv, addr, val);
@@ -1400,15 +1466,19 @@ static void cnss_pci_get_timestamp_qcn9000(struct cnss_pci_data *pci_priv,
 	cnss_pci_reg_write(pci_priv, QCN9000_WLAON_GLOBAL_COUNTER_CTRL5,
 			   QCN9000_TIME_SYNC_ENABLE);
 
-	cnss_pci_reg_read(pci_priv, QCN9000_WLAON_GLOBAL_COUNTER_CTRL3, low);
-	cnss_pci_reg_read(pci_priv, QCN9000_WLAON_GLOBAL_COUNTER_CTRL4, high);
+	cnss_pci_reg_read(pci_priv->plat_priv,
+			  QCN9000_WLAON_GLOBAL_COUNTER_CTRL3, low);
+	cnss_pci_reg_read(pci_priv->plat_priv,
+			  QCN9000_WLAON_GLOBAL_COUNTER_CTRL4, high);
 }
 
 static void cnss_pci_get_timestamp_qcn9224(struct cnss_pci_data *pci_priv,
 					   u32 *low, u32 *high)
 {
-	cnss_pci_reg_read(pci_priv, QCN9224_PCIE_PCIE_MHI_TIME_LOW, low);
-	cnss_pci_reg_read(pci_priv, QCN9224_PCIE_PCIE_MHI_TIME_HIGH, high);
+	cnss_pci_reg_read(pci_priv->plat_priv,
+			  QCN9224_PCIE_PCIE_MHI_TIME_LOW, low);
+	cnss_pci_reg_read(pci_priv->plat_priv,
+			  QCN9224_PCIE_PCIE_MHI_TIME_HIGH, high);
 }
 
 static int cnss_pci_get_device_timestamp(struct cnss_pci_data *pci_priv,
@@ -1480,8 +1550,8 @@ static int cnss_pci_update_timestamp(struct cnss_pci_data *pci_priv)
 	cnss_pci_reg_write(pci_priv, QCA6390_PCIE_SHADOW_REG_VALUE_34, low);
 	cnss_pci_reg_write(pci_priv, QCA6390_PCIE_SHADOW_REG_VALUE_35, high);
 
-	cnss_pci_reg_read(pci_priv, QCA6390_PCIE_SHADOW_REG_VALUE_34, &low);
-	cnss_pci_reg_read(pci_priv, QCA6390_PCIE_SHADOW_REG_VALUE_35, &high);
+	cnss_pci_reg_read(plat_priv, QCA6390_PCIE_SHADOW_REG_VALUE_34, &low);
+	cnss_pci_reg_read(plat_priv, QCA6390_PCIE_SHADOW_REG_VALUE_35, &high);
 
 	cnss_pr_dbg("Updated time sync regs [0x%x] = 0x%x, [0x%x] = 0x%x\n",
 		    QCA6390_PCIE_SHADOW_REG_VALUE_34, low,
@@ -1806,7 +1876,7 @@ static void cnss_pci_dump_shadow_reg(struct cnss_pci_data *pci_priv)
 	for (i = 0; i < SHADOW_REG_COUNT; i++, j++) {
 		reg_offset = QCA6390_PCIE_SHADOW_REG_VALUE_0 + i * 4;
 		pci_priv->debug_reg[j].offset = reg_offset;
-		if (cnss_pci_reg_read(pci_priv, reg_offset,
+		if (cnss_pci_reg_read(plat_priv, reg_offset,
 				      &pci_priv->debug_reg[j].val))
 			goto force_wake_put;
 	}
@@ -1814,7 +1884,7 @@ static void cnss_pci_dump_shadow_reg(struct cnss_pci_data *pci_priv)
 	for (i = 0; i < SHADOW_REG_INTER_COUNT; i++, j++) {
 		reg_offset = QCA6390_PCIE_SHADOW_REG_INTER_0 + i * 4;
 		pci_priv->debug_reg[j].offset = reg_offset;
-		if (cnss_pci_reg_read(pci_priv, reg_offset,
+		if (cnss_pci_reg_read(plat_priv, reg_offset,
 				      &pci_priv->debug_reg[j].val))
 			goto force_wake_put;
 	}
@@ -5586,7 +5656,7 @@ void cnss_pci_global_reset(struct cnss_pci_data *pci_priv)
 			    pcie_cfg_pcie_status);
 #endif
 
-	iRet = cnss_pci_reg_read(pci_priv, PCIE_SOC_GLOBAL_RESET, &val);
+	iRet = cnss_pci_reg_read(plat_priv, PCIE_SOC_GLOBAL_RESET, &val);
 	if (iRet != 0)
 		cnss_pr_err("Error(%d): %s failed.\n", iRet, __func__);
 
@@ -5609,7 +5679,7 @@ void cnss_pci_global_reset(struct cnss_pci_data *pci_priv)
 
 	mdelay(delay);
 
-	iRet = cnss_pci_reg_read(pci_priv, PCIE_SOC_GLOBAL_RESET, &val);
+	iRet = cnss_pci_reg_read(plat_priv, PCIE_SOC_GLOBAL_RESET, &val);
 	if (iRet != 0)
 		cnss_pr_err("Error(%d): %s failed.\n", iRet, __func__);
 
@@ -5624,7 +5694,7 @@ static void cnss_reset_mhi_state(struct cnss_pci_data *pci_priv)
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 	u32 val = 0;
 
-	cnss_pci_reg_read(pci_priv, MHISTATUS, &val);
+	cnss_pci_reg_read(plat_priv, MHISTATUS, &val);
 	cnss_pr_info("Setting MHI State to reset, current state: 0x%x", val);
 	cnss_pci_reg_write(pci_priv, MHICTRL, MHICTRL_RESET_MASK);
 }
@@ -5683,7 +5753,7 @@ static void cnss_pci_dump_qdss_reg(struct cnss_pci_data *pci_priv)
 
 	for (i = 0; i < array_size && qdss_csr[i].name; i++) {
 		reg_offset = QDSS_APB_DEC_CSR_BASE + qdss_csr[i].offset;
-		if (cnss_pci_reg_read(pci_priv, reg_offset,
+		if (cnss_pci_reg_read(plat_priv, reg_offset,
 				      &plat_priv->qdss_reg[i]))
 			return;
 		cnss_pr_dbg("%s[0x%x] = 0x%x\n", qdss_csr[i].name, reg_offset,
@@ -5715,6 +5785,14 @@ int cnss_bus_reg_read(struct cnss_plat_data *plat_priv, u32 reg_offset,
 
 	switch (plat_priv->bus_type) {
 	case CNSS_BUS_AHB:
+		if (plat_priv->device_id == QCN6122_DEVICE_ID ||
+		    plat_priv->device_id == QCN9160_DEVICE_ID) {
+			if (cnss_pci_reg_read(plat_priv, reg_offset, val)) {
+				cnss_pr_err("PCI register read failed.\n");
+				return -EIO;
+			}
+			return 0;
+		}
 		if (cnss_ahb_reg_read(plat_priv, reg_offset, val)) {
 			cnss_pr_err("AHB register read failed.\n");
 			return -EIO;
@@ -5725,7 +5803,7 @@ int cnss_bus_reg_read(struct cnss_plat_data *plat_priv, u32 reg_offset,
 			cnss_pr_err("PCI Priv is NULL\n");
 			return -ENODEV;
 		}
-		if (cnss_pci_reg_read(plat_priv->bus_priv, reg_offset, val)) {
+		if (cnss_pci_reg_read(plat_priv, reg_offset, val)) {
 			cnss_pr_err("PCI register read failed.\n");
 			return -EIO;
 		}
@@ -6353,7 +6431,7 @@ static irqreturn_t qdss_irq_handler(int irq, void *context)
 	u32 val;
 	unsigned long flags;
 
-	cnss_pci_reg_read(pci_priv, PCIE_SOC_PCIE_REG_PCIE_SCRATCH_0, &val);
+	cnss_pci_reg_read(plat_priv, PCIE_SOC_PCIE_REG_PCIE_SCRATCH_0, &val);
 	spin_lock_irqsave(&qdss_lock, flags);
 	atomic_add(val, &qdss_stream->seq_no);
 	schedule_work(&qdss_stream->qld_stream_work);
@@ -6686,7 +6764,7 @@ int cnss_pci_probe(struct pci_dev *pci_dev,
 		cnss_power_off_device(plat_priv, 0);
 		break;
 	case QCN9224_DEVICE_ID:
-		cnss_pci_reg_read(pci_priv,
+		cnss_pci_reg_read(plat_priv,
 				  QCN9224_QFPROM_RAW_RFA_PDET_ROW13_LSB,
 				  &val);
 		pci_priv->otp_board_id = (val & OTP_BOARD_ID_MASK);
