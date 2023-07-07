@@ -3516,6 +3516,8 @@ void cnss_do_mlo_global_memset(struct cnss_plat_data *plat_priv, u64 mem_size)
 	case MODE_0_RECOVERY_MODE:
 	default:
 		if (!test_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state)) {
+			cnss_pr_info("Resetting the MLO Global mem, memory size is %lld\n",
+				      mem_size);
 			memset_io(mlo_global_mem[
 					   plat_priv->mlo_group_info->group_id],
 					   0, mem_size);
