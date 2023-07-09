@@ -3716,7 +3716,9 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 		if (plat_priv->mlo_support && group_info != NULL &&
 		    plat_priv->recovery_mode != MODE_1_RECOVERY_MODE &&
 		    !plat_priv->standby_mode) {
-			if (group_info->num_chips != group_info->rddm_dump_all)
+			if (!test_bit(CNSS_FW_READY, &plat_priv->driver_state))
+				cnss_pr_info("FW_READY not received for the device, so early assert\n");
+			else if (group_info->num_chips != group_info->rddm_dump_all)
 				return 0;
 		}
 		ret = cnss_bus_update_status(plat_priv, CNSS_FW_DOWN);
