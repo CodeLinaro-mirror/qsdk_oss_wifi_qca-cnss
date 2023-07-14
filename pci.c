@@ -2133,11 +2133,6 @@ clear_dump_info:
 	return ret;
 }
 #else
-int cnss_do_ramdump(struct cnss_plat_data *plat_priv)
-{
-	return 0;
-}
-
 /* Using completion event inside dynamically allocated ramdump_desc
  * may result a race between freeing the event after setting it to
  * complete inside dev coredump free callback and the thread that is
@@ -5744,7 +5739,7 @@ int cnss_bus_reg_read(struct cnss_plat_data *plat_priv, u32 reg_offset,
 	return 0;
 }
 
-#if defined(CONFIG_CNSS2_KERNEL_MSM) || defined(CONFIG_CNSS2_KERNEL_5_15)
+#if defined(CONFIG_CNSS2_KERNEL_MSM) || (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
 #define MAX_RAMDUMP_TABLE_SIZE	6
 #define COREDUMP_DESC		"Q6-COREDUMP"
 #define Q6_SFR_DESC		"Q6-SFR"
@@ -5874,7 +5869,7 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 		return;
 	}
 
-#if defined(CONFIG_CNSS2_KERNEL_MSM) || defined(CONFIG_CNSS2_KERNEL_5_15)
+#if defined(CONFIG_CNSS2_KERNEL_MSM) || (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
 	cnss_get_crash_reason(pci_priv);
 #endif
 
