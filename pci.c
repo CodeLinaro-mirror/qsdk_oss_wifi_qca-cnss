@@ -482,7 +482,11 @@ static struct mhi_channel_config cnss_pci_mhi_channels[] = {
 	{
 		.num = 20,
 		.name = "IPCR",
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0))
 		.num_elements = 32,
+#else
+		.num_elements = 64,
+#endif
 		.event_ring = 1,
 		.dir = DMA_TO_DEVICE,
 		.ee_mask = 0x4,
@@ -499,7 +503,11 @@ static struct mhi_channel_config cnss_pci_mhi_channels[] = {
 	{
 		.num = 21,
 		.name = "IPCR",
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0))
 		.num_elements = 32,
+#else
+		.num_elements = 64,
+#endif
 		.event_ring = 1,
 		.dir = DMA_FROM_DEVICE,
 		.ee_mask = 0x4,
@@ -4752,8 +4760,8 @@ static int cnss_pci_smmu_fault_handler(struct iommu_domain *domain,
 
 	cnss_pr_err("SMMU fault happened with IOVA 0x%lx\n", iova);
 
-	/* IOMMU driver requires non-zero return value to print debug info. */
-	return -EINVAL;
+	/* Return ENOSYS to initiate IOMMU default fault handler */
+	return -ENOSYS;
 }
 
 static int cnss_pci_init_smmu(struct cnss_pci_data *pci_priv)
@@ -7252,7 +7260,7 @@ struct pci_driver cnss_pci_driver = {
 int cnss_pci_init(struct cnss_plat_data *plat_priv)
 {
 	int ret = 0;
-#if defined(CONFIG_CNSS2_PCI_MSM) || defined(CONFIG_CNSS2_KERNEL_5_15)
+#ifdef CONFIG_CNSS2_PCI_MSM
 	struct device *dev = &plat_priv->plat_dev->dev;
 	u32 rc_num;
 

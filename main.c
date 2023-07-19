@@ -47,6 +47,7 @@
 #ifdef CONFIG_CNSS2_KERNEL_5_15
 #include <linux/devcoredump.h>
 #include <linux/elf.h>
+#include <linux/panic_notifier.h>
 #else
 #include <soc/qcom/ramdump.h>
 #endif
@@ -94,6 +95,10 @@ int plat_env_index;
 struct cnss_mlo_group_info g_mlo_group_info[CNSS_MAX_MLO_GROUPS];
 static DEFINE_SPINLOCK(plat_env_spinlock);
 static DEFINE_SPINLOCK(rddm_spinlock);
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
+static DEFINE_MUTEX(rproc_list_mutex);
+struct notifier_block panic_nb;
+#endif
 
 #ifdef CONFIG_CNSS2_PM
 static DECLARE_RWSEM(cnss_pm_sem);
@@ -805,7 +810,6 @@ static int cnss_hif_shutdown(struct cnss_plat_data *plat_priv)
 	if (ret != 0) {
 		cnss_pr_err("%s: cnss_bus_dev_shutdown failed(%d)\n", __func__,
 			    ret);
-		CNSS_ASSERT(0);
 	}
 	cnss_hif_notifier(plat_priv, CNSS_AFTER_SHUTDOWN);
 
@@ -5953,6 +5957,39 @@ cnss_check_skip_target_probe(const struct platform_device_id *device_id,
 	return false;
 }
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
+static int cnss_panic_handler(struct notifier_block *this,
+                                unsigned long event, void *ptr)
+{
+	int i;
+	struct cnss_plat_data *plat_priv = NULL;
+
+	mutex_lock(&rproc_list_mutex);
+	for (i = 0; i < plat_env_index; i++) {
+		cnss_pr_dbg("cnss_panic_handler for plat_env %d\n", i);
+		plat_env[i]->target_asserted = 1;
+		cnss_bus_dev_crash_shutdown(plat_env[i]);
+        }
+	mutex_unlock(&rproc_list_mutex);
+
+	return 0;
+}
+
+static void cnss_panic_notifier_register()
+{
+	int ret;
+	struct cnss_plat_data *plat_priv = NULL;
+	panic_nb.notifier_call = cnss_panic_handler;
+	panic_nb.priority = 100;
+
+	ret = atomic_notifier_chain_register(&panic_notifier_list, &panic_nb);
+	if(ret)
+		cnss_pr_err("Err(%d): register panic notifier failed.\n", ret);
+	else
+		cnss_pr_dbg("%s: atomic_notifier_chain_register success.\n", __func__);
+}
+#endif
+
 #ifdef CONFIG_CNSS2_KERNEL_RPROC_FRAMEWORK
 const struct rproc_ops cnss_rproc_ops = {
 	.start = cnss_subsys_powerup,
@@ -6194,9 +6231,6 @@ static int cnss_probe(struct platform_device *plat_dev)
 	const struct platform_device_id *device_id;
 	u32 node_id = 0, userpd_id = 0, node_id_base;
 	unsigned long flags;
-#ifdef CONFIG_CNSS2_KERNEL_5_15
-	int retry = 0;
-#endif
 #ifdef CONFIG_CNSS2_KERNEL_IPQ
 	const int *soc_version;
 #endif
@@ -6376,18 +6410,6 @@ static int cnss_probe(struct platform_device *plat_dev)
 		return -ENODEV;
 	}
 
-#ifdef CONFIG_CNSS2_KERNEL_5_15
-	cnss_get_pinctrl(plat_priv);
-
-	ret = pinctrl_select_state(plat_priv->pinctrl_info.pinctrl,
-				   plat_priv->pinctrl_info.wlan_en_active);
-	if (ret) {
-		cnss_pr_err("Failed to select wlan_en active state, err = %d\n",
-		       ret);
-		return 0;
-	}
-#endif
-
 	ret = cnss_set_device_name(plat_priv);
 	if (ret)
 		return -ENODEV;
@@ -6487,20 +6509,6 @@ static int cnss_probe(struct platform_device *plat_dev)
 	spin_lock_irqsave(&plat_env_spinlock, flags);
 	plat_env[plat_env_index++] = plat_priv;
 	spin_unlock_irqrestore(&plat_env_spinlock, flags);
-#ifdef CONFIG_CNSS2_KERNEL_5_15
-retry:
-	ret = cnss_bus_init(plat_priv);
-	if (ret) {
-		if ((ret != -EPROBE_DEFER) &&
-		    retry++ < POWER_ON_RETRY_MAX_TIMES) {
-			cnss_pr_dbg("Retry cnss_bus_init #%d\n", retry);
-			msleep(POWER_ON_RETRY_DELAY_MS * retry);
-			goto retry;
-		} else {
-			cnss_pr_err("cnss_bus_init failed.");
-		}
-	}
-#endif
 	cnss_pr_info("Platform driver probed successfully. plat 0x%pK tgt 0x%lx\n",
 		     plat_priv, plat_priv->device_id);
 
@@ -6635,13 +6643,15 @@ static int __init cnss_initialize(void)
 		cnss_debug_deinit();
 		return ret;
 	}
-#ifndef CONFIG_CNSS2_KERNEL_5_15
+
 	cnss_bus_init_by_type(CNSS_BUS_PCI);
-#endif
 	cnss_plat_ipc_qmi_svc_init();
 	cnss_init_ipc_qmi_cb(&ipc_qmi_callbacks);
 	cnss_plat_ipc_register(CNSS_PLAT_IPC_DAEMON_QMI_CLIENT_V01,
 			       &ipc_qmi_callbacks, NULL);
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
+	cnss_panic_notifier_register();
+#endif
 
 	return ret;
 }
