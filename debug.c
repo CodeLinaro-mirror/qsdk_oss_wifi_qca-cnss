@@ -380,7 +380,7 @@ void cnss_pci_dump_bl_sram_mem(struct cnss_pci_data *pci_priv)
 	u32 parf_ltssm = 0;
 	u16 type0_status_cmd_reg = 0;
 	u32 gcc_ramss_cbcr = 0;
-#ifdef CONFIG_CNSS2_QCOM_KERNEL_DEPENDENCY
+#if defined(CONFIG_CNSS2_QCOM_KERNEL_DEPENDENCY) && (KERNEL_VERSION(6, 1, 0) > LINUX_VERSION_CODE)
 	u32 pcie_cfg_pcie_status = 0;
 #endif
 
@@ -413,7 +413,7 @@ void cnss_pci_dump_bl_sram_mem(struct cnss_pci_data *pci_priv)
 		pbl_data.tcsr_pbl_logging_reg = QCN9224_TCSR_PBL_LOGGING_REG;
 		pbl_data.pbl_wlan_boot_cfg = QCN9224_PBL_WLAN_BOOT_CFG;
 		pbl_data.pbl_bootstrap_status = QCN9224_PBL_BOOTSTRAP_STATUS;
-#ifdef CONFIG_CNSS2_QCOM_KERNEL_DEPENDENCY
+#if defined(CONFIG_CNSS2_QCOM_KERNEL_DEPENDENCY) && (KERNEL_VERSION(6, 1, 0) > LINUX_VERSION_CODE)
 		ret = pcie_parf_read(pci_priv->pci_dev, PCIE_CFG_PCIE_STATUS,
 				     &pcie_cfg_pcie_status);
 		if (ret)
