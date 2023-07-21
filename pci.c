@@ -5597,7 +5597,7 @@ void cnss_pci_global_reset(struct cnss_pci_data *pci_priv)
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 	int resetcount = 0, tx_count = 0;
 	u32 errdbg1 = 0;
-#ifdef CONFIG_CNSS2_QCOM_KERNEL_DEPENDENCY
+#if defined(CONFIG_CNSS2_QCOM_KERNEL_DEPENDENCY) && (KERNEL_VERSION(6, 1, 0) > LINUX_VERSION_CODE)
 	u32 pcie_cfg_pcie_status = 0;
 	int ret = 0;
 #endif
@@ -5624,7 +5624,7 @@ void cnss_pci_global_reset(struct cnss_pci_data *pci_priv)
 	if (tx_count > 25)
 		cnss_pr_warn("Dump time exceeds %d mseconds\n", tx_count * 20);
 
-#ifdef CONFIG_CNSS2_QCOM_KERNEL_DEPENDENCY
+#if defined(CONFIG_CNSS2_QCOM_KERNEL_DEPENDENCY) && (KERNEL_VERSION(6, 1, 0) > LINUX_VERSION_CODE)
 	ret = pcie_parf_read(pci_priv->pci_dev, PCIE_CFG_PCIE_STATUS,
 			     &pcie_cfg_pcie_status);
 	if (ret)
@@ -5656,7 +5656,7 @@ void cnss_pci_global_reset(struct cnss_pci_data *pci_priv)
 {
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 	u32 val, delay, iRet = 0;
-#ifdef CONFIG_CNSS2_QCOM_KERNEL_DEPENDENCY
+#if defined(CONFIG_CNSS2_QCOM_KERNEL_DEPENDENCY) && (KERNEL_VERSION(6, 1, 0) > LINUX_VERSION_CODE)
 	u32 pcie_cfg_pcie_status = 0;
 	int ret = 0;
 
