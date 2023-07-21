@@ -98,7 +98,10 @@ static inline void qcn9224_process_irq(struct legacy2virtual_irqdata *lvirq,
 {
 	int irq_pin;
 	int irq;
-	struct irq_desc *desc;
+#if (KERNEL_VERSION(5, 10, 0) < LINUX_VERSION_CODE)
+	struct irq_data *data;
+#endif
+	struct irq_desc *desc = NULL;
 	/* deliveredtime */
 	unsigned long dt;
 	/* executiontime */
@@ -120,7 +123,13 @@ static inline void qcn9224_process_irq(struct legacy2virtual_irqdata *lvirq,
 			if (irq_pin > 0) {
 				STAT_INC(raisedirq, irq);
 				dt = jiffies;
+#if (KERNEL_VERSION(5, 10, 0) >= LINUX_VERSION_CODE)
 				desc = irq_to_desc(irq_pin);
+#else
+				data = irq_get_irq_data(irq_pin);
+				if (data)
+					desc = container_of(data, struct irq_desc, irq_data);
+#endif
 				if (likely(desc))
 					handle_simple_irq(desc);
 				ct = jiffies;

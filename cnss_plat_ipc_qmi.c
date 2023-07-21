@@ -7,7 +7,9 @@
 #include <linux/kernel.h>
 #include <linux/qrtr.h>
 #include <linux/soc/qcom/qmi.h>
+#if IS_ENABLED(CONFIG_IPC_LOGGING)
 #include <linux/ipc_logging.h>
+#endif
 #include <linux/limits.h>
 #include <linux/slab.h>
 #include "cnss_plat_ipc_qmi.h"

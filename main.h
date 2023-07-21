@@ -55,7 +55,7 @@
 #define CNSS_FW_TYPE_MASK		0xF000
 #define CNSS_FW_TYPE_SHIFT		12
 
-#ifdef CONFIG_CNSS2_KERNEL_5_15
+#if (KERNEL_VERSION(5, 15, 0) <= LINUX_VERSION_CODE)
 typedef void ramdump_device_t;
 #else
 typedef struct ramdump_device ramdump_device_t;
@@ -706,8 +706,11 @@ struct cnss_plat_data {
 	bool mlo_default_cfg;
 	struct cnss_mlo_chip_info *adj_mlo_chip_info[CNSS_MAX_ADJ_CHIPS];
 	enum cnss_recovery_reason reason;
-#ifdef CONFIG_CNSS2_KERNEL_5_15
+#if defined(CONFIG_CNSS2_KERNEL_5_15) || defined(CONFIG_CNSS2_KERNEL_6_1)
 	struct work_struct crash_work;
+#endif
+#ifdef CONFIG_CNSS2_KERNEL_6_1
+	struct srcu_notifier_head *notifier_list[2];
 #endif
 };
 

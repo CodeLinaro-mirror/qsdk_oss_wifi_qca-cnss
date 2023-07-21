@@ -29,6 +29,9 @@ CNSS2_INCLUDE += -I$(obj)/include
 
 ccflags-y += $(CNSS2_INCLUDE)
 ccflags-y += -Wall -Werror -Wno-format-security
+ifeq ($(QCA_CNSS_LINUX_6_1_SUPPORT),y)
+ccflags-y += -Wno-implicit-fallthrough
+endif
 
 ccflags-y += -DCONFIG_CNSS_QCN9000
 ccflags-y += -DCONFIG_CNSS2_GENL
@@ -49,6 +52,9 @@ else
 	ccflags-y += -DCONFIG_CNSS2_LEGACY_IRQ
 ifeq ($(QCA_CNSS_KERNEL_DEPENDENCY),y)
 	ccflags-y += -DCONFIG_CNSS2_QCOM_KERNEL_DEPENDENCY
+endif
+ifeq ($(QCA_CNSS_LINUX_6_1_SUPPORT),y)
+	ccflags-y += -DCONFIG_CNSS2_KERNEL_6_1
 endif
 endif
 
