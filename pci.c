@@ -1,5 +1,5 @@
 /* Copyright (c) 2016-2018, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -397,7 +397,18 @@ static struct mhi_controller_config cnss_pci_mhi_config = {
 };
 #endif
 
-#if IS_ENABLED(CONFIG_MHI_BUS_MISC)
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0) && \
+!IS_ENABLED(CONFIG_MHI_BUS_MISC))
+static void cnss_mhi_debug_reg_dump(struct cnss_pci_data *pci_priv)
+{
+}
+
+static bool cnss_mhi_scan_rddm_cookie(struct cnss_pci_data *pci_priv,
+				      u32 cookie)
+{
+	return false;
+}
+#else
 static void cnss_mhi_debug_reg_dump(struct cnss_pci_data *pci_priv)
 {
 	mhi_debug_reg_dump(pci_priv->mhi_ctrl);
@@ -408,17 +419,7 @@ static bool cnss_mhi_scan_rddm_cookie(struct cnss_pci_data *pci_priv,
 {
 	return mhi_scan_rddm_cookie(pci_priv->mhi_ctrl, cookie);
 }
-#else
-static void cnss_mhi_debug_reg_dump(struct cnss_pci_data *pci_priv)
-{
-}
-
-static bool cnss_mhi_scan_rddm_cookie(struct cnss_pci_data *pci_priv,
-				      u32 cookie)
-{
-	return false;
-}
-#endif /* CONFIG_MHI_BUS_MISC */
+#endif
 
 
 static int cnss_pci_check_link_status(struct cnss_pci_data *pci_priv)
