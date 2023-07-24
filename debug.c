@@ -435,6 +435,7 @@ void cnss_pci_dump_bl_sram_mem(struct cnss_pci_data *pci_priv)
 	u32 remap_bar_ctrl = 0;
 	u32 soc_rc_shadow_reg = 0;
 	u32 parf_ltssm = 0;
+	u32 parf_pm_stts = 0;
 	u16 type0_status_cmd_reg = 0;
 	u32 gcc_ramss_cbcr = 0;
 #if defined(CONFIG_CNSS2_QCOM_KERNEL_DEPENDENCY) && (KERNEL_VERSION(6, 1, 0) > LINUX_VERSION_CODE)
@@ -508,14 +509,17 @@ void cnss_pci_dump_bl_sram_mem(struct cnss_pci_data *pci_priv)
 		cnss_pci_reg_read(plat_priv,
 				  QCN9224_PCIE_PCIE_PARF_LTSSM,
 				  &parf_ltssm);
+		cnss_pci_reg_read(plat_priv,
+				  QCN9224_PCIE_PCIE_PARF_PM_STTS,
+				  &parf_pm_stts);
 		pci_read_config_word(pci_priv->pci_dev, PCI_COMMAND,
 				     &type0_status_cmd_reg);
 		cnss_pci_reg_read(plat_priv,
 				  QCN9224_GCC_RAMSS_CBCR,
 				  &gcc_ramss_cbcr);
-		cnss_pr_err("%s: LOCAL_REG_REMAP_BAR_CTRL: 0x%08x, WLAON_SOC_RESET_CAUSE_SHADOW_REG: 0x%08x, PARF_LTSSM: 0x%08x\n",
+		cnss_pr_err("%s: LOCAL_REG_REMAP_BAR_CTRL: 0x%08x, WLAON_SOC_RESET_CAUSE_SHADOW_REG: 0x%08x, PARF_LTSSM: 0x%08x, PARF_PM_STTS: 0x%08x\n",
 			    __func__, remap_bar_ctrl, soc_rc_shadow_reg,
-			    parf_ltssm);
+			    parf_ltssm, parf_pm_stts);
 		cnss_pr_err("%s: TYPE0_STATUS_COMMAND_REG: 0x%08x, GCC_RAMSS_CBCR: 0x%08x\n",
 			    __func__, type0_status_cmd_reg, gcc_ramss_cbcr);
 
