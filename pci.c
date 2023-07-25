@@ -4153,7 +4153,7 @@ static void cnss_etr_sg_tbl_free(uint32_t *vaddr,
 }
 #endif
 
-#ifdef CONFIG_CNSS2_KERNEL_IPQ
+#if defined(CONFIG_CNSS2_KERNEL_IPQ) && !defined(CONFIG_CNSS2_KERNEL_6_1)
 static void cnss_etr_sg_tbl_flush(uint32_t *vaddr,
 				  struct cnss_plat_data *plat_priv)
 {
