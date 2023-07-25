@@ -1,5 +1,5 @@
 /* Copyright (c) 2015-2018, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -122,6 +122,8 @@ static struct device_name_string device_name_table[] = {
 	{ "QCN6122_1", USERPD_1+WLFW_SERVICE_INS_ID_V01_QCN6122 },
 	{ "QCN9160_0", USERPD_0+WLFW_SERVICE_INS_ID_V01_QCN9160 },
 	{ "QCN9160_1", USERPD_1+WLFW_SERVICE_INS_ID_V01_QCN9160 },
+	{ "QCN6432_0", USERPD_0+WLFW_SERVICE_INS_ID_V01_QCN6432 },
+	{ "QCN6432_1", USERPD_1+WLFW_SERVICE_INS_ID_V01_QCN6432 },
 	{ "UNKNOWN", 0 },
 };
 
@@ -1153,6 +1155,13 @@ static int cnss_wlfw_load_bdf(struct wlfw_bdf_download_req_msg_v01 *req,
 				 "%d" DEFAULT_CAL_FILE_SUFFIX,
 				 cnss_get_fw_path(plat_priv),
 				 plat_priv->userpd_id);
+		} else if (plat_priv->device_id == QCN6432_DEVICE_ID) {
+			snprintf(filename, sizeof(filename),
+				"%s" DEFAULT_CAL_FILE_PREFIX
+				"%d.b%.*x", cnss_get_fw_path(plat_priv),
+				(plat_priv->userpd_id),
+				(plat_priv->board_info.num_bytes * 2),
+				plat_priv->board_info.board_id);
 		} else {
 			snprintf(filename, sizeof(filename),
 				 "%s" DEFAULT_CAL_FILE_NAME,
@@ -1332,6 +1341,23 @@ int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv,
 				 "%d" DEFAULT_CAL_FILE_SUFFIX,
 				 cnss_get_fw_path(plat_priv),
 				 plat_priv->userpd_id);
+		} else if (plat_priv->device_id == QCN6432_DEVICE_ID) {
+			snprintf(filename, sizeof(filename), "%s",
+				FTM_CONF_FILE_PATH);
+			if (cnss_check_path_exists(FTM_CONF_FILE_PATH)) {
+				snprintf(filename, sizeof(filename),
+					"%s" DEFAULT_CAL_FILE_PREFIX
+				"%d.b%.*x", cnss_get_fw_path(plat_priv),
+				(plat_priv->userpd_id),
+				(plat_priv->board_info.num_bytes * 2),
+				board_id);
+			} else {
+				snprintf(filename, sizeof(filename),
+					"%s" DEFAULT_CAL_FILE_PREFIX
+					"%d" DEFAULT_CAL_FILE_SUFFIX,
+					cnss_get_fw_path(plat_priv),
+					plat_priv->userpd_id);
+			}
 		} else {
 			snprintf(filename, sizeof(filename),
 				 "%s" DEFAULT_CAL_FILE_NAME,
@@ -3498,22 +3524,25 @@ static void cnss_wlfw_qdss_trace_req_mem_ind_cb(struct qmi_handle *qmi_wlfw,
 	}
 
 	if (plat_priv->qdss_mem_seg_len) {
-		cnss_pr_err("Ignore double allocation for QDSS trace, current len %u\n",
+		cnss_pr_err("Ignore double allocation for QDSS trace, "
+			    "current len %u\n",
 			    plat_priv->qdss_mem_seg_len);
-		return;
-	}
-	plat_priv->qdss_mem_seg_len = ind_msg->mem_seg_len;
-	if (ind_msg->mem_seg_len > 1) {
-		cnss_pr_dbg("%s: FW requests %d segments, overwriting it with 1",
-			    __func__, ind_msg->mem_seg_len);
-		plat_priv->qdss_mem_seg_len = 1;
-	}
+	} else {
+		plat_priv->qdss_mem_seg_len = ind_msg->mem_seg_len;
+		if (ind_msg->mem_seg_len > 1) {
+			cnss_pr_dbg("%s: FW requests %d segments, "
+				    "overwriting it with 1",
+				    __func__, ind_msg->mem_seg_len);
+			plat_priv->qdss_mem_seg_len = 1;
+		}
 
-	for (i = 0; i < plat_priv->qdss_mem_seg_len; i++) {
-		cnss_pr_dbg("QDSS requests for memory, size: 0x%x, type: %u\n",
-			    ind_msg->mem_seg[i].size, ind_msg->mem_seg[i].type);
-		plat_priv->qdss_mem[i].type = ind_msg->mem_seg[i].type;
-		plat_priv->qdss_mem[i].size = ind_msg->mem_seg[i].size;
+		for (i = 0; i < plat_priv->qdss_mem_seg_len; i++) {
+			cnss_pr_dbg("QDSS requests for memory, size: 0x%x, "
+				    "type: %u\n", ind_msg->mem_seg[i].size,
+				    ind_msg->mem_seg[i].type);
+			plat_priv->qdss_mem[i].type = ind_msg->mem_seg[i].type;
+			plat_priv->qdss_mem[i].size = ind_msg->mem_seg[i].size;
+		}
 	}
 
 	cnss_driver_event_post(plat_priv, CNSS_DRIVER_EVENT_QDSS_TRACE_REQ_MEM,
@@ -3550,6 +3579,7 @@ static void cnss_wlfw_qdss_trace_save_ind_cb(struct qmi_handle *qmi_wlfw,
 	case QCN9160_DEVICE_ID:
 	case QCN9224_DEVICE_ID:
 	case QCA5332_DEVICE_ID:
+	case QCN6432_DEVICE_ID:
 		break;
 	case QCA8074_DEVICE_ID:
 	case QCA8074V2_DEVICE_ID:

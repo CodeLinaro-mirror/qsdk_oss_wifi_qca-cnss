@@ -1,5 +1,5 @@
 /* Copyright (c) 2016-2018, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -30,7 +30,7 @@
 #include <linux/msm_pcie.h>
 #endif
 #include <linux/pci.h>
-#ifdef CONFIG_CNSS2_KERNEL_5_15
+#if IS_ENABLED(CONFIG_MHI_BUS_MISC)
 #include <linux/mhi_misc.h>
 #endif
 
@@ -51,6 +51,7 @@
 #define QCA9574_DEVICE_ID		0xFFFA
 #define QCA5332_DEVICE_ID		0xFFF9
 #define QCN9160_DEVICE_ID		0xFFF8
+#define QCN6432_DEVICE_ID		0xFFF7
 #define QCA6174_DEVICE_ID		0x003E
 #define QCA6390_DEVICE_ID		0x1101
 #define QCA6490_DEVICE_ID		0x1103
@@ -59,9 +60,11 @@
 #define QCN6122_DEVICE_BAR_SIZE		0x200000
 #define QCN6122_ETR_DEV_NODE_PREFIX	"q6_qcn6122_etr"
 #define QCN9160_ETR_DEV_NODE_PREFIX	"q6_qcn9160_etr"
+#define QCN6432_ETR_DEV_NODE_PREFIX	"q6_qcn6432_etr"
 #define ETR_DEV_NODE_LEN		17
 #define QCN6122_M3_DUMP_PREFIX		"m3_dump_qcn6122"
 #define QCN9160_M3_DUMP_PREFIX		"m3_dump_qcn9160"
+#define QCN6432_M3_DUMP_PREFIX		"m3_dump_qcn6432"
 #define M3_DUMP_NODE_LEN		18
 #define HOST_DDR_REGION_TYPE		0x1
 #define BDF_MEM_REGION_TYPE		0x2
@@ -70,6 +73,10 @@
 #define QDSS_ETR_MEM_REGION_TYPE	0x6
 #define QMI_WLFW_PAGEABLE_MEM_V01	0x9
 #define AFC_REGION_TYPE			0xA
+
+#define MLO_GROUP_MASTER_CHIP		0
+#define MODE_0_RECOVERY_MODE		1
+#define MODE_1_RECOVERY_MODE		2
 
 #define CNSS_ETR_SG_ENT(phys_pte)	(((phys_pte >> PAGE_SHIFT) << 4) | 0x2)
 #define CNSS_ETR_SG_NXT_TBL(phys_pte)	(((phys_pte >> PAGE_SHIFT) << 4) | 0x3)
@@ -115,13 +122,6 @@ struct cnss_pci_reg {
 struct cnss_pci_debug_reg {
 	u32 offset;
 	u32 val;
-};
-
-struct cnss_ce_base_addr {
-	u32 src_base;
-	u32 dst_base;
-	u32 common_base;
-	u32 max_ce_count;
 };
 
 struct cnss_pci_data {
@@ -173,22 +173,6 @@ struct cnss_pci_data {
 struct paging_header {
 	u64 version;   /* dump version */
 	u64 seg_num;   /* paging seg num */
-};
-
-struct pbl_reg_addr {
-	u32 pbl_log_sram_start;
-	u32 pbl_log_sram_max_size;
-	u32 tcsr_pbl_logging_reg;
-	u32 pbl_wlan_boot_cfg;
-	u32 pbl_bootstrap_status;
-};
-
-struct sbl_reg_addr {
-	u32 sbl_sram_start;
-	u32 sbl_sram_end;
-	u32 sbl_log_start_reg;
-	u32 sbl_log_size_reg;
-	u32 sbl_log_size_shift;
 };
 
 static inline void cnss_set_pci_priv(struct pci_dev *pci_dev, void *data)
@@ -299,9 +283,11 @@ int cnss_ahb_update_status(struct cnss_plat_data *plat_priv,
 			   enum cnss_driver_status status);
 void cnss_pci_global_reset(struct cnss_pci_data *pci_priv);
 void cnss_free_soc_info(struct cnss_plat_data *plat_priv);
-void cnss_dump_ce_reg(struct cnss_plat_data *plat_priv, enum cnss_ce_index ce,
-		      struct cnss_ce_base_addr *ce_object);
-struct cnss_ce_base_addr *register_ce_object(struct cnss_plat_data *plat_priv);
+void cnss_do_mlo_global_memset(struct cnss_plat_data *plat_priv, u64 mem_size);
+int cnss_bus_reg_read(struct cnss_plat_data *plat_priv, u32 reg_offset,
+		      u32 *val);
+int cnss_pci_reg_read(struct cnss_pci_data *pci_priv,
+			     u32 addr, u32 *val);
 #ifdef CONFIG_CNSS2_QGIC2M
 struct qgic2_msi *cnss_qgic2_enable_msi(struct cnss_plat_data *plat_priv);
 void cnss_qgic2_disable_msi(struct cnss_plat_data *plat_priv);

@@ -1,5 +1,5 @@
 /* Copyright (c) 2016-2018, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -19,7 +19,9 @@
 #include <linux/pm_qos.h>
 #include <linux/platform_device.h>
 #include <cnss2.h>
+#ifdef CONFIG_QTI_MEMORY_DUMP_V2
 #include <soc/qcom/memory_dump.h>
+#endif
 
 #ifdef CONFIG_CNSS2_KERNEL_SSR_FRAMEWORK
 #include <soc/qcom/subsystem_restart.h>
@@ -250,7 +252,9 @@ struct cnss_ramdump_info {
 	unsigned long ramdump_size;
 	void *ramdump_va;
 	phys_addr_t ramdump_pa;
+#ifdef CONFIG_QTI_MEMORY_DUMP_V2
 	struct msm_dump_data dump_data;
+#endif
 };
 
 struct cnss_dump_seg {
@@ -570,6 +574,11 @@ struct qdss_stream_data {
 	atomic_t                completed_seq_no;
 };
 
+enum cnss_recovery_type {
+	CNSS_ASYNC_RECOVERY, /* asynchronous recovery */
+	CNSS_SYNC_RECOVERY, /* synchronous recovery */
+};
+
 struct cnss_plat_data {
 	void *wlan_priv;
 	struct platform_device *plat_dev;
@@ -591,6 +600,7 @@ struct cnss_plat_data {
 	struct cnss_pinctrl_info pinctrl_info;
 	struct cnss_subsys_info subsys_info;
 	bool recovery_enabled;
+	enum cnss_recovery_type recovery_type;
 	struct cnss_ramdump_info ramdump_info;
 	struct cnss_ramdump_info_v2 ramdump_info_v2;
 	struct cnss_esoc_info esoc_info;
@@ -604,6 +614,7 @@ struct cnss_plat_data {
 	struct cnss_wlan_driver *driver_ops;
 	enum cnss_driver_status driver_status;
 	u32 recovery_count;
+	u8 recovery_mode;
 	unsigned long driver_state;
 	struct list_head event_list;
 	spinlock_t event_lock; /* spinlock for driver work event handling */
@@ -713,11 +724,11 @@ static inline u64 cnss_get_host_timestamp(struct cnss_plat_data *plat_priv)
 #else
 static inline u64 cnss_get_host_timestamp(struct cnss_plat_data *plat_priv)
 {
-	struct timespec ts;
+	struct timespec64 ts;
 
-	ktime_get_ts(&ts);
+	ktime_get_ts64(&ts);
 
-	return ((u64)ts.tv_sec * 1000000) + (ts.tv_nsec / 1000);
+	return (ts.tv_sec * 1000000) + (ts.tv_nsec / 1000);
 }
 #endif
 

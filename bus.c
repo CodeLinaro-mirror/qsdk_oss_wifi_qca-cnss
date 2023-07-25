@@ -1,4 +1,5 @@
 /* Copyright (c) 2018-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -49,6 +50,7 @@ enum cnss_dev_bus_type cnss_get_bus_type(unsigned long device_id)
 	case QCN9160_DEVICE_ID:
 	case QCA9574_DEVICE_ID:
 	case QCA5332_DEVICE_ID:
+	case QCN6432_DEVICE_ID:
 		return CNSS_BUS_AHB;
 	default:
 		pr_err("Unknown device_id: 0x%lx\n", device_id);
@@ -210,6 +212,10 @@ struct device_node *cnss_get_etr_dev_node(struct cnss_plat_data *plat_priv)
 		snprintf(buf, ETR_DEV_NODE_LEN, "%s_%d",
 			QCN9160_ETR_DEV_NODE_PREFIX, plat_priv->userpd_id);
 		dev_node = of_find_node_by_name(NULL, buf);
+	} else if (plat_priv->device_id == QCN6432_DEVICE_ID) {
+		snprintf(buf, ETR_DEV_NODE_LEN, "%s_%d",
+		QCN6432_ETR_DEV_NODE_PREFIX, plat_priv->userpd_id);
+		dev_node = of_find_node_by_name(NULL, buf);
 	} else {
 		dev_node = of_find_node_by_name(NULL, "q6_etr_dump");
 	}
@@ -254,7 +260,8 @@ int cnss_bus_alloc_qdss_mem(struct cnss_plat_data *plat_priv)
 
 			if (plat_priv->device_id == QCN6122_DEVICE_ID ||
 			    plat_priv->device_id == QCN9160_DEVICE_ID ||
-			    plat_priv->device_id == QCA5332_DEVICE_ID) {
+			    plat_priv->device_id == QCA5332_DEVICE_ID ||
+			    plat_priv->device_id == QCN6432_DEVICE_ID) {
 				plat_priv->qdss_mem[i].va =
 					ioremap(plat_priv->qdss_mem[i].pa,
 						plat_priv->qdss_mem[i].size);
