@@ -5,7 +5,9 @@ obj-m += ipq_cnss2.o
 
 ifneq ($(QCA_CNSS_STREAM_MOD),)
 ifneq ($(CONFIG_BUILD_OWRT),y)
+ifneq ($(QCA_CNSS_LINUX_6_1_SUPPORT),y)
 obj-m += ipq_cnss2_stream.o
+endif
 endif
 endif
 

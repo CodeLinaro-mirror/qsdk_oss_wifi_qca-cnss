@@ -737,7 +737,7 @@ static void cnss_hif_notifier(struct cnss_plat_data *plat_priv,
 				enum cnss_notif_type code)
 {
 	struct cnss_wlan_driver *driver_ops = NULL;
-	enum cnss_notif_type event_code = cnss_get_event(code);
+	enum cnss_notif_type event_code = code;
 
 	if (!plat_priv->cal_in_progress)
 		driver_ops = plat_priv->driver_ops;
@@ -5159,7 +5159,7 @@ int cnss_register_subsys(struct cnss_plat_data *plat_priv)
 
 	}
 
-#ifdef CONFIG_CNSS2_KERNEL6x_NO_PCI_RPR
+#ifdef CONFIG_CNSS2_KERNEL_6_1
 	if (plat_priv->bus_type == CNSS_BUS_PCI)
 		return ret;
 #endif
