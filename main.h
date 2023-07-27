@@ -706,6 +706,7 @@ struct cnss_plat_data {
 	bool mlo_default_cfg;
 	struct cnss_mlo_chip_info *adj_mlo_chip_info[CNSS_MAX_ADJ_CHIPS];
 	enum cnss_recovery_reason reason;
+	enum cnss_crash_type crash_type;
 #if defined(CONFIG_CNSS2_KERNEL_5_15) || defined(CONFIG_CNSS2_KERNEL_6_1)
 	struct work_struct crash_work;
 #endif
