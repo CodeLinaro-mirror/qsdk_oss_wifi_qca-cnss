@@ -411,6 +411,77 @@ void cnss_set_recovery_mode(struct device *dev, u8 recovery_mode)
 }
 EXPORT_SYMBOL(cnss_set_recovery_mode);
 
+#if defined(CNSS_LOWMEM_PROFILE) && defined(QCA_CNSS_QCA5332) && \
+	defined(CONFIG_CNSS2_KERNEL_IPQ)
+/*
+ * For FW_UMOUNT feature umount_firmware_delay is used as delay to trigger
+ * umount in delayed_workqueue.
+ */
+static int umount_firmware_delay = 10000;
+module_param(umount_firmware_delay, int, 0644);
+MODULE_PARM_DESC(umount_firmware_delay, "umount_firmware_delay");
+
+/*
+ * fw_load_in_progress_bmap flag is used to indicate if FW load is in progress
+ * set_bit is used based on the plat_env index to represent the fw load
+ * progress for each devices.
+ */
+static unsigned long fw_load_in_progress_bmap;
+static struct delayed_work umount_firmware_wq;
+
+/**
+ * cnss_mount_firmware - Mount FW Partition to DDR
+ *
+ * @plat_priv: plat_priv of soc
+ *
+ * cnss_mount_firmware will call call_usermodehelper which helps calling the
+ * script file in MOUNT_PATH path that will mount the FW partition to DDR.
+ */
+void cnss_mount_firmware(struct cnss_plat_data *plat_priv)
+{
+	char *argv[] = {MOUNT_PATH, NULL };
+
+	set_bit(cnss_get_plat_env_index_from_plat_priv(plat_priv),
+		&fw_load_in_progress_bmap);
+	call_usermodehelper(argv[0], argv, NULL, UMH_WAIT_PROC);
+}
+
+/**
+ * cnss_umount_firmware - Schedule unmount handler
+ *
+ * @plat_priv: plat_priv of soc
+ *
+ * cnss_umount_firmware will cancel all pending delayed workqueues and will
+ * schedule a new delayed workqueue with a delay of umount_firmware_delay for
+ * the wifi load/up/recovery to be completed after which WIFI_FW will be
+ * unmounted.
+ */
+void cnss_unmount_firmware(struct cnss_plat_data *plat_priv)
+{
+	clear_bit(cnss_get_plat_env_index_from_plat_priv(plat_priv),
+		  &fw_load_in_progress_bmap);
+	cancel_delayed_work_sync(&umount_firmware_wq);
+	schedule_delayed_work(&umount_firmware_wq,
+			      msecs_to_jiffies(umount_firmware_delay));
+}
+
+/**
+ * cnss_schedule_umount_firmware - Unmount FW Partition
+ *
+ * @work: Work initialized in workqueue
+ *
+ * cnss_schedule_umount_firmware will call call_usermodehelper which helps in
+ * calling script file in UMOUNT_PATH path that will unmount the FW partition.
+ */
+void cnss_schedule_umount_firmware(struct work_struct *work)
+{
+	char *argv[] = {UMOUNT_PATH, NULL };
+
+	if (fw_load_in_progress_bmap == 0)
+		call_usermodehelper(argv[0], argv, NULL, UMH_WAIT_PROC);
+}
+#endif
+
 struct cnss_plat_data *cnss_get_plat_priv_by_device_id(int id)
 {
 	int i;
@@ -2922,6 +2993,7 @@ void  *__cnss_subsystem_get(struct cnss_plat_data *plat_priv)
 	}
 	clear_bit(CNSS_RECOVERY_WAIT_FOR_DRIVER, &plat_priv->driver_state);
 
+	cnss_mount_firmware(plat_priv);
 #ifdef CONFIG_CNSS2_KERNEL_SSR_FRAMEWORK
 	subsys_info->subsys_handle =
 				subsystem_get(subsys_info->subsys_desc.name);
@@ -4824,6 +4896,7 @@ static void cnss_driver_recovery_work(struct work_struct *work)
 		pr_err("plat_priv is NULL!\n");
 		return;
 	}
+	cnss_mount_firmware(plat_priv);
 	cnss_do_recovery(plat_priv, plat_priv->reason);
 }
 
@@ -5176,6 +5249,7 @@ int cnss_register_subsys(struct cnss_plat_data *plat_priv)
 	plat_priv->esoc_info.modem_notify_handler =
 		cnss_register_notifier_cb(plat_priv);
 
+	cnss_mount_firmware(plat_priv);
 	ret = rproc_boot(subsys_info->subsys_handle);
 	if (ret) {
 		cnss_pr_err("%s: Failed to boot device %s (%d)\n",
@@ -6850,6 +6924,10 @@ static int cnss_probe(struct platform_device *plat_dev)
 	INIT_LIST_HEAD(&plat_priv->vreg_list);
 	INIT_LIST_HEAD(&plat_priv->clk_list);
 
+#if defined(CNSS_LOWMEM_PROFILE) && defined(QCA_CNSS_QCA5332) && \
+	defined(CONFIG_CNSS2_KERNEL_IPQ)
+	INIT_DELAYED_WORK(&umount_firmware_wq, cnss_schedule_umount_firmware);
+#endif
 	cnss_init_control_params(plat_priv);
 
 	ret = cnss_get_resources(plat_priv);
