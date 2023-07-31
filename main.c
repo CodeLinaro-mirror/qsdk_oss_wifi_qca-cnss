@@ -6358,7 +6358,7 @@ static int cnss_panic_handler(struct notifier_block *this,
 	return 0;
 }
 
-static void cnss_panic_notifier_register()
+static void cnss_panic_notifier_register(void)
 {
 	int ret;
 	struct cnss_plat_data *plat_priv = NULL;
@@ -6370,6 +6370,8 @@ static void cnss_panic_notifier_register()
 		cnss_pr_err("Err(%d): register panic notifier failed.\n", ret);
 	else
 		cnss_pr_dbg("%s: atomic_notifier_chain_register success.\n", __func__);
+
+	return;
 }
 #endif
 
