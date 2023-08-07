@@ -5562,7 +5562,6 @@ static void cnss_unregister_ramdump_v1(struct cnss_plat_data *plat_priv)
 				  ramdump_info->ramdump_pa);
 }
 
-#ifdef CONFIG_QTI_MEMORY_DUMP_V2
 static u32 cnss_get_dump_desc_size(struct cnss_plat_data *plat_priv)
 {
 	u32 descriptor_size = 0;
@@ -5579,16 +5578,34 @@ static u32 cnss_get_dump_desc_size(struct cnss_plat_data *plat_priv)
 
 	return descriptor_size;
 }
+
+#ifdef CONFIG_QTI_MEMORY_DUMP_V2
+static int cnss_set_msm_dump_table(struct cnss_dump_data *dump_data)
+{
+	struct msm_dump_entry dump_entry;
+	int ret = 0;
+
+	dump_entry.id = MSM_DUMP_DATA_CNSS_WLAN;
+	dump_entry.addr = virt_to_phys(dump_data);
+#ifdef NOMINIDUMP
+	ret = msm_dump_data_register_nominidump(MSM_DUMP_TABLE_APPS,
+						&dump_entry);
+#endif
+	return ret;
+}
+#else
+static int cnss_set_msm_dump_table(struct cnss_dump_data *dump_data)
+{
+	return 0;
+}
 #endif
 
 static int cnss_register_ramdump_v2(struct cnss_plat_data *plat_priv)
 {
 	int ret = 0;
-#ifdef CONFIG_QTI_MEMORY_DUMP_V2
 	struct cnss_subsys_info *subsys_info;
 	struct cnss_ramdump_info_v2 *info_v2;
 	struct cnss_dump_data *dump_data;
-	struct msm_dump_entry dump_entry;
 	struct device *dev = &plat_priv->plat_dev->dev;
 #ifdef CONFIG_CNSS2_KERNEL_IPQ
 	char ramdump_dev_name[CNSS_RAMDUMP_FILE_NAME_MAX_LEN] = {0};
@@ -5623,15 +5640,8 @@ static int cnss_register_ramdump_v2(struct cnss_plat_data *plat_priv)
 	dump_data->seg_version = CNSS_DUMP_SEG_VER_V2;
 	strlcpy(dump_data->name, CNSS_DUMP_NAME,
 		sizeof(dump_data->name));
-	dump_entry.id = MSM_DUMP_DATA_CNSS_WLAN;
-	dump_entry.addr = virt_to_phys(dump_data);
 
-#ifdef NOMINIDUMP
-	ret = msm_dump_data_register_nominidump(MSM_DUMP_TABLE_APPS,
-						&dump_entry);
-#else
-	ret = 0;
-#endif
+	ret = cnss_set_msm_dump_table(dump_data);
 	if (ret) {
 		cnss_pr_err("Failed to setup dump table, err = %d\n", ret);
 		goto free_ramdump;
@@ -5672,7 +5682,6 @@ free_ramdump:
 	kfree(info_v2->dump_data_vaddr);
 	plat_priv->rd_dev_present = false;
 	info_v2->dump_data_vaddr = NULL;
-#endif
 	return ret;
 }
 
