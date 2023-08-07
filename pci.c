@@ -2334,7 +2334,7 @@ int cnss_qcom_elf_dump(struct list_head *segs, struct device *dev,
 	if (!data)
 		return -ENOMEM;
 
-	cnss_pr_vdbg("Creating ELF file with size %lu\n", data_size);
+	cnss_pr_vdbg("Creating ELF file with size %zu\n", data_size);
 
 	ehdr = data;
 	memset(ehdr, 0, sizeof_elf_hdr(class));
