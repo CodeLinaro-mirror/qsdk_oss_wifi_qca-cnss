@@ -35,6 +35,14 @@ ifeq ($(QCA_CNSS_LINUX_6_1_SUPPORT),y)
 ccflags-y += -Wno-implicit-fallthrough
 endif
 
+ifeq ($(QCA_CNSS_LOWMEM_PROFILE),y)
+ccflags-y += -DCNSS_LOWMEM_PROFILE
+endif
+
+ifeq ($(ENABLE_QCA5332_HEADER),y)
+ccflags-y += -DQCA_CNSS_QCA5332
+endif
+
 ccflags-y += -DCONFIG_CNSS_QCN9000
 ccflags-y += -DCONFIG_CNSS2_GENL
 

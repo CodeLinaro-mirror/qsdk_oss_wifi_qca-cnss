@@ -1934,6 +1934,9 @@ int cnss_wlfw_wlan_mode_send_sync(struct cnss_plat_data *plat_priv,
 		goto out;
 	}
 
+	if (mode == CNSS_MISSION)
+		cnss_unmount_firmware(plat_priv);
+
 	ret = qmi_txn_wait(&txn, QMI_WLFW_TIMEOUT_JF);
 	if (ret < 0) {
 		resp_error_msg = -QMI_RESULT_FAILURE_V01;

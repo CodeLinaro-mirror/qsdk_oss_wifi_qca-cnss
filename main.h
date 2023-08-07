@@ -769,6 +769,27 @@ struct cnss_plat_data *cnss_get_plat_priv_by_instance_id(int instance_id);
 struct cnss_plat_data *cnss_get_plat_priv(struct platform_device *plat_dev);
 int cnss_get_plat_env_index_from_plat_priv(struct cnss_plat_data *plat_priv);
 int cnss_qca9000_shutdown_part2(struct cnss_plat_data *plat_priv);
+
+#if defined(CNSS_LOWMEM_PROFILE) && defined(CONFIG_CNSS2_KERNEL_IPQ) && \
+	defined(QCA_CNSS_QCA5332)
+#define MOUNT_PATH			"/lib/wifi/mount/mount_fw_partition.sh"
+#define UMOUNT_PATH			"/lib/wifi/mount/umount_fw_partition.sh"
+
+void cnss_mount_firmware(struct cnss_plat_data *plat_priv);
+void cnss_unmount_firmware(struct cnss_plat_data *plat_priv);
+void cnss_schedule_umount_firmware(struct work_struct *work);
+#else
+static inline void cnss_mount_firmware(struct cnss_plat_data *plat_priv)
+{
+}
+static inline void cnss_unmount_firmware(struct cnss_plat_data *plat_priv)
+{
+}
+static inline void cnss_schedule_umount_firmware(struct work_struct *work)
+{
+}
+#endif
+
 int cnss_get_cpr_info(struct cnss_plat_data *plat_priv);
 int cnss_update_cpr_info(struct cnss_plat_data *plat_priv);
 void cnss_update_platform_feature_support(u8 type, u32 instance_id, u32 value);
