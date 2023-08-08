@@ -4660,6 +4660,7 @@ static int cnss_pci_init_smmu(struct cnss_pci_data *pci_priv)
 					   "smmu_iova_ipa");
 	if (res) {
 		pci_priv->smmu_iova_ipa_start = res->start;
+		pci_priv->smmu_iova_ipa_current = res->start;
 		pci_priv->smmu_iova_ipa_len = resource_size(res);
 		cnss_pr_dbg("smmu_iova_ipa_start: %pa, smmu_iova_ipa_len: 0x%zx\n",
 			    &pci_priv->smmu_iova_ipa_start,
@@ -4698,8 +4699,12 @@ int cnss_smmu_map(struct device *dev,
 	struct cnss_pci_data *pci_priv = cnss_get_pci_priv(to_pci_dev(dev));
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 	unsigned long iova;
+	int flag = IOMMU_READ | IOMMU_WRITE;
+	struct pci_dev *root_port;
+	struct device_node *root_of_node;
 	size_t len;
 	int ret = 0;
+	bool dma_coherent = false;
 
 	if (!pci_priv)
 		return -ENODEV;
@@ -4711,7 +4716,7 @@ int cnss_smmu_map(struct device *dev,
 	}
 
 	len = roundup(size + paddr - rounddown(paddr, PAGE_SIZE), PAGE_SIZE);
-	iova = roundup(pci_priv->smmu_iova_ipa_start, PAGE_SIZE);
+	iova = roundup(pci_priv->smmu_iova_ipa_current, PAGE_SIZE);
 
 	if (iova >=
 	    (pci_priv->smmu_iova_ipa_start + pci_priv->smmu_iova_ipa_len)) {
@@ -4722,21 +4727,78 @@ int cnss_smmu_map(struct device *dev,
 		return -ENOMEM;
 	}
 
+	root_port = pcie_find_root_port(pci_priv->pci_dev);
+	if (!root_port) {
+		cnss_pr_err("Root port is null, so dma_coherent is disabled\n");
+	} else {
+		root_of_node = root_port->dev.of_node;
+		if (root_of_node && root_of_node->parent) {
+			dma_coherent =
+				of_property_read_bool(root_of_node->parent,
+							"dma-coherent");
+			cnss_pr_dbg("dma-coherent is %s\n",
+					dma_coherent ? "enabled" : "disabled");
+			if (dma_coherent)
+				flag |= IOMMU_CACHE;
+		}
+	}
+
+	cnss_pr_dbg("IOMMU map: iova %lx, len %zu\n", iova, len);
+
 	ret = iommu_map(pci_priv->iommu_domain, iova,
-			rounddown(paddr, PAGE_SIZE), len,
-			IOMMU_READ | IOMMU_WRITE);
+			rounddown(paddr, PAGE_SIZE), len, flag);
 	if (ret) {
 		cnss_pr_err("PA to IOVA mapping failed, ret %d\n", ret);
 		return ret;
 	}
 
-	pci_priv->smmu_iova_ipa_start = iova + len;
+	pci_priv->smmu_iova_ipa_current = iova + len;
 	*iova_addr = (uint32_t)(iova + paddr - rounddown(paddr, PAGE_SIZE));
+	cnss_pr_dbg("IOMMU map: iova_addr %x\n", *iova_addr);
 #endif
 
 	return 0;
 }
 EXPORT_SYMBOL(cnss_smmu_map);
+
+int cnss_smmu_unmap(struct device *dev, uint32_t iova_addr, size_t size)
+{
+#ifdef CONFIG_CNSS2_SMMU
+	struct cnss_pci_data *pci_priv = cnss_get_pci_priv(to_pci_dev(dev));
+	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
+	unsigned long iova;
+	size_t unmapped;
+	size_t len;
+
+	if (!pci_priv)
+		return -ENODEV;
+
+	iova = rounddown(iova_addr, PAGE_SIZE);
+	len = roundup(size + iova_addr - iova, PAGE_SIZE);
+
+	if (iova >= pci_priv->smmu_iova_ipa_start +
+		    pci_priv->smmu_iova_ipa_len) {
+		cnss_pr_err("Out of IOVA space to unmap, iova %lx, smmu_iova_ipa_start %pad, smmu_iova_ipa_len %zu\n",
+			    iova,
+			    &pci_priv->smmu_iova_ipa_start,
+			    pci_priv->smmu_iova_ipa_len);
+		return -ENOMEM;
+	}
+
+	cnss_pr_dbg("IOMMU unmap: iova %lx, len %zu\n", iova, len);
+
+	unmapped = iommu_unmap(pci_priv->iommu_domain, iova, len);
+	if (unmapped != len) {
+		cnss_pr_err("IOMMU unmap failed, unmapped = %zu, requested = %zu\n",
+			    unmapped, len);
+		return -EINVAL;
+	}
+
+	pci_priv->smmu_iova_ipa_current = iova;
+#endif
+	return 0;
+}
+EXPORT_SYMBOL(cnss_smmu_unmap);
 
 void cnss_free_soc_info(struct cnss_plat_data *plat_priv)
 {
