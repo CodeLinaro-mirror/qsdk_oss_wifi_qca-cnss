@@ -3652,6 +3652,13 @@ static int cnss_qcn9000_notifier_nb(struct notifier_block *nb,
 }
 #endif
 
+#if defined(CONFIG_CNSS2_KERNEL_5_15) || defined(CONFIG_CNSS2_KERNEL_6_1)
+int cnss_handle_usrpd_in_rpd_crash(struct cnss_plat_data *plat_priv)
+{
+	return 0;
+}
+#endif
+
 void cnss_bus_dev_to_plat_priv_wrapper(struct device *dev,
 				       int device_id,
 				       struct cnss_plat_data **plat_priv)
@@ -4165,12 +4172,10 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 			cnss_bus_dev_ramdump(plat_priv);
 		if (plat_priv->mlo_support && group_info != NULL &&
 		    plat_priv->recovery_mode != MODE_1_RECOVERY_MODE) {
-#ifndef CONFIG_CNSS2_KERNEL_6_1
 			if (plat_priv->crash_type == CNSS_ROOTPD_CRASH) {
 				for (userpd = 0; userpd < plat_env_index; userpd++)
 					cnss_handle_usrpd_in_rpd_crash(plat_env[userpd]);
 			}
-#endif
 			if (!test_bit(CNSS_FW_READY, &plat_priv->driver_state))
 				cnss_pr_info("FW_READY not received for the device, so early assert\n");
 			else if (group_info->num_chips != group_info->rddm_dump_all)
