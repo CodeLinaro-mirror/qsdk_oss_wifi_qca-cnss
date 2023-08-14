@@ -4211,8 +4211,6 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 		 * multiple targets in the MLO group are all powered up in the
 		 * correct sequence
 		 */
-		set_bit(CNSS_RECOVERY_WAIT_FOR_DRIVER,
-			&plat_priv->driver_state);
 		if (plat_priv->bus_type == CNSS_BUS_PCI) {
 #if defined(CONFIG_CNSS2_KERNEL_5_15) || defined(CONFIG_CNSS2_KERNEL_6_1)
 			cnss_hif_shutdown(plat_priv);
@@ -4229,12 +4227,16 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 					CNSS_RAMDUMP_NOTIFICATION, NULL);
 			cnss_subsys_ramdump(subsys_info->subsys_handle,
 								NULL, NULL);
+			set_bit(CNSS_RECOVERY_WAIT_FOR_DRIVER,
+				&plat_priv->driver_state);
 			cnss_qcn9000_notifier_nb(&plat_priv->modem_nb,
 						 CNSS_RAMDUMP_DONE, NULL);
 #endif
 		} else if ((plat_priv->bus_type == CNSS_BUS_AHB) &&
 			(plat_priv->recovery_type == CNSS_SYNC_RECOVERY)) {
 			cnss_rproc_recovery(plat_priv);
+			set_bit(CNSS_RECOVERY_WAIT_FOR_DRIVER,
+				&plat_priv->driver_state);
 			if (plat_priv->crash_type == CNSS_ROOTPD_CRASH) {
 				for (userpd = 0; userpd < plat_env_index; userpd++) {
 					if (plat_env[userpd]->bus_type == CNSS_BUS_AHB) {
