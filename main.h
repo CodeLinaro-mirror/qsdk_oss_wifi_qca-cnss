@@ -756,6 +756,7 @@ struct cnss_plat_data {
 	struct cnss_mlo_chip_info *adj_mlo_chip_info[CNSS_MAX_ADJ_CHIPS];
 	enum cnss_recovery_reason reason;
 	enum cnss_crash_type crash_type;
+	struct timer_list crash_wait_timer;
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0))
 	u8 switch_link_enable;
 #endif

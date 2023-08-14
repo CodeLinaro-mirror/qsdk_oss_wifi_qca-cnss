@@ -4536,6 +4536,27 @@ static const char *cnss_recovery_reason_to_str(enum cnss_recovery_reason reason)
 	return "UNKNOWN";
 };
 
+void cnss_crash_wait_timeout_hdlr(struct timer_list *timer)
+{
+	struct cnss_plat_data *plat_priv = from_timer(plat_priv, timer,
+							crash_wait_timer);
+	struct cnss_mlo_group_info *group_info;
+
+	group_info = plat_priv->mlo_group_info;
+
+	/* This handler is invoked after 10s after the dump collection.
+	 * If the partner radio dumps in the mlo group are not collected
+	 * during this time then force assert to exit out of the wait for
+	 * partner crash.
+	 */
+	if (plat_priv->target_asserted &&
+	    group_info->num_chips != group_info->rddm_dump_all) {
+		cnss_pr_info("Partner crash not received %d, so force ASSERT\n", group_info->rddm_dump_all);
+		CNSS_ASSERT(0);
+	} else
+		del_timer(timer);
+}
+
 static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 			    enum cnss_recovery_reason reason)
 {
@@ -4603,6 +4624,13 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 				for (userpd = 0; userpd < plat_env_index; userpd++)
 					cnss_handle_usrpd_in_rpd_crash(plat_env[userpd]);
 			}
+
+			timer_setup(&plat_priv->crash_wait_timer,
+				    cnss_crash_wait_timeout_hdlr, 0);
+
+			mod_timer(&plat_priv->crash_wait_timer, jiffies +
+				  msecs_to_jiffies(10000));
+
 			if (!test_bit(CNSS_FW_READY, &plat_priv->driver_state))
 				cnss_pr_info("FW_READY not received for the device, so early assert\n");
 			else if (group_info->num_chips != group_info->rddm_dump_all)
