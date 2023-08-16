@@ -479,7 +479,12 @@ static int qcom_qcn9224_probe(struct platform_device *pdev)
 	lvirq->pdev = pdev;
 	lvirq_list[lvirq_index++] = lvirq;
 
+#ifdef CONFIG_CNSS2_KERNEL_6_1
+	of_property_read_u32(pdev->dev.of_node, "node_id", &node_id);
+	node_id = node_id + (QCN9224_0 - 1);
+#else
 	of_property_read_u32(pdev->dev.of_node, "qrtr_node_id", &node_id);
+#endif
 	lvirq->qrtr_node_id = node_id;
 
 	snprintf(name, sizeof(name), "qcnvic%d", node_id - QCN9224_0);
