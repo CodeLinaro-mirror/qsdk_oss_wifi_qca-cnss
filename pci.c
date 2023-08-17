@@ -557,6 +557,9 @@ static struct mhi_controller_config cnss_pci_mhi_config = {
 	.ch_cfg = cnss_pci_mhi_channels,
 	.num_events = ARRAY_SIZE(cnss_pci_mhi_events),
 	.event_cfg = cnss_pci_mhi_events,
+#ifdef CONFIG_TARGET_SDX75
+	.rddm_timeout_us = 400000,
+#endif
 };
 #endif
 
