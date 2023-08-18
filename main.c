@@ -1869,7 +1869,7 @@ EXPORT_SYMBOL(cnss_get_mlo_group_id);
 bool cnss_get_mlo_group_info(uint8_t grp_id,
 			struct cnss_mlo_group_info *grp_info)
 {
-	if (grp_id < 0 && grp_id >= CNSS_MAX_MLO_GROUPS)
+	if (grp_id < 0 || grp_id >= CNSS_MAX_MLO_GROUPS)
 		return false;
 	memcpy(grp_info, &g_mlo_group_info[grp_id],
 		sizeof(struct cnss_mlo_group_info));
