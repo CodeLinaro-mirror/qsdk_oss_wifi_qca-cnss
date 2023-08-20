@@ -114,6 +114,7 @@ EXPORT_SYMBOL(cnss_get_enable_intx);
 #define DEFAULT_QDSS_VECTORS MIN_QDSS_VECTORS
 
 static void *mlo_global_mem[CNSS_MAX_MLO_GROUPS];
+phys_addr_t mlo_global_mem_phys[CNSS_MAX_MLO_GROUPS];
 
 #define PCI_LINK_UP			1
 #define PCI_LINK_DOWN			0
@@ -3591,6 +3592,172 @@ void cnss_do_mlo_global_memset(struct cnss_plat_data *plat_priv, u64 mem_size)
 	}
 
 }
+
+#ifndef CONFIG_CNSS2_KERNEL_5_15
+static int cnss_mlo_mem_get(struct cnss_plat_data *plat_priv, int group_id,
+			    phys_addr_t paddr, int idx)
+{
+	struct cnss_fw_mem *fw_mem = plat_priv->fw_mem;
+
+	mlo_global_mem_phys[group_id] = paddr;
+	mlo_global_mem[group_id] = ioremap(mlo_global_mem_phys[group_id],
+					   fw_mem[idx].size);
+
+	if (!mlo_global_mem[group_id])
+		cnss_pr_err("WARNING: Host DDR remap failed\n");
+
+	return 0;
+}
+
+static int get_mlo_pa(struct cnss_plat_data *plat_priv, int group_id, int idx)
+{
+	struct cnss_fw_mem *fw_mem = plat_priv->fw_mem;
+
+	fw_mem[idx].pa = mlo_global_mem_phys[group_id];
+	return 0;
+}
+
+#else
+static int cnss_mlo_mem_get(struct cnss_plat_data *plat_priv, int group_id,
+			    phys_addr_t paddr, int idx)
+{
+	struct cnss_fw_mem *fw_mem = plat_priv->fw_mem;
+	int ret;
+	struct device *dev;
+	struct page *page = NULL;
+
+	dev = &plat_priv->plat_dev->dev;
+
+	ret = of_reserved_mem_device_init_by_idx(dev,
+		   plat_priv->plat_dev->dev.of_node, group_id);
+	if (ret != 0) {
+		cnss_pr_err("Error(%d): of_reserved_mem_device_init_by_idx failed.",
+			    ret);
+		return -ENOMEM;
+	}
+
+	page = cma_alloc(dev->cma_area,
+			 DIV_ROUND_UP(fw_mem[idx].size, PAGE_SIZE), 0,
+			 false);
+	if (page == NULL) {
+		cnss_pr_err("Error: cma alloc failed.\n");
+		return -ENOMEM;
+	}
+
+	mlo_global_mem[group_id] = page_to_virt(page);
+	of_reserved_mem_device_release(dev);
+
+	return 0;
+}
+
+static int get_mlo_pa(struct cnss_plat_data *plat_priv, int group_id, int idx)
+{
+	struct cnss_fw_mem *fw_mem = plat_priv->fw_mem;
+
+	/*remap alocated mlo shared mem to pcie device*/
+	mlo_global_mem_phys[group_id] =
+		dma_map_single(&((struct pci_dev *)plat_priv->pci_dev)->dev,
+				mlo_global_mem[group_id],
+				fw_mem[idx].size, DMA_BIDIRECTIONAL);
+	if (dma_mapping_error(&((struct pci_dev *)plat_priv->pci_dev)->dev,
+				mlo_global_mem_phys[group_id])) {
+		cnss_pr_err("Error: dma_map_single failed.\n");
+		return -ENOMEM;
+	}
+
+	fw_mem[idx].pa =  mlo_global_mem_phys[group_id];
+
+	return 0;
+}
+#endif
+
+static int cnss_mlo_mem_alloc(struct cnss_plat_data *plat_priv, int index)
+{
+	struct cnss_fw_mem *fw_mem = plat_priv->fw_mem;
+	int ret, group_id, chip_id;
+	char mlo_node_name[20];
+	struct device_node *mlo_global_mem_node = NULL;
+	struct cnss_pci_data *pci_priv = plat_priv->bus_priv;
+	struct reserved_mem *mlo_mem = NULL;
+	unsigned int mlo_global_mem_size;
+	int i = index;
+	struct device *dev;
+
+	dev = &plat_priv->plat_dev->dev;
+	group_id = plat_priv->mlo_group_info->group_id;
+	if (!mlo_global_mem[group_id]) {
+		snprintf(mlo_node_name, sizeof(mlo_node_name),
+				"mlo_global_mem_%d", group_id);
+		mlo_global_mem_node =
+			of_find_node_by_name(NULL, mlo_node_name);
+		if (!mlo_global_mem_node) {
+			cnss_pr_err("could not get mlo_global_mem_node\n");
+			CNSS_ASSERT(0);
+			return -ENOMEM;
+		}
+
+		mlo_mem = of_reserved_mem_lookup(mlo_global_mem_node);
+		if (!mlo_mem) {
+			cnss_pr_err("%s: Unable to get mlo_mem",
+					__func__);
+			of_node_put(mlo_global_mem_node);
+			CNSS_ASSERT(0);
+			return -ENOMEM;
+		}
+
+		of_node_put(mlo_global_mem_node);
+		mlo_global_mem_size = mlo_mem->size;
+		if (fw_mem[i].size > mlo_global_mem_size) {
+			cnss_pr_err("Error: Need more memory 0x%x\n",
+					(unsigned int)fw_mem[i].size);
+			CNSS_ASSERT(0);
+			return -ENOMEM;
+		}
+
+		if (fw_mem[i].size < mlo_global_mem_size) {
+			cnss_pr_err("WARNING: More MLO global memory is reserved. Reserved size 0x%x, Requested size 0x%x.\n",
+					mlo_global_mem_size,
+					(unsigned int)fw_mem[i].size);
+		}
+
+		ret = cnss_mlo_mem_get(plat_priv, group_id, mlo_mem->base, i);
+		if (ret != 0) {
+			cnss_pr_err("Error(%d): cnss_mlo_mem_get failed.\n",
+				    ret);
+			CNSS_ASSERT(0);
+		}
+
+		fw_mem[i].va = mlo_global_mem[group_id];
+	} else
+		fw_mem[i].va = mlo_global_mem[group_id];
+
+	ret = get_mlo_pa(plat_priv, group_id, i);
+	if (ret != 0) {
+		cnss_pr_err("Error: get_mlo_pa failed.");
+		CNSS_ASSERT(0);
+	}
+
+	if (mlo_global_mem[group_id] != NULL) {
+		if (plat_priv->bus_type == CNSS_BUS_PCI)
+			chip_id =
+			    cnss_get_mlo_chip_id(&pci_priv->pci_dev->dev);
+		else
+			chip_id = cnss_get_mlo_chip_id(dev);
+
+		if (chip_id == MLO_GROUP_MASTER_CHIP)
+			cnss_do_mlo_global_memset(plat_priv, fw_mem[i].size);
+	}
+
+	if (!fw_mem[i].va) {
+		cnss_pr_err("Failed to allocate memory for FW, size: 0x%zx, type: %u\n",
+				fw_mem[i].size,
+				fw_mem[i].type);
+		return -ENOMEM;
+	}
+
+	return 0;
+}
+
 int cnss_ahb_alloc_fw_mem(struct cnss_plat_data *plat_priv)
 {
 	struct cnss_fw_mem *fw_mem = plat_priv->fw_mem;
@@ -3599,15 +3766,11 @@ int cnss_ahb_alloc_fw_mem(struct cnss_plat_data *plat_priv)
 	unsigned int reg[4], mem_region_reserved_size;
 	u32 caldb_size = 0;
 	struct device *dev;
-	int i, idx, mode, chip_id, group_id = 0;
+	int i, idx, mode;
 	struct device_node *dev_node = NULL;
 	struct device_node *mem_region_node = NULL;
 	phandle mem_region_phandle;
 	struct resource m3_dump;
-	unsigned int mlo_global_mem_size;
-	struct device_node *mlo_global_mem_node = NULL;
-	struct reserved_mem *mlo_mem = NULL;
-	char mlo_node_name[20];
 
 	dev = &plat_priv->plat_dev->dev;
 
@@ -3785,63 +3948,11 @@ int cnss_ahb_alloc_fw_mem(struct cnss_plat_data *plat_priv)
 			idx++;
 			break;
 		case QMI_WLFW_MLO_GLOBAL_MEM_V01:
-			group_id = plat_priv->mlo_group_info->group_id;
-			snprintf(mlo_node_name, sizeof(mlo_node_name),
-				 "mlo_global_mem_%d", group_id);
-			mlo_global_mem_node =
-				of_find_node_by_name(NULL, mlo_node_name);
-			if (!mlo_global_mem_node) {
-				cnss_pr_err("could not get mlo_global_mem_node\n");
-				CNSS_ASSERT(0);
-				return -ENOMEM;
-			}
-
-			mlo_mem = of_reserved_mem_lookup(mlo_global_mem_node);
-			if (!mlo_mem) {
-				cnss_pr_err("%s: Unable to get mlo_mem",
-					    __func__);
-				of_node_put(mlo_global_mem_node);
-				CNSS_ASSERT(0);
-				return -ENOMEM;
-			}
-
-			of_node_put(mlo_global_mem_node);
-
-			mlo_global_mem_size = mlo_mem->size;
-
-			if (fw_mem[i].size > mlo_global_mem_size) {
-				cnss_pr_err("Error: Need more memory 0x%x\n",
-					    (unsigned int)fw_mem[i].size);
-				CNSS_ASSERT(0);
-				return -ENOMEM;
-			}
-
-			if (fw_mem[i].size < mlo_global_mem_size) {
-				cnss_pr_err("WARNING: More MLO global memory is reserved. Reserved size 0x%x, Requested size 0x%x.\n",
-					    mlo_global_mem_size,
-					    (unsigned int)fw_mem[i].size);
-			}
-
-			fw_mem[i].pa = mlo_mem->base;
-			if (!mlo_global_mem[group_id])
-				mlo_global_mem[group_id] = ioremap(fw_mem[i].pa,
-							 fw_mem[i].size);
-
-			fw_mem[i].va = mlo_global_mem[group_id];
-
+			cnss_mlo_mem_alloc(plat_priv, i);
 			fw_mem[idx].pa = fw_mem[i].pa;
 			fw_mem[idx].va = fw_mem[i].va;
 			fw_mem[idx].size = fw_mem[i].size;
 			fw_mem[idx].type = fw_mem[i].type;
-
-			if (!mlo_global_mem[group_id]) {
-				cnss_pr_err("WARNING: Host DDR remap failed\n");
-			} else {
-				chip_id = cnss_get_mlo_chip_id(dev);
-				if (chip_id == MLO_GROUP_MASTER_CHIP)
-					cnss_do_mlo_global_memset(plat_priv,
-							fw_mem[i].size);
-			}
 			idx++;
 			break;
 		default:
@@ -3853,38 +3964,47 @@ int cnss_ahb_alloc_fw_mem(struct cnss_plat_data *plat_priv)
 	return 0;
 }
 
+
 int cnss_pci_alloc_fw_mem(struct cnss_plat_data *plat_priv)
 {
 	struct cnss_fw_mem *fw_mem = plat_priv->fw_mem;
-	unsigned int mlo_global_mem_size;
 	u32 addr = 0;
 	u32 hremote_size = 0;
 	u32 caldb_size = 0;
 	u32 pageable_size = 0;
-	struct device *dev, *pci_bus_dev;
-	int i, chip_id, group_id = 0;
+	struct device *dev;
+	int i;
 	struct cnss_pci_data *pci_priv = plat_priv->bus_priv;
 	struct pci_dev *pci_dev = (struct pci_dev *)plat_priv->pci_dev;
-	struct device_node *mlo_global_mem_node = NULL;
-	struct reserved_mem *mlo_mem = NULL;
-	char mlo_node_name[20];
+	int ret;
 
 	dev = &plat_priv->plat_dev->dev;
 
 	if (plat_priv->dma_alloc_supported) {
 		for (i = 0; i < plat_priv->fw_mem_seg_len; i++) {
 			if (!fw_mem[i].va && fw_mem[i].size) {
-				fw_mem[i].va =
-					dma_alloc_attrs(&pci_dev->dev,
-						fw_mem[i].size, &fw_mem[i].pa,
-						GFP_KERNEL,
-						DMA_ATTR_FORCE_CONTIGUOUS);
+				if (fw_mem[i].type ==
+					QMI_WLFW_MLO_GLOBAL_MEM_V01) {
+					ret = cnss_mlo_mem_alloc(plat_priv, i);
+					if (ret != 0) {
+						cnss_pr_err("Error(%d): mlo memory alloc failed.\n",
+								ret);
+						return ret;
+					}
+				} else {
+					fw_mem[i].va =
+						dma_alloc_attrs(&pci_dev->dev,
+								fw_mem[i].size,
+								&fw_mem[i].pa,
+								GFP_KERNEL,
+						    DMA_ATTR_FORCE_CONTIGUOUS);
 
-				if (!fw_mem[i].va) {
-					cnss_pr_err("Failed to allocate memory for FW, size: 0x%zx, type: %u\n",
-						    fw_mem[i].size,
-						    fw_mem[i].type);
-					return -ENOMEM;
+					if (!fw_mem[i].va) {
+						cnss_pr_err("Failed to allocate memory for FW, size: 0x%zx, type: %u\n",
+								fw_mem[i].size,
+								fw_mem[i].type);
+						return -ENOMEM;
+					}
 				}
 			}
 		}
@@ -4034,58 +4154,7 @@ int cnss_pci_alloc_fw_mem(struct cnss_plat_data *plat_priv)
 			}
 			break;
 		case QMI_WLFW_MLO_GLOBAL_MEM_V01:
-			group_id = plat_priv->mlo_group_info->group_id;
-			snprintf(mlo_node_name, sizeof(mlo_node_name),
-				"mlo_global_mem_%d", group_id);
-			mlo_global_mem_node =
-				of_find_node_by_name(NULL, mlo_node_name);
-			if (!mlo_global_mem_node) {
-				cnss_pr_err("could not get mlo_global_mem_node\n");
-				CNSS_ASSERT(0);
-				return -ENOMEM;
-			}
-
-			mlo_mem = of_reserved_mem_lookup(mlo_global_mem_node);
-			if (!mlo_mem) {
-				cnss_pr_err("%s: Unable to get mlo_mem",
-					    __func__);
-				of_node_put(mlo_global_mem_node);
-				CNSS_ASSERT(0);
-				return -ENOMEM;
-			}
-
-			of_node_put(mlo_global_mem_node);
-
-			mlo_global_mem_size = mlo_mem->size;
-
-			if (fw_mem[i].size > mlo_global_mem_size) {
-				cnss_pr_err("Error: Need more memory 0x%x\n",
-					    (unsigned int)fw_mem[i].size);
-				CNSS_ASSERT(0);
-				return -ENOMEM;
-			}
-
-			if (fw_mem[i].size < mlo_global_mem_size) {
-				cnss_pr_err("WARNING: More MLO global memory is reserved. Reserved size 0x%x, Requested size 0x%x.\n",
-					    mlo_global_mem_size,
-					    (unsigned int)fw_mem[i].size);
-			}
-
-			fw_mem[i].pa = mlo_mem->base;
-			if (!mlo_global_mem[group_id])
-				mlo_global_mem[group_id] =
-					ioremap(fw_mem[i].pa, mlo_mem->size);
-			fw_mem[i].va = mlo_global_mem[group_id];
-
-			if (!mlo_global_mem[group_id]) {
-				cnss_pr_err("WARNING: Host DDR remap failed\n");
-			} else {
-				pci_bus_dev = &pci_priv->pci_dev->dev;
-				chip_id = cnss_get_mlo_chip_id(pci_bus_dev);
-				if (chip_id == MLO_GROUP_MASTER_CHIP)
-					cnss_do_mlo_global_memset(plat_priv,
-							mlo_mem->size);
-			}
+			cnss_mlo_mem_alloc(plat_priv, i);
 			break;
 		default:
 			cnss_pr_err("Ignore mem req type %d\n", fw_mem[i].type);
