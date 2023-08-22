@@ -135,8 +135,8 @@ static int cnss_stats_show_state(struct seq_file *s,
 		case CNSS_RECOVERY_WAIT_FOR_DRIVER:
 			seq_puts(s, "CNSS_RECOVERY_WAIT_FOR_DRIVER");
 			continue;
-		case CNSS_RDDM_IN_PROGRESS:
-			seq_puts(s, "RDDM_IN_PROGRESS");
+		case CNSS_RDDM_DUMP_IN_PROGRESS:
+			seq_puts(s, "RDDM_DUMP_IN_PROGRESS");
 			continue;
 		}
 
@@ -1081,10 +1081,10 @@ bool cnss_wait_for_rddm_complete(struct cnss_plat_data *plat_priv)
 	if (!plat_priv)
 		return true;
 
-	if (test_bit(CNSS_RDDM_IN_PROGRESS, &plat_priv->driver_state)) {
+	if (test_bit(CNSS_RDDM_DUMP_IN_PROGRESS, &plat_priv->driver_state)) {
 		cnss_pr_dbg("Waiting for RDDM collection for device 0x%lx\n",
 			      plat_priv->device_id);
-		while (test_bit(CNSS_RDDM_IN_PROGRESS,
+		while (test_bit(CNSS_RDDM_DUMP_IN_PROGRESS,
 		       &plat_priv->driver_state)) {
 			msleep(RDDM_DONE_DELAY);
 			if (count++ > rddm_done_timeout * 10) {
