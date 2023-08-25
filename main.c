@@ -6630,12 +6630,18 @@ static int cnss_panic_handler(struct notifier_block *this,
 
 	mutex_lock(&rproc_list_mutex);
 	for (i = 0; i < plat_env_index; i++) {
-		cnss_pr_dbg("cnss_panic_handler for plat_env %d\n", i);
-		plat_env[i]->target_asserted = 1;
-		cnss_bus_dev_crash_shutdown(plat_env[i]);
-        }
-	mutex_unlock(&rproc_list_mutex);
+		if (plat_env[i]->target_asserted == 1) {
+			mutex_unlock(&rproc_list_mutex);
+			return 0;
+		}
+	}
 
+	for (i = 0; i < plat_env_index; i++) {
+		cnss_pr_dbg("cnss_panic_handler for plat_env %d\n", i);
+		cnss_bus_dev_crash_shutdown(plat_env[i]);
+	}
+
+	mutex_unlock(&rproc_list_mutex);
 	return 0;
 }
 
