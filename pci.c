@@ -483,10 +483,10 @@ static struct mhi_channel_config cnss_pci_mhi_channels[] = {
 	{
 		.num = 20,
 		.name = "IPCR",
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0))
-		.num_elements = 32,
-#else
+#ifdef CONFIG_TARGET_SDX75
 		.num_elements = 64,
+#else
+		.num_elements = 32,
 #endif
 		.event_ring = 1,
 		.dir = DMA_TO_DEVICE,
@@ -504,10 +504,10 @@ static struct mhi_channel_config cnss_pci_mhi_channels[] = {
 	{
 		.num = 21,
 		.name = "IPCR",
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0))
-		.num_elements = 32,
-#else
+#ifdef CONFIG_TARGET_SDX75
 		.num_elements = 64,
+#else
+		.num_elements = 32,
 #endif
 		.event_ring = 1,
 		.dir = DMA_FROM_DEVICE,
