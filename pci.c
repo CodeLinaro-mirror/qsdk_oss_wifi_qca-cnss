@@ -4789,8 +4789,8 @@ static int cnss_pci_smmu_fault_handler(struct iommu_domain *domain,
 
 	cnss_pr_err("SMMU fault happened with IOVA 0x%lx\n", iova);
 
-	/* IOMMU driver requires non-zero return value to print debug info. */
-	return -EINVAL;
+	/* Return ENOSYS to initiate IOMMU default fault handler */
+	return -ENOSYS;
 }
 
 static int cnss_pci_init_smmu(struct cnss_pci_data *pci_priv)
