@@ -68,6 +68,10 @@ ifeq ($(QCA_CNSS_LINUX_6_1_SUPPORT),y)
 endif
 endif
 
+ifeq ($(CONFIG_TARGET_SDX75),y)
+	ccflags-y += -DCONFIG_TARGET_SDX75
+endif
+
 all:
 	$(MAKE) -C $(KERNEL_SRC) M=$(M) V=1 modules
 
