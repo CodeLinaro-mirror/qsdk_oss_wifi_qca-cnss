@@ -46,6 +46,10 @@ else
 	ccflags-y += -DCONFIG_CNSS2_KERNEL_RPROC_FRAMEWORK
 endif
 
+ifeq ($(CONFIG_TARGET_SDX75),y)
+	ccflags-y += -DCONFIG_TARGET_SDX75
+endif
+
 all:
 	$(MAKE) -C $(KERNEL_SRC) M=$(M) V=1 modules
 

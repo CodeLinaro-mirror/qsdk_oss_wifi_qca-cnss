@@ -7331,7 +7331,7 @@ int cnss_pci_probe_basic(struct pci_dev *pci_dev,
 	}
 #endif
 
-#ifdef CONFIG_CNSS2_KERNEL_MSM
+#if defined(CONFIG_CNSS2_KERNEL_MSM) || defined(CONFIG_TARGET_SDX75)
 	cnss_pr_info("Taking PM vote for %s", plat_priv->device_name);
 	device_set_wakeup_enable(&pci_dev->dev, true);
 	pm_stay_awake(&pci_dev->dev);
