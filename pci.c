@@ -4868,7 +4868,8 @@ static int cnss_pci_init_smmu(struct cnss_pci_data *pci_priv)
 
 	ret = of_property_read_string(of_node, "qcom,iommu-dma",
 				      &iommu_dma_type);
-	if (!ret && !strcmp("fastmap", iommu_dma_type)) {
+	if (!ret && (!strcmp("fastmap", iommu_dma_type) ||
+	    !strcmp("atomic", iommu_dma_type))) {
 		cnss_pr_dbg("Enabling SMMU S1 stage\n");
 		pci_priv->smmu_s1_enable = true;
 		iommu_set_fault_handler(pci_priv->iommu_domain,
