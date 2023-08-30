@@ -1497,6 +1497,53 @@ static const struct file_operations cnss_qmi_record_debug_fops = {
 	.llseek		= seq_lseek,
 };
 
+#if !defined(CONFIG_CNSS2_KERNEL_5_15) && !defined(CONFIG_CNSS2_KERNEL_6_1)
+static ssize_t cnss_pci_write_switch_link(struct file *fp,
+					   const char __user *user_buf,
+					   size_t count, loff_t *off)
+{
+	struct cnss_plat_data *plat_priv =
+		((struct seq_file *)fp->private_data)->private;
+	char buf[1] = {0};
+
+	if (copy_from_user(buf, user_buf, 1))
+		return -EFAULT;
+
+	if (!plat_priv)
+		return -ENODEV;
+
+	plat_priv->switch_link_enable = buf[0] & 1;
+	cnss_modify_link_speed(plat_priv);
+
+	return count;
+}
+
+static int cnss_show_pci_switch_link(struct seq_file *s, void *data)
+{
+	struct cnss_plat_data *plat_priv = s->private;
+
+	if (!plat_priv)
+		seq_puts(s, "plat priv is NULL\n");
+
+	return 0;
+}
+
+static int cnss_pci_read_switch_link(struct inode *inode, struct file *file)
+{
+	return single_open(file, cnss_show_pci_switch_link, inode->i_private);
+}
+
+static const struct file_operations cnss_pci_switch_link_fops = {
+	.read		= seq_read,
+	.write		= cnss_pci_write_switch_link,
+	.release	= single_release,
+	.open		= cnss_pci_read_switch_link,
+	.owner		= THIS_MODULE,
+	.llseek		= seq_lseek,
+
+};
+#endif
+
 static int cnss_mlo_config_debug_show(struct seq_file *s, void *data)
 {
 	cnss_print_mlo_config();
@@ -1536,7 +1583,10 @@ static int cnss_create_debug_only_node(struct cnss_plat_data *plat_priv)
 			    &cnss_hds_support_fops);
 	debugfs_create_file("ce_info", 0600, root_dentry, plat_priv,
 			    &cnss_ce_reg_debug_fops);
-
+#if !defined(CONFIG_CNSS2_KERNEL_5_15) && !defined(CONFIG_CNSS2_KERNEL_6_1)
+	debugfs_create_file("pci_switch_link", 0600, root_dentry, plat_priv,
+			    &cnss_pci_switch_link_fops);
+#endif
 	return 0;
 }
 

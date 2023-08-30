@@ -242,6 +242,14 @@ static DEFINE_SPINLOCK(qdss_lock);
 #define QRTR_NODE_ID_REG_MASK			0x7FFFF
 #define QRTR_NODE_ID_REG		PCIE_PCIE_LOCAL_REG_PCIE_LOCAL_RSV0
 
+#if !defined(CONFIG_CNSS2_KERNEL_5_15) && !defined(CONFIG_CNSS2_KERNEL_6_1)
+#define LINK_CTRL2_REG				0xA0
+#define LINK_CTRL_REG				0x80
+#define LANE_CTRL_REG				0x8C0
+#define PORT_LINK_CTRL_REG			0x710
+#define LANE_SKEW_REG				0x714
+#endif
+
 /* Timeout, to print boot debug logs, in seconds */
 static int boot_debug_timeout = 7;
 module_param(boot_debug_timeout, int, 0644);
@@ -5692,6 +5700,7 @@ static int cnss_pci_enable_bus(struct cnss_pci_data *pci_priv)
 	u16 device_id;
 
 	pci_read_config_word(pci_dev, PCI_DEVICE_ID, &device_id);
+
 	if (device_id != pci_priv->pci_device_id->device)  {
 		cnss_pr_err("PCI device ID mismatch, config ID: 0x%x, probe ID: 0x%x\n",
 			    device_id, pci_priv->pci_device_id->device);
@@ -6866,6 +6875,93 @@ int cnss_pci_of_reserved_mem_device_init(struct cnss_plat_data *plat_priv)
 			    cma_get_name(dev->cma_area));
 
 	return ret;
+}
+#endif
+
+#if !defined(CONFIG_CNSS2_KERNEL_5_15) && !defined(CONFIG_CNSS2_KERNEL_6_1)
+void cnss_modify_link_speed(struct cnss_plat_data *plat_priv)
+{
+	int ret = 0;
+	struct pci_dev *root_port, *pci_dev;
+	struct cnss_pci_data *pci_priv;
+	u32 link_ctrl2_reg_val = 0, link_ctrl_reg_val = 0,
+		lane_ctrl_reg_val = 0, port_link_ctrl_reg_val = 0,
+		lane_skew_reg_val = 0;
+
+	if (!plat_priv->device_id)
+		cnss_pr_info("The device id is NULL\n");
+
+	pci_dev = plat_priv->pci_dev;
+	pci_priv = cnss_get_pci_priv(pci_dev);
+	root_port = pci_find_pcie_root_port(pci_priv->pci_dev);
+
+	if (!root_port) {
+		cnss_pr_info("The root port is NULL\n");
+		return;
+	}
+
+	cnss_pr_info("Switch_link_enable val : %d\n",
+			plat_priv->switch_link_enable);
+
+	if (!plat_priv->switch_link_enable) {
+		cnss_pr_info("Changing to Default settings\n");
+
+		ret = pci_write_config_dword(root_port, LINK_CTRL2_REG,
+			link_ctrl2_reg_val | 0xFFFFFFF3);
+		ret = pci_write_config_dword(root_port, LINK_CTRL_REG,
+			link_ctrl_reg_val | 0x20);
+		ret = pci_write_config_dword(root_port, PORT_LINK_CTRL_REG,
+			0x30120);
+		ret = pci_write_config_dword(root_port, LANE_SKEW_REG,
+			0x08000020);
+		ret = pci_write_config_dword(root_port, LANE_CTRL_REG, 0xc2);
+
+		ret = pci_read_config_dword(root_port, LINK_CTRL2_REG,
+			&link_ctrl2_reg_val);
+		cnss_pr_info("link_ctrl2_reg_val reg val : %x\n",
+			link_ctrl2_reg_val);
+
+		ret = pci_read_config_dword(root_port, LINK_CTRL_REG,
+			&link_ctrl_reg_val);
+		cnss_pr_info("link_ctrl_reg_va reg val : %x\n",
+			link_ctrl_reg_val);
+
+		ret = pci_read_config_dword(root_port, PORT_LINK_CTRL_REG,
+			&port_link_ctrl_reg_val);
+		cnss_pr_info("port_link_ctrl_reg_val val : %x\n",
+			port_link_ctrl_reg_val);
+
+		ret = pci_read_config_dword(root_port, LANE_SKEW_REG,
+			&lane_skew_reg_val);
+		cnss_pr_info("lan_skew_reg_val val : %x\n", lane_skew_reg_val);
+
+		ret = pci_read_config_dword(root_port, LANE_CTRL_REG,
+			&lane_ctrl_reg_val);
+		cnss_pr_info("lane_ctrl_reg_val val : %x\n", lane_ctrl_reg_val);
+
+	} else {
+		cnss_pr_info("Changing to Low Power settings\n");
+
+		ret = pci_write_config_dword(root_port, LINK_CTRL2_REG,
+			link_ctrl2_reg_val & 0xFFFFFFF1);
+		ret = pci_write_config_dword(root_port, LINK_CTRL_REG,
+			link_ctrl_reg_val | 0x20);
+		ret = pci_write_config_dword(root_port, LANE_CTRL_REG, 0xc1);
+
+		ret = pci_read_config_dword(root_port, LINK_CTRL2_REG,
+			&link_ctrl2_reg_val);
+		cnss_pr_info("link_ctrl2_reg_val reg val : %x\n",
+			link_ctrl2_reg_val);
+
+		ret = pci_read_config_dword(root_port, LINK_CTRL_REG,
+			&link_ctrl_reg_val);
+		cnss_pr_info("link_ctrl_reg_va reg val : %x\n",
+			link_ctrl_reg_val);
+
+		ret = pci_read_config_dword(root_port, LANE_CTRL_REG,
+			&lane_ctrl_reg_val);
+		cnss_pr_info("lane_ctrl_reg_val val : %x\n", lane_ctrl_reg_val);
+	}
 }
 #endif
 
