@@ -701,8 +701,10 @@ struct cnss_plat_data {
 	bool mlo_default_cfg;
 	struct cnss_mlo_chip_info *adj_mlo_chip_info[CNSS_MAX_ADJ_CHIPS];
 	enum cnss_recovery_reason reason;
-#ifdef CONFIG_CNSS2_KERNEL_5_15
+#if defined(CONFIG_CNSS2_KERNEL_5_15)
 	struct work_struct crash_work;
+#else
+	u8 switch_link_enable;
 #endif
 	struct completion soc_reset_request_complete;
 };
@@ -768,5 +770,7 @@ const char *cnss_get_fw_path(struct cnss_plat_data *plat_priv);
 int cnss_cal_file_download_to_mem(struct cnss_plat_data *plat_priv,
 				  u32 *cal_file_size);
 struct cnss_plat_data *cnss_get_plat_priv_by_chip_id(int chip_id);
-
+#if !defined(CONFIG_CNSS2_KERNEL_5_15)
+void cnss_modify_link_speed(struct cnss_plat_data *plat_priv);
+#endif
 #endif /* _CNSS_MAIN_H */
