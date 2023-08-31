@@ -3806,7 +3806,8 @@ static int cnss_mlo_mem_alloc(struct cnss_plat_data *plat_priv, int index)
 		else
 			chip_id = cnss_get_mlo_chip_id(dev);
 
-		if (chip_id == MLO_GROUP_MASTER_CHIP)
+		if (chip_id == MLO_GROUP_MASTER_CHIP &&
+			!plat_priv->standby_mode)
 			cnss_do_mlo_global_memset(plat_priv, fw_mem[i].size);
 	}
 

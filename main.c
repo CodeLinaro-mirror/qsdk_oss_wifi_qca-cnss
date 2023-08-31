@@ -414,6 +414,19 @@ void cnss_set_recovery_mode(struct device *dev, u8 recovery_mode)
 }
 EXPORT_SYMBOL(cnss_set_recovery_mode);
 
+void cnss_set_standby_mode(struct device *dev, u8 standby_mode)
+{
+	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
+
+	if (!plat_priv)
+		return;
+
+	cnss_pr_info("The standby mode is %d\n", standby_mode);
+	plat_priv->standby_mode = standby_mode;
+
+}
+EXPORT_SYMBOL(cnss_set_standby_mode);
+
 #if defined(CNSS_LOWMEM_PROFILE) && defined(QCA_CNSS_QCA5332) && \
 	defined(CONFIG_CNSS2_KERNEL_IPQ)
 /*
@@ -4214,7 +4227,8 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 		if (ramdump_enabled)
 			cnss_bus_dev_ramdump(plat_priv);
 		if (plat_priv->mlo_support && group_info != NULL &&
-		    plat_priv->recovery_mode != MODE_1_RECOVERY_MODE) {
+		    plat_priv->recovery_mode != MODE_1_RECOVERY_MODE &&
+		    !plat_priv->standby_mode) {
 			if (plat_priv->crash_type == CNSS_ROOTPD_CRASH) {
 				for (userpd = 0; userpd < plat_env_index; userpd++)
 					cnss_handle_usrpd_in_rpd_crash(plat_env[userpd]);
