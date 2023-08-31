@@ -366,6 +366,19 @@ void cnss_set_recovery_mode(struct device *dev, u8 recovery_mode)
 }
 EXPORT_SYMBOL(cnss_set_recovery_mode);
 
+void cnss_set_standby_mode(struct device *dev, u8 standby_mode)
+{
+	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
+
+	if (!plat_priv)
+		return;
+
+	cnss_pr_info("The standby mode is %d\n", standby_mode);
+	plat_priv->standby_mode = standby_mode;
+
+}
+EXPORT_SYMBOL(cnss_set_standby_mode);
+
 struct cnss_plat_data *cnss_get_plat_priv_by_device_id(int id)
 {
 	int i;
@@ -3701,7 +3714,8 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 		if (ramdump_enabled)
 			cnss_bus_dev_ramdump(plat_priv);
 		if (plat_priv->mlo_support && group_info != NULL &&
-		    plat_priv->recovery_mode != MODE_1_RECOVERY_MODE) {
+		    plat_priv->recovery_mode != MODE_1_RECOVERY_MODE &&
+		    !plat_priv->standby_mode) {
 			if (group_info->num_chips != group_info->rddm_dump_all)
 				return 0;
 		}
