@@ -483,10 +483,10 @@ static struct mhi_channel_config cnss_pci_mhi_channels[] = {
 	{
 		.num = 20,
 		.name = "IPCR",
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0))
-		.num_elements = 32,
-#else
+#ifdef CONFIG_TARGET_SDX75
 		.num_elements = 64,
+#else
+		.num_elements = 32,
 #endif
 		.event_ring = 1,
 		.dir = DMA_TO_DEVICE,
@@ -504,10 +504,10 @@ static struct mhi_channel_config cnss_pci_mhi_channels[] = {
 	{
 		.num = 21,
 		.name = "IPCR",
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0))
-		.num_elements = 32,
-#else
+#ifdef CONFIG_TARGET_SDX75
 		.num_elements = 64,
+#else
+		.num_elements = 32,
 #endif
 		.event_ring = 1,
 		.dir = DMA_FROM_DEVICE,
@@ -557,6 +557,9 @@ static struct mhi_controller_config cnss_pci_mhi_config = {
 	.ch_cfg = cnss_pci_mhi_channels,
 	.num_events = ARRAY_SIZE(cnss_pci_mhi_events),
 	.event_cfg = cnss_pci_mhi_events,
+#ifdef CONFIG_TARGET_SDX75
+	.rddm_timeout_us = 400000,
+#endif
 };
 #endif
 
@@ -7328,7 +7331,7 @@ int cnss_pci_probe_basic(struct pci_dev *pci_dev,
 	}
 #endif
 
-#ifdef CONFIG_CNSS2_KERNEL_MSM
+#if defined(CONFIG_CNSS2_KERNEL_MSM) || defined(CONFIG_TARGET_SDX75)
 	cnss_pr_info("Taking PM vote for %s", plat_priv->device_name);
 	device_set_wakeup_enable(&pci_dev->dev, true);
 	pm_stay_awake(&pci_dev->dev);
