@@ -805,7 +805,6 @@ static int cnss_hif_shutdown(struct cnss_plat_data *plat_priv)
 	if (ret != 0) {
 		cnss_pr_err("%s: cnss_bus_dev_shutdown failed(%d)\n", __func__,
 			    ret);
-		CNSS_ASSERT(0);
 	}
 	cnss_hif_notifier(plat_priv, CNSS_AFTER_SHUTDOWN);
 
