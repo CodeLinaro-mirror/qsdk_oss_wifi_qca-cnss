@@ -2973,7 +2973,12 @@ int cnss_pci_register_driver_hdlr(struct cnss_pci_data *pci_priv,
 
 int cnss_pci_unregister_driver_hdlr(struct cnss_pci_data *pci_priv)
 {
-	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
+	struct cnss_plat_data *plat_priv;
+
+	if (!pci_priv)
+		return -EINVAL;
+
+	plat_priv = pci_priv->plat_priv;
 
 	set_bit(CNSS_DRIVER_UNLOADING, &plat_priv->driver_state);
 	cnss_pci_dev_shutdown(pci_priv);
@@ -7001,6 +7006,7 @@ static void cnss_pci_unregister_mhi(struct cnss_pci_data *pci_priv)
 	mhi_unregister_controller(mhi_ctrl);
 #endif
 	kfree(mhi_ctrl->irq);
+	mhi_ctrl->irq = NULL;
 }
 
 static void cnss_pci_free_mhi_controller(struct cnss_pci_data *pci_priv)
