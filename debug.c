@@ -18,7 +18,11 @@
 #include "main.h"
 #include "debug.h"
 #include "pci.h"
+
 #define CNSS_IPC_LOG_PAGES		32
+#define CNSS_DEBUG_DIR			"qca-cnss"
+#define CNSS_IPC_LOG_MODNAME		"qca-cnss"
+#define CNSS_IPC_LOG_LONG_MODNAME	"qca-cnss-long"
 
 #if IS_ENABLED(CONFIG_IPC_LOGGING)
 void *cnss_ipc_log_context;
@@ -28,7 +32,6 @@ extern void cnss_dump_qmi_history(void);
 struct dentry *cnss_root_dentry = NULL;
 
 int log_level = CNSS_LOG_LEVEL_INFO;
-EXPORT_SYMBOL(log_level);
 module_param(log_level, int, 0644);
 MODULE_PARM_DESC(log_level, "CNSS2 Module Log Level");
 
@@ -1004,7 +1007,7 @@ int cnss_debugfs_create(struct cnss_plat_data *plat_priv)
 	struct dentry *root_dentry = NULL;
 
 	if (!cnss_root_dentry) {
-		cnss_root_dentry = debugfs_create_dir("cnss", 0);
+		cnss_root_dentry = debugfs_create_dir(CNSS_DEBUG_DIR, 0);
 		if (IS_ERR(cnss_root_dentry)) {
 			ret = PTR_ERR(cnss_root_dentry);
 			cnss_pr_err("Unable to create debugfs %d\n", ret);
@@ -1053,14 +1056,14 @@ int cnss_debug_init(void)
 	struct cnss_plat_data *plat_priv = NULL;
 
 	cnss_ipc_log_context = ipc_log_context_create(CNSS_IPC_LOG_PAGES,
-						      "cnss", 0);
+						      CNSS_IPC_LOG_MODNAME, 0);
 	if (!cnss_ipc_log_context) {
 		cnss_pr_info("IPC Logging is disabled!\n");
 		return -EINVAL;
 	}
 
 	cnss_ipc_log_long_context = ipc_log_context_create(CNSS_IPC_LOG_PAGES,
-							   "cnss-long", 0);
+							   CNSS_IPC_LOG_LONG_MODNAME, 0);
 	if (!cnss_ipc_log_long_context) {
 		cnss_pr_info("IPC long logging is disabled!\n");
 		ipc_log_context_destroy(cnss_ipc_log_context);

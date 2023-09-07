@@ -349,6 +349,9 @@ static DEFINE_SPINLOCK(qdss_lock);
 #define QRTR_NODE_ID_REG_MASK			0x7FFFF
 #define QRTR_NODE_ID_REG		PCIE_PCIE_LOCAL_REG_PCIE_LOCAL_RSV0
 
+#define CNSS_PCI_DRIVER_NAME			"qca_cnss_pci"
+#define CNSS_MHI_IPC_NAME_PREFIX		"qca-cnss-mhi"
+
 /* Timeout, to print boot debug logs, in seconds */
 static int boot_debug_timeout = 7;
 module_param(boot_debug_timeout, int, 0644);
@@ -6963,7 +6966,7 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 
 #ifdef CONFIG_CNSS2_KERNEL_MSM
 	snprintf(cnss_mhi_log_buf_name, sizeof(cnss_mhi_log_buf_name),
-		 "cnss-mhi_%x", plat_priv->wlfw_service_instance_id);
+		 CNSS_MHI_IPC_NAME_PREFIX"_%x", plat_priv->wlfw_service_instance_id);
 
 	mhi_ctrl->log_buf = ipc_log_context_create(CNSS_IPC_LOG_PAGES,
 					(const char *)cnss_mhi_log_buf_name, 0);
@@ -7421,7 +7424,7 @@ void cnss_pci_remove_basic(struct pci_dev *pci_dev)
 }
 
 struct pci_driver cnss_pci_driver = {
-	.name     = "cnss_pci",
+	.name     = CNSS_PCI_DRIVER_NAME,
 	.id_table = cnss_pci_id_table,
 	.probe    = cnss_pci_probe_basic,
 	.remove   = cnss_pci_remove_basic,
