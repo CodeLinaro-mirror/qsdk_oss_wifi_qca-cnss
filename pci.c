@@ -2122,8 +2122,12 @@ int cnss_pci_register_driver_hdlr(struct cnss_pci_data *pci_priv,
 
 int cnss_pci_unregister_driver_hdlr(struct cnss_pci_data *pci_priv)
 {
-	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
+	struct cnss_plat_data *plat_priv;
 
+	if (!pci_priv)
+		return -EINVAL;
+
+	plat_priv = pci_priv->plat_priv;
 	set_bit(CNSS_DRIVER_UNLOADING, &plat_priv->driver_state);
 	cnss_pci_dev_shutdown(pci_priv);
 	pci_priv->driver_ops = NULL;
@@ -4603,6 +4607,7 @@ static void cnss_pci_unregister_mhi(struct cnss_pci_data *pci_priv)
 	mhi_unregister_mhi_controller(mhi_ctrl);
 	ipc_log_context_destroy(mhi_ctrl->log_buf);
 	kfree(mhi_ctrl->irq);
+	mhi_ctrl->irq = NULL;
 }
 
 #if IS_ENABLED(CONFIG_ARCH_QCOM)
@@ -4777,6 +4782,9 @@ unregister_subsys:
 	devm_kfree(&pci_dev->dev, pci_priv);
 	cnss_set_pci_priv(pci_dev, NULL);
 	plat_priv->bus_priv = NULL;
+
+	kfree(pci_priv->default_state);
+	pci_priv->default_state = NULL;
 out:
 	return ret;
 }
@@ -4817,6 +4825,12 @@ void cnss_pci_remove(struct pci_dev *pci_dev)
 		cnss_pci_deinit_smmu(pci_priv);
 #endif
 	cnss_unregister_ramdump(plat_priv);
+
+	kfree(pci_priv->default_state);
+	pci_priv->default_state = NULL;
+
+	mhi_free_controller(pci_priv->mhi_ctrl);
+	pci_priv->mhi_ctrl = NULL;
 
 	cnss_pr_info("Pci device removed\n");
 }
