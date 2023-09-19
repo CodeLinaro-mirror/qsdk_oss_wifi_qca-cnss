@@ -55,6 +55,8 @@
 #define CNSS_FW_TYPE_MASK		0xF000
 #define CNSS_FW_TYPE_SHIFT		12
 
+#define CNSS_PCI_SWITCH_LINK_MASK      GENMASK(1, 0)
+
 #if (KERNEL_VERSION(5, 15, 0) <= LINUX_VERSION_CODE)
 typedef void ramdump_device_t;
 #else

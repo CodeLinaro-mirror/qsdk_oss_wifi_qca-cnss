@@ -242,14 +242,6 @@ static DEFINE_SPINLOCK(qdss_lock);
 #define QRTR_NODE_ID_REG_MASK			0x7FFFF
 #define QRTR_NODE_ID_REG		PCIE_PCIE_LOCAL_REG_PCIE_LOCAL_RSV0
 
-#if !defined(CONFIG_CNSS2_KERNEL_5_15) && !defined(CONFIG_CNSS2_KERNEL_6_1)
-#define LINK_CTRL2_REG				0xA0
-#define LINK_CTRL_REG				0x80
-#define LANE_CTRL_REG				0x8C0
-#define PORT_LINK_CTRL_REG			0x710
-#define LANE_SKEW_REG				0x714
-#endif
-
 /* Timeout, to print boot debug logs, in seconds */
 static int boot_debug_timeout = 7;
 module_param(boot_debug_timeout, int, 0644);
@@ -6886,90 +6878,56 @@ int cnss_pci_of_reserved_mem_device_init(struct cnss_plat_data *plat_priv)
 #endif
 
 #if !defined(CONFIG_CNSS2_KERNEL_5_15) && !defined(CONFIG_CNSS2_KERNEL_6_1)
-void cnss_modify_link_speed(struct cnss_plat_data *plat_priv)
+void cnss_set_pci_link_speed_width(struct device *dev, u16 link_speed,
+					u16 link_width)
 {
-	int ret = 0;
+	struct cnss_plat_data *plat_priv;
 	struct pci_dev *root_port, *pci_dev;
 	struct cnss_pci_data *pci_priv;
-	u32 link_ctrl2_reg_val = 0, link_ctrl_reg_val = 0,
-		lane_ctrl_reg_val = 0, port_link_ctrl_reg_val = 0,
-		lane_skew_reg_val = 0;
+	int ret = 0;
 
-	if (!plat_priv->device_id)
-		cnss_pr_info("The device id is NULL\n");
+	plat_priv = cnss_bus_dev_to_plat_priv(dev);
+	if (!plat_priv) {
+		cnss_pr_err("The plat_priv is NULL\n");
+		return;
+	}
 
 	pci_dev = plat_priv->pci_dev;
-	pci_priv = cnss_get_pci_priv(pci_dev);
-	root_port = pci_find_pcie_root_port(pci_priv->pci_dev);
+	if (!pci_dev) {
+		cnss_pr_err("Pci dev is NULL\n");
+		return;
+	}
 
+	pci_priv = cnss_get_pci_priv(pci_dev);
+	if (!pci_priv) {
+		cnss_pr_err("Pci priv is NULL\n");
+		return;
+	}
+
+	root_port = pci_find_pcie_root_port(pci_priv->pci_dev);
 	if (!root_port) {
 		cnss_pr_info("The root port is NULL\n");
 		return;
 	}
 
-	cnss_pr_info("Switch_link_enable val : %d\n",
-			plat_priv->switch_link_enable);
+	cnss_pr_dbg("Selected link speed is %d, link_width is %d\n",
+			link_speed, link_width);
 
-	if (!plat_priv->switch_link_enable) {
-		cnss_pr_info("Changing to Default settings\n");
+	ret = pcie_set_link_speed(root_port, link_speed);
+	if (ret)
+		cnss_pr_err("%s Failed to set link speed %d\n", __func__, ret);
+	else
+		cnss_pr_info("%s The PCI Generation is %d\n", __func__,
+				link_speed);
 
-		ret = pci_write_config_dword(root_port, LINK_CTRL2_REG,
-			link_ctrl2_reg_val | 0xFFFFFFF3);
-		ret = pci_write_config_dword(root_port, LINK_CTRL_REG,
-			link_ctrl_reg_val | 0x20);
-		ret = pci_write_config_dword(root_port, PORT_LINK_CTRL_REG,
-			0x30120);
-		ret = pci_write_config_dword(root_port, LANE_SKEW_REG,
-			0x08000020);
-		ret = pci_write_config_dword(root_port, LANE_CTRL_REG, 0xc2);
-
-		ret = pci_read_config_dword(root_port, LINK_CTRL2_REG,
-			&link_ctrl2_reg_val);
-		cnss_pr_info("link_ctrl2_reg_val reg val : %x\n",
-			link_ctrl2_reg_val);
-
-		ret = pci_read_config_dword(root_port, LINK_CTRL_REG,
-			&link_ctrl_reg_val);
-		cnss_pr_info("link_ctrl_reg_va reg val : %x\n",
-			link_ctrl_reg_val);
-
-		ret = pci_read_config_dword(root_port, PORT_LINK_CTRL_REG,
-			&port_link_ctrl_reg_val);
-		cnss_pr_info("port_link_ctrl_reg_val val : %x\n",
-			port_link_ctrl_reg_val);
-
-		ret = pci_read_config_dword(root_port, LANE_SKEW_REG,
-			&lane_skew_reg_val);
-		cnss_pr_info("lan_skew_reg_val val : %x\n", lane_skew_reg_val);
-
-		ret = pci_read_config_dword(root_port, LANE_CTRL_REG,
-			&lane_ctrl_reg_val);
-		cnss_pr_info("lane_ctrl_reg_val val : %x\n", lane_ctrl_reg_val);
-
-	} else {
-		cnss_pr_info("Changing to Low Power settings\n");
-
-		ret = pci_write_config_dword(root_port, LINK_CTRL2_REG,
-			link_ctrl2_reg_val & 0xFFFFFFF1);
-		ret = pci_write_config_dword(root_port, LINK_CTRL_REG,
-			link_ctrl_reg_val | 0x20);
-		ret = pci_write_config_dword(root_port, LANE_CTRL_REG, 0xc1);
-
-		ret = pci_read_config_dword(root_port, LINK_CTRL2_REG,
-			&link_ctrl2_reg_val);
-		cnss_pr_info("link_ctrl2_reg_val reg val : %x\n",
-			link_ctrl2_reg_val);
-
-		ret = pci_read_config_dword(root_port, LINK_CTRL_REG,
-			&link_ctrl_reg_val);
-		cnss_pr_info("link_ctrl_reg_va reg val : %x\n",
-			link_ctrl_reg_val);
-
-		ret = pci_read_config_dword(root_port, LANE_CTRL_REG,
-			&lane_ctrl_reg_val);
-		cnss_pr_info("lane_ctrl_reg_val val : %x\n", lane_ctrl_reg_val);
-	}
+	ret = pcie_set_link_width(root_port, link_width);
+	if (ret)
+		cnss_pr_err("%s Failed to set link width %d\n", __func__, ret);
+	else
+		cnss_pr_info("%s The PCI link width is %d\n", __func__,
+				link_width);
 }
+EXPORT_SYMBOL(cnss_set_pci_link_speed_width);
 #endif
 
 int cnss_pci_probe(struct pci_dev *pci_dev,
