@@ -3834,6 +3834,11 @@ int cnss_ahb_alloc_fw_mem(struct cnss_plat_data *plat_priv)
 	struct device_node *mem_region_node = NULL;
 	phandle mem_region_phandle;
 	struct resource m3_dump;
+#ifdef CONFIG_CNSS2_KERNEL_6_1
+	const char *mem_phandle_node_name = "memory-region";
+#else
+	const char *mem_phandle_node_name = "mem-region";
+#endif
 
 	dev = &plat_priv->plat_dev->dev;
 
@@ -3897,7 +3902,8 @@ int cnss_ahb_alloc_fw_mem(struct cnss_plat_data *plat_priv)
 			idx++;
 			break;
 		case HOST_DDR_REGION_TYPE:
-			if (of_property_read_u32(dev->of_node, "mem-region",
+			if (of_property_read_u32(dev->of_node,
+						 mem_phandle_node_name,
 						 &mem_region_phandle)) {
 				cnss_pr_err("could not get mem_region_phandle\n");
 				CNSS_ASSERT(0);
@@ -3914,7 +3920,8 @@ int cnss_ahb_alloc_fw_mem(struct cnss_plat_data *plat_priv)
 
 			if (of_property_read_u32_array(mem_region_node, "reg",
 						       reg, ARRAY_SIZE(reg))) {
-				cnss_pr_err("Error: mem-region node is not assigned\n");
+				cnss_pr_err("Error: %s node is not assigned\n",
+					    mem_phandle_node_name);
 				CNSS_ASSERT(0);
 				return -ENOMEM;
 			}
@@ -4524,11 +4531,24 @@ void cnss_pci_free_qdss_mem(struct cnss_plat_data *plat_priv)
 
 void cnss_pci_free_fw_mem(struct cnss_plat_data *plat_priv)
 {
-	struct cnss_pci_data *pci_priv = plat_priv->bus_priv;
-	struct cnss_fw_mem *fw_mem = plat_priv->fw_mem;
-	struct device *dev = &pci_priv->pci_dev->dev;
+	struct cnss_pci_data *pci_priv = NULL;
+	struct cnss_fw_mem *fw_mem = NULL;
+	struct device *dev = NULL;
 	int i;
 
+	if (!plat_priv) {
+		cnss_pr_err("%s: plat_priv is NULL\n", __func__);
+		return;
+	}
+
+	fw_mem = plat_priv->fw_mem;
+	pci_priv = plat_priv->bus_priv;
+	if (!pci_priv) {
+		cnss_pr_err("%s: pci_priv is NULL\n", __func__);
+		return;
+	}
+
+	dev = &pci_priv->pci_dev->dev;
 	if (plat_priv->dma_alloc_supported) {
 		for (i = 0; i < plat_priv->fw_mem_seg_len; i++) {
 			if (fw_mem[i].va && fw_mem[i].size) {
@@ -7240,10 +7260,10 @@ static int cnss_get_qrtr_instance_id(struct pci_dev *pci_dev, u32 *node_id)
 
 	switch (pci_dev->device) {
 	case QCN9000_DEVICE_ID:
-		*node_id = *node_id + (QCN9000_0 - 1);
+		*node_id = *node_id + QCN9000_0;
 		break;
 	case QCN9224_DEVICE_ID:
-		*node_id = *node_id + (QCN9224_0 - 1);
+		*node_id = *node_id + QCN9224_0;
 		break;
 	default:
 		cnss_pr_dbg("Invalid device id 0x%lx",

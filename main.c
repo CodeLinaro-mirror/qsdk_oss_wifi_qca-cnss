@@ -289,14 +289,17 @@ static int cnss_get_event(unsigned long subsys_event)
 	int event = -EINVAL;
 
 	switch (subsys_event) {
+	case QCOM_SSR_BEFORE_POWERUP:
+		event = CNSS_BEFORE_POWERUP;
+		break;
+	case QCOM_SSR_AFTER_POWERUP:
+		event = CNSS_AFTER_POWERUP;
+		break;
 	case QCOM_SSR_BEFORE_SHUTDOWN:
 		event = CNSS_BEFORE_SHUTDOWN;
 		break;
 	case QCOM_SSR_AFTER_SHUTDOWN:
 		event = CNSS_AFTER_SHUTDOWN;
-		break;
-	case QCOM_SSR_BEFORE_POWERUP:
-		event = CNSS_BEFORE_POWERUP;
 		break;
 	case QCOM_SSR_NOTIFY_CRASH:
 		event = CNSS_PREPARE_FOR_FATAL_SHUTDOWN;
@@ -305,6 +308,7 @@ static int cnss_get_event(unsigned long subsys_event)
 		event = subsys_event;
 		break;
 	}
+
 	return event;
 }
 #else
@@ -2937,10 +2941,10 @@ static int cnss_get_node_id(struct platform_device *plat_dev,
 
 	switch (device_id) {
 	case QCN9000_DEVICE_ID:
-		*node_id = *node_id + (QCN9000_0 - 1);
+		*node_id = *node_id + QCN9000_0;
 		break;
 	case QCN9224_DEVICE_ID:
-		*node_id = *node_id + (QCN9224_0 - 1);
+		*node_id = *node_id + QCN9224_0;
 		break;
 	default:
 		cnss_pr_dbg("Invalid device id 0x%lx", device_id);

@@ -481,7 +481,7 @@ static int qcom_qcn9224_probe(struct platform_device *pdev)
 
 #ifdef CONFIG_CNSS2_KERNEL_6_1
 	of_property_read_u32(pdev->dev.of_node, "node_id", &node_id);
-	node_id = node_id + (QCN9224_0 - 1);
+	node_id = node_id + QCN9224_0;
 #else
 	of_property_read_u32(pdev->dev.of_node, "qrtr_node_id", &node_id);
 #endif
