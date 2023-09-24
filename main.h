@@ -53,6 +53,8 @@
 #define CNSS_FW_TYPE_MASK		0xF000
 #define CNSS_FW_TYPE_SHIFT		12
 
+#define CNSS_PCI_SWITCH_LINK_MASK      GENMASK(1, 0)
+
 #ifdef CONFIG_CNSS2_KERNEL_5_15
 typedef void ramdump_device_t;
 #else

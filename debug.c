@@ -952,42 +952,59 @@ static ssize_t cnss_pci_write_switch_link(struct file *fp,
 					   const char __user *user_buf,
 					   size_t count, loff_t *off)
 {
-	struct cnss_plat_data *plat_priv =
-		((struct seq_file *)fp->private_data)->private;
-	char buf[1] = {0};
+	struct cnss_plat_data *plat_priv = fp->private_data;
+	u16 link_speed = 0, link_width = 0, pci_set_val = 0;
 
-	if (copy_from_user(buf, user_buf, 1))
+	if (kstrtou16_from_user(user_buf, count, 0, &pci_set_val))
 		return -EFAULT;
 
 	if (!plat_priv)
 		return -ENODEV;
 
-	plat_priv->switch_link_enable = buf[0] & 1;
-	cnss_modify_link_speed(plat_priv);
+	/* The first nibble in a byte represents both pci link speed
+	 * width. The first 2[0,1] bits in a nibble represent link speed.
+	 * The next 2[2,3] bits represents link width.
+	 * e.g: echo 0xB > pci_switch_link will set the PCI Generation
+	 * to 3 and PCI lane width to 2. The possible values are,
+	 * 1 <= Link speed <= 3
+	 * 1 <= Link width <= 2
+	 */
+	link_speed = pci_set_val & CNSS_PCI_SWITCH_LINK_MASK;
+
+	link_width = (pci_set_val >> 2) & CNSS_PCI_SWITCH_LINK_MASK;
+
+	if (!link_speed || !link_width) {
+		cnss_pr_info("Invalid data\n");
+		return -EFAULT;
+	}
+
+	cnss_set_pci_link_speed_width(&plat_priv->plat_dev->dev, link_speed,
+				link_width);
 
 	return count;
 }
 
-static int cnss_show_pci_switch_link(struct seq_file *s, void *data)
+static ssize_t cnss_pci_read_switch_link(struct file *file,
+					char __user *user_buf,
+					size_t count, loff_t *ppos)
 {
-	struct cnss_plat_data *plat_priv = s->private;
+	const char buf[] =
+	"PCI SWITCH LINk USAGE :\n"
+	"The first 2[0,1] bits in a nibble represent link speed.\n"
+	"The next 2[2,3] bits represents link width.\n"
+	"echo 0xB > pci_switch_link ,will set the PCI Generation\n"
+	"to 3 and PCI lane width to 2. The possible values are,\n"
+	"1 <= Link speed <= 3\n"
+	"1 <= Link width <= 2\n";
 
-	if (!plat_priv)
-		seq_puts(s, "plat priv is NULL\n");
-
-	return 0;
-}
-
-static int cnss_pci_read_switch_link(struct inode *inode, struct file *file)
-{
-	return single_open(file, cnss_show_pci_switch_link, inode->i_private);
+	return simple_read_from_buffer(user_buf, count, ppos, buf, strlen(buf));
 }
 
 static const struct file_operations cnss_pci_switch_link_fops = {
-	.read		= seq_read,
+	.read		= cnss_pci_read_switch_link,
 	.write		= cnss_pci_write_switch_link,
 	.release	= single_release,
-	.open		= cnss_pci_read_switch_link,
+	.open		= simple_open,
 	.owner		= THIS_MODULE,
 	.llseek		= seq_lseek,
 
