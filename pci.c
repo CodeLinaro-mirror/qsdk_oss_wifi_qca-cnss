@@ -6928,6 +6928,12 @@ void cnss_set_pci_link_speed_width(struct device *dev, u16 link_speed,
 				link_width);
 }
 EXPORT_SYMBOL(cnss_set_pci_link_speed_width);
+#else
+void cnss_set_pci_link_speed_width(struct device *dev, u16 link_speed,
+					u16 link_width)
+{
+}
+EXPORT_SYMBOL(cnss_set_pci_link_speed_width);
 #endif
 
 int cnss_pci_probe(struct pci_dev *pci_dev,

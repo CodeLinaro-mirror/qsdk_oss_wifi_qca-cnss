@@ -540,13 +540,11 @@ static inline void cnss_set_standby_mode(struct device *dev, u8 standby_mode)
 {
 	return -EINVAL;
 }
-#if !defined(CONFIG_CNSS2_KERNEL_5_15) && !defined(CONFIG_CNSS2_KERNEL_6_1)
 static inline void cnss_set_pci_link_speed_width(struct device *dev,
 						u16 link_speed, u16 link_width);
 {
 	return -EINVAL;
 }
-#endif
 #else
 extern int cnss_wlan_register_driver_ops(struct cnss_wlan_driver *driver);
 extern int cnss_wlan_probe_driver(void);
@@ -665,9 +663,7 @@ bool cnss_get_mlo_group_info(uint8_t grp_id,
 int cnss_get_mlo_group_id(struct device *dev);
 void cnss_set_recovery_mode(struct device *dev, u8 recovery_mode);
 void cnss_set_standby_mode(struct device *dev, u8 standby_mode);
-#if !defined(CONFIG_CNSS2_KERNEL_5_15) && !defined(CONFIG_CNSS2_KERNEL_6_1)
 void cnss_set_pci_link_speed_width(struct device *dev, u16 link_speed,
 					u16 link_width);
-#endif
 #endif
 #endif /* _NET_CNSS2_H */
