@@ -1422,6 +1422,119 @@ static const struct file_operations cnss_dynamic_feature_fops = {
 	.llseek = seq_lseek,
 };
 
+#ifdef CONFIG_CNSS2_KERNEL_6_1
+static ssize_t cnss_platform_features_write(struct file *fp,
+				      const char __user *user_buf,
+				      size_t count, loff_t *off)
+{
+	struct cnss_plat_data *plat_priv =
+		((struct seq_file *)fp->private_data)->private;
+	u32 val;
+	char buf[64];
+	char *sptr, *token;
+	char *cmd;
+	unsigned int len = 0;
+	const char *delim = " ";
+
+	if (!plat_priv)
+		return -ENODEV;
+
+	len = min(count, sizeof(buf) - 1);
+	if (copy_from_user(buf, user_buf, len))
+		return -EFAULT;
+
+	buf[len] = '\0';
+	sptr = buf;
+
+	token = strsep(&sptr, delim);
+	if (!token)
+		return -EINVAL;
+	if (!sptr)
+		return -EINVAL;
+	cmd = token;
+
+	token = strsep(&sptr, delim);
+	if (!token)
+		return -EINVAL;
+	if (kstrtou32(token, 0, &val))
+		return -EINVAL;
+
+	if (strcmp(cmd, "enable_cold_boot_support") == 0) {
+		plat_priv->cold_boot_support = val;
+		cnss_pr_info("Setting cold_boot_support=%u for instance_id 0x%x\n",
+			     val, plat_priv->wlfw_service_instance_id);
+	} else if (strcmp(cmd, "enable_qdss_tracing") == 0) {
+		plat_priv->qdss_support = val;
+		cnss_pr_info("Setting qdss_support=%u for instance_id 0x%x\n",
+			     val, plat_priv->wlfw_service_instance_id);
+	} else if (strcmp(cmd, "enable_hds_support") == 0) {
+		plat_priv->hds_support = val;
+		cnss_pr_info("Setting hds_support=%u for instance_id 0x%x\n",
+			     val, plat_priv->wlfw_service_instance_id);
+	} else if (strcmp(cmd, "enable_regdb_support") == 0) {
+		plat_priv->regdb_support = val;
+		cnss_pr_info("Setting regdb_support=%u for instance_id 0x%x\n",
+			     val, plat_priv->wlfw_service_instance_id);
+	} else if (strcmp(cmd, "trace_qdss") == 0) {
+		switch (val) {
+		case CNSS_QDSS_STOP:
+			if (cnss_check_be_target(plat_priv))
+				val = QMI_WLANFW_QDSS_STOP_ALL_TRACE_BE;
+			else
+				val = QMI_WLANFW_QDSS_STOP_ALL_TRACE_LI;
+
+			cnss_wlfw_send_qdss_trace_mode_req(plat_priv,
+						QMI_WLFW_QDSS_TRACE_OFF_V01,
+						val);
+			break;
+		case CNSS_QDSS_START:
+			plat_priv->qdss_etr_sg_mode = 0;
+			cnss_wlfw_qdss_dnld_send_sync(plat_priv);
+			break;
+		default:
+			cnss_pr_err("Invalid arg. for %s\n",
+				    plat_priv->device_name);
+			break;
+		}
+	} else
+		return -EINVAL;
+
+	return count;
+}
+
+static int cnss_platform_features_show(struct seq_file *s, void *data)
+{
+	struct cnss_plat_data *plat_priv = s->private;
+
+	seq_puts(s, "\nCurrent value:\n");
+
+	seq_printf(s, "coldboot_support: %s\n",
+		   plat_priv->cold_boot_support ? "enabled" : "disabled");
+	seq_printf(s, "qdss_tracing: %s\n",
+		   plat_priv->qdss_support ? "enabled" : "disabled");
+	seq_printf(s, "hds_support: %s\n",
+		   plat_priv->hds_support ? "enabled" : "disabled");
+	seq_printf(s, "regdb_support: %s\n",
+		   plat_priv->regdb_support ? "enabled" : "disabled");
+
+	return 0;
+}
+
+static int cnss_platform_features_open(struct inode *inode,
+				 struct file *file)
+{
+	return single_open(file, cnss_platform_features_show,
+			   inode->i_private);
+}
+
+static const struct file_operations cnss_platform_features_fops = {
+	.read = seq_read,
+	.write = cnss_platform_features_write,
+	.open = cnss_platform_features_open,
+	.owner = THIS_MODULE,
+	.llseek = seq_lseek,
+};
+#else
 static ssize_t cnss_hds_support_write(struct file *fp,
 				      const char __user *user_buf,
 				      size_t count, loff_t *off)
@@ -1464,6 +1577,7 @@ static const struct file_operations cnss_hds_support_fops = {
 	.owner = THIS_MODULE,
 	.llseek = seq_lseek,
 };
+#endif
 
 static ssize_t cnss_qmi_record_debug_write(struct file *fp,
 					   const char __user *user_buf,
@@ -1596,8 +1710,13 @@ static int cnss_create_debug_only_node(struct cnss_plat_data *plat_priv)
 			    &cnss_control_params_debug_fops);
 	debugfs_create_file("dynamic_feature", 0600, root_dentry, plat_priv,
 			    &cnss_dynamic_feature_fops);
+#ifdef CONFIG_CNSS2_KERNEL_6_1
+	debugfs_create_file("platform_features", 0600, root_dentry, plat_priv,
+			    &cnss_platform_features_fops);
+#else
 	debugfs_create_file("hds_support", 0600, root_dentry, plat_priv,
 			    &cnss_hds_support_fops);
+#endif
 	debugfs_create_file("ce_info", 0600, root_dentry, plat_priv,
 			    &cnss_ce_reg_debug_fops);
 #if !defined(CONFIG_CNSS2_KERNEL_5_15) && !defined(CONFIG_CNSS2_KERNEL_6_1)
