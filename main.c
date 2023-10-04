@@ -730,6 +730,7 @@ int cnss_get_platform_cap(struct device *dev, struct cnss_platform_cap *cap)
 }
 EXPORT_SYMBOL(cnss_get_platform_cap);
 
+#ifndef CONFIG_CNSS2_KERNEL_6_1
 static int cnss_cal_db_mem_update(struct cnss_plat_data *plat_priv,
 				  enum cnss_cal_db_op op, u32 *size)
 {
@@ -823,6 +824,21 @@ int cnss_cal_file_download_to_mem(struct cnss_plat_data *plat_priv,
 	return cnss_cal_db_mem_update(plat_priv, CNSS_CAL_DB_DOWNLOAD,
 				      cal_file_size);
 }
+
+static void cnss_cal_report_upload(struct cnss_plat_data *plat_priv)
+{
+	/* Send cal upload req to cnss-daemon after confirming that
+	 * it is connected to cnss2 over QMI.
+	 */
+	if (is_ipc_qmi_client_connected
+			(CNSS_PLAT_IPC_DAEMON_QMI_CLIENT_V01, 0))
+		cnss_cal_mem_upload_to_file(plat_priv);
+}
+#else
+static void cnss_cal_report_upload(struct cnss_plat_data *plat_priv)
+{
+}
+#endif
 
 #if defined(CONFIG_CNSS2_KERNEL_5_15) || defined(CONFIG_CNSS2_KERNEL_6_1)
 static void cnss_hif_notifier(struct cnss_plat_data *plat_priv,
@@ -4539,12 +4555,7 @@ static int cnss_cold_boot_cal_done_hdlr(struct cnss_plat_data *plat_priv,
 	case CNSS_CAL_DONE:
 		cnss_pr_info("Coldboot Calibration completed successfully for device 0x%lx\n",
 			     plat_priv->device_id);
-		/* Send cal upload req to cnss-daemon after confirming that
-		 * it is connected to cnss2 over QMI.
-		 */
-		if (is_ipc_qmi_client_connected
-				(CNSS_PLAT_IPC_DAEMON_QMI_CLIENT_V01, 0))
-			cnss_cal_mem_upload_to_file(plat_priv);
+		cnss_cal_report_upload(plat_priv);
 		plat_priv->cal_done = true;
 		break;
 	case CNSS_CAL_TIMEOUT:
