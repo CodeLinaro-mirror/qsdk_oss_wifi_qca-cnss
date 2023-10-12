@@ -4045,6 +4045,12 @@ int cnss_pci_alloc_fw_mem(struct cnss_plat_data *plat_priv)
 	if (plat_priv->dma_alloc_supported) {
 		for (i = 0; i < plat_priv->fw_mem_seg_len; i++) {
 			if (!fw_mem[i].va && fw_mem[i].size) {
+				if ((fw_mem[i].type ==
+					CALDB_MEM_REGION_TYPE) &&
+					(!plat_priv->cold_boot_support)) {
+					continue;
+				}
+
 				if (fw_mem[i].type ==
 					QMI_WLFW_MLO_GLOBAL_MEM_V01) {
 					ret = cnss_mlo_mem_alloc(plat_priv, i);
