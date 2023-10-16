@@ -97,6 +97,7 @@ enum cnss_mhi_state {
 	CNSS_MHI_RDDM,
 	CNSS_MHI_RDDM_DONE,
 	CNSS_MHI_SOC_RESET,
+	CNSS_MHI_MISSION_MODE,
 };
 
 enum pci_link_status {

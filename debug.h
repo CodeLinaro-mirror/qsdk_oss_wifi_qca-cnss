@@ -159,6 +159,7 @@
 #define QCN9224_TCSR_PBL_LOGGING_REG		0x1B00094
 #define QCN9224_PBL_WLAN_BOOT_CFG		0x1E22B34
 #define QCN9224_PBL_BOOTSTRAP_STATUS		0x1A006D4
+#define MAX_PBL_DATA_SNAPSHOT			2
 
 #ifdef CONFIG_CNSS2_KERNEL_6_1
 #define QMI_WLANFW_QDSS_STOP_ALL_TRACE_LI 0x3F
@@ -339,6 +340,30 @@ struct noc_err_table {
 	unsigned long reg;
 	int (*reg_handler)(struct cnss_plat_data *plat_priv, u32 addr,
 				     u32 *val);
+};
+
+struct pbl_err_data {
+	u32 *pbl_vals;
+	u32 *pbl_reg_tbl;
+	u32 pbl_tbl_len;
+};
+
+struct dump_pbl_sbl_data {
+	u32 pbl_stage;
+	u32 sbl_log_start;
+	u32 pbl_wlan_boot_cfg;
+	u32 pbl_bootstrap_status;
+	u32 remap_bar_ctrl;
+	u32 soc_rc_shadow_reg;
+	u32 parf_ltssm;
+	u32 parf_pm_stts;
+	u32 gcc_ramss_cbcr;
+	u32 pcie_cfg_pcie_status;
+	u32 *sbl_vals;
+	u32 sbl_len;
+	u32 *noc_vals;
+	u16 type0_status_cmd_reg;
+	struct pbl_err_data pbl_data[MAX_PBL_DATA_SNAPSHOT];
 };
 
 struct cnss_ce_base_addr *register_ce_object(struct cnss_plat_data *plat_priv);

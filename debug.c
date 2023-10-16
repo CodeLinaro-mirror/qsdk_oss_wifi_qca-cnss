@@ -361,15 +361,67 @@ int cnss_get_mhi_region_len(struct cnss_plat_data *plat_priv,
 	return 0;
 }
 
-static int cnss_dump_sbl_log(struct cnss_pci_data *pci_priv, u32 log_size,
-			     u32 sram_start_reg)
+static int cnss_debug_read_pbl_data(struct cnss_pci_data *pci_priv,
+				    u32 log_size, u32 sram_start_reg,
+				    struct pbl_err_data *pbl_data)
+{
+	int i = 0;
+	int j = 0;
+	int gfp = GFP_KERNEL;
+	u32 *mem_addr = NULL;
+	u32 *buf = NULL;
+	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
+
+	if (test_bit(CNSS_MHI_MISSION_MODE, &pci_priv->mhi_state)) {
+		cnss_pr_err("%s: %s is already in Mission mode\n",
+			    __func__, plat_priv->device_name);
+		return -EINVAL;
+	}
+
+	if (in_interrupt() || irqs_disabled())
+		gfp = GFP_ATOMIC;
+
+	buf = kzalloc(log_size, gfp);
+	if (!buf)
+		return -ENOMEM;
+
+	mem_addr = kzalloc(log_size, gfp);
+	if (!mem_addr) {
+		kfree(buf);
+		return -ENOMEM;
+	}
+
+	for (i = 0, j = 0; i < log_size; i += sizeof(u32), j++) {
+		mem_addr[j] = sram_start_reg + i;
+		if (cnss_pci_reg_read(pci_priv->plat_priv,
+					mem_addr[j], &buf[j]))
+			break;
+	}
+
+	pbl_data->pbl_tbl_len = j;
+	pbl_data->pbl_vals = buf;
+	pbl_data->pbl_reg_tbl = mem_addr;
+
+	return 0;
+}
+
+static int cnss_debug_read_sbl_data(struct cnss_pci_data *pci_priv,
+				    u32 log_size,
+				    u32 sram_start_reg,
+				    struct dump_pbl_sbl_data *pbl_sbl_err)
 {
 	int i = 0;
 	int j = 0;
 	int gfp = GFP_KERNEL;
 	u32 mem_addr = 0;
 	u32 *buf = NULL;
+	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 
+	if (test_bit(CNSS_MHI_MISSION_MODE, &pci_priv->mhi_state)) {
+		cnss_pr_err("%s: %s is already in Mission mode\n",
+			    __func__, plat_priv->device_name);
+		return -EINVAL;
+	}
 	if (in_interrupt() || irqs_disabled())
 		gfp = GFP_ATOMIC;
 
@@ -383,36 +435,264 @@ static int cnss_dump_sbl_log(struct cnss_pci_data *pci_priv, u32 log_size,
 		if (buf[j] == 0)
 			break;
 	}
-	print_hex_dump(KERN_ERR, "", DUMP_PREFIX_OFFSET, 32, 4,
-		       buf, i, 1);
-	kfree(buf);
+	pbl_sbl_err->sbl_vals = buf;
+
 	return 0;
 }
 
-static void cnss_dump_noc_errors(struct cnss_pci_data *pci_priv)
+static int cnss_debug_read_noc_errors(struct cnss_pci_data *pci_priv,
+				      struct dump_pbl_sbl_data *pbl_sbl_err)
 {
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 	int i = 0;
-	u32 reg_values[sizeof(noc_err_table_list) /
-					sizeof(noc_err_table_list[0])] = { 0 };
+	u32 *buf = NULL;
+	int gfp = GFP_KERNEL;
+	size_t len = sizeof(noc_err_table_list) /
+			sizeof(noc_err_table_list[0]);
+
+	if (test_bit(CNSS_MHI_MISSION_MODE, &pci_priv->mhi_state)) {
+		cnss_pr_err("%s: %s is already in Mission mode\n",
+			    __func__, plat_priv->device_name);
+		return -EINVAL;
+	}
+	if (in_interrupt() || irqs_disabled())
+		gfp = GFP_ATOMIC;
+
+	buf = kzalloc(len, gfp);
+	if (!buf)
+		return -ENOMEM;
 
 	switch (plat_priv->device_id) {
 	case QCN9224_DEVICE_ID:
 		for (i = 0; noc_err_table_list[i].reg_name; i++)
 			noc_err_table_list[i].reg_handler(plat_priv,
-				noc_err_table_list[i].reg, &reg_values[i]);
-
-		for (i = 0; noc_err_table_list[i].reg_name; i++)
-			cnss_pr_err("%s: %s: 0x%08x\n", __func__,
-				noc_err_table_list[i].reg_name, reg_values[i]);
+				noc_err_table_list[i].reg, &buf[i]);
+		pbl_sbl_err->noc_vals = buf;
 		break;
 	default:
 		break;
 	}
+
+	return 0;
+}
+
+static int cnss_debug_read_misc_data(struct cnss_pci_data *pci_priv,
+				     struct pbl_reg_addr *pbl_data,
+				     struct sbl_reg_addr *sbl_data,
+				     struct dump_pbl_sbl_data *pbl_sbl_err)
+{
+	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
+
+	if (test_bit(CNSS_MHI_MISSION_MODE, &pci_priv->mhi_state)) {
+		cnss_pr_err("%s: %s is already in Mission mode\n",
+			    __func__, plat_priv->device_name);
+		return -EINVAL;
+	}
+	if (plat_priv->device_id == QCN9224_DEVICE_ID) {
+#if defined(CONFIG_CNSS2_QCOM_KERNEL_DEPENDENCY) && \
+		(KERNEL_VERSION(6, 1, 0) > LINUX_VERSION_CODE)
+		pcie_parf_read(pci_priv->pci_dev, PCIE_CFG_PCIE_STATUS,
+			       &pbl_sbl_err->pcie_cfg_pcie_status);
+#endif
+		cnss_pci_reg_read(plat_priv,
+				  QCN9224_PCIE_PCIE_LOCAL_REG_REMAP_BAR_CTRL,
+				  &pbl_sbl_err->remap_bar_ctrl);
+		cnss_pci_reg_read(plat_priv,
+				  QCN9224_WLAON_SOC_RESET_CAUSE_SHADOW_REG,
+				  &pbl_sbl_err->soc_rc_shadow_reg);
+		cnss_pci_reg_read(plat_priv,
+				  QCN9224_PCIE_PCIE_PARF_LTSSM,
+				  &pbl_sbl_err->parf_ltssm);
+		cnss_pci_reg_read(plat_priv,
+				  QCN9224_PCIE_PCIE_PARF_PM_STTS,
+				  &pbl_sbl_err->parf_pm_stts);
+		pci_read_config_word(pci_priv->pci_dev, PCI_COMMAND,
+				     &pbl_sbl_err->type0_status_cmd_reg);
+		cnss_pci_reg_read(plat_priv,
+				  QCN9224_GCC_RAMSS_CBCR,
+				  &pbl_sbl_err->gcc_ramss_cbcr);
+	}
+
+	if (cnss_pci_reg_read(plat_priv, sbl_data->sbl_log_start_reg,
+			      &pbl_sbl_err->sbl_log_start)) {
+		cnss_pr_err("Invalid SBL log data\n");
+		return -EINVAL;
+	}
+
+	cnss_pci_reg_read(plat_priv, pbl_data->tcsr_pbl_logging_reg,
+			  &pbl_sbl_err->pbl_stage);
+	cnss_pci_reg_read(plat_priv, pbl_data->pbl_wlan_boot_cfg,
+			  &pbl_sbl_err->pbl_wlan_boot_cfg);
+	cnss_pci_reg_read(plat_priv, pbl_data->pbl_bootstrap_status,
+			  &pbl_sbl_err->pbl_bootstrap_status);
+
+	return 0;
+}
+
+static void cnss_debug_collect_bl_data(struct cnss_pci_data *pci_priv,
+				       struct pbl_reg_addr *pbl_data,
+				       struct sbl_reg_addr *sbl_data,
+				       struct dump_pbl_sbl_data *pbl_sbl_err)
+{
+	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
+	u32 sbl_log_size;
+	u32 sbl_log_start;
+
+	if (test_bit(CNSS_MHI_MISSION_MODE, &pci_priv->mhi_state)) {
+		cnss_pr_err("%s: %s is already in Mission mode\n",
+			    __func__, plat_priv->device_name);
+		return;
+	}
+	/* Dump SRAM content twice before and after the register dump as
+	 * Q6 team requested. Please check with Q6 team before removing one
+	 * of the SRAM dump.
+	 */
+	if (cnss_debug_read_pbl_data(pci_priv, pbl_data->pbl_log_sram_max_size,
+				     pbl_data->pbl_log_sram_start,
+				     &pbl_sbl_err->pbl_data[0])) {
+		cnss_pr_err("%s: Failed to read PBL log data\n",
+			    __func__);
+		return;
+	}
+
+	if (cnss_debug_read_misc_data(pci_priv, pbl_data, sbl_data,
+				      pbl_sbl_err)) {
+		cnss_pr_err("%s: Failed to read Misc log data\n",
+			    __func__);
+		return;
+	}
+
+	if (cnss_debug_read_noc_errors(pci_priv, pbl_sbl_err)) {
+		cnss_pr_err("%s: Failed to read NOC data\n",
+			    __func__);
+		return;
+	}
+
+	if (cnss_debug_read_pbl_data(pci_priv, pbl_data->pbl_log_sram_max_size,
+				     pbl_data->pbl_log_sram_start,
+				     &pbl_sbl_err->pbl_data[1])) {
+		cnss_pr_err("%s: Failed to read PBL log data\n",
+			    __func__);
+		return;
+	}
+
+	if (cnss_pci_reg_read(plat_priv, sbl_data->sbl_log_size_reg,
+			      &sbl_log_size)) {
+		cnss_pr_err("Invalid SBL log data\n");
+		return;
+	}
+
+	sbl_log_start = pbl_sbl_err->sbl_log_start;
+	sbl_log_size = ((sbl_log_size >> sbl_data->sbl_log_size_shift) &
+			SBL_LOG_SIZE_MASK);
+	if (sbl_log_start < sbl_data->sbl_sram_start ||
+	    sbl_log_start > sbl_data->sbl_sram_end ||
+	    (sbl_log_start + sbl_log_size) > sbl_data->sbl_sram_end) {
+		cnss_pr_err("Invalid SBL log data\n");
+		return;
+	}
+
+	if (cnss_debug_read_sbl_data(pci_priv, sbl_log_size, sbl_log_start,
+				     pbl_sbl_err))
+		cnss_pr_err("%s: Failed to read SBL log data\n",
+			    __func__);
+}
+
+static void cnss_debug_print_pbl_data(struct cnss_pci_data *pci_priv,
+				      struct pbl_err_data *pbl_data)
+{
+	int i;
+	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
+
+	cnss_pr_err("Dumping PBL log data\n");
+	for (i = 0; i < pbl_data->pbl_tbl_len; i++)
+		cnss_pr_err("SRAM[0x%x] = 0x%x\n",
+			    pbl_data->pbl_reg_tbl[i],
+			    pbl_data->pbl_vals[i]);
+}
+
+static void cnss_debug_print_sbl_data(struct cnss_pci_data *pci_priv,
+				      struct dump_pbl_sbl_data *pbl_sbl_err)
+{
+	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
+
+	cnss_pr_err("Dumping SBL log data\n");
+	print_hex_dump(KERN_ERR, "", DUMP_PREFIX_OFFSET, 32, 4,
+		       pbl_sbl_err->sbl_vals, pbl_sbl_err->sbl_len, 1);
+}
+
+static void cnss_debug_print_noc_data(struct cnss_pci_data *pci_priv,
+				      struct dump_pbl_sbl_data *pbl_sbl_err)
+{
+	int i;
+	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
+
+	cnss_pr_err("Dumping NOC log data\n");
+	for (i = 0; noc_err_table_list[i].reg_name; i++)
+		cnss_pr_err("%s: %s: 0x%08x\n", __func__,
+			noc_err_table_list[i].reg_name,
+			pbl_sbl_err->noc_vals[i]);
+}
+
+static void cnss_debug_print_bl_data(struct cnss_pci_data *pci_priv,
+				     struct dump_pbl_sbl_data *pbl_sbl_err)
+{
+	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
+
+#if defined(CONFIG_CNSS2_QCOM_KERNEL_DEPENDENCY) && \
+		(KERNEL_VERSION(6, 1, 0) > LINUX_VERSION_CODE)
+	if (plat_priv->device_id == QCN9224_DEVICE_ID)
+		cnss_pr_err("%s: PCIE_CFG_PCIE_STATUS: 0x%08x\n",
+			    __func__, pbl_sbl_err->pcie_cfg_pcie_status);
+#endif
+
+	cnss_debug_print_pbl_data(pci_priv, &pbl_sbl_err->pbl_data[0]);
+
+	if (plat_priv->device_id == QCN9224_DEVICE_ID) {
+		cnss_pr_err("%s: LOCAL_REG_REMAP_BAR_CTRL: 0x%08x, WLAON_SOC_RESET_CAUSE_SHADOW_REG: 0x%08x, PARF_LTSSM: 0x%08x, PARF_PM_STTS: 0x%08x\n",
+			    __func__, pbl_sbl_err->remap_bar_ctrl,
+			    pbl_sbl_err->soc_rc_shadow_reg,
+			    pbl_sbl_err->parf_ltssm, pbl_sbl_err->parf_pm_stts);
+		cnss_pr_err("%s: TYPE0_STATUS_COMMAND_REG: 0x%08x, GCC_RAMSS_CBCR: 0x%08x\n",
+			    __func__, pbl_sbl_err->type0_status_cmd_reg,
+			    pbl_sbl_err->gcc_ramss_cbcr);
+
+		cnss_debug_print_noc_data(pci_priv, pbl_sbl_err);
+	}
+
+	cnss_pr_err("TCSR_PBL_LOGGING: 0x%08x PCIE_BHI_ERRDBG: Start: 0x%08x\n",
+		    pbl_sbl_err->pbl_stage, pbl_sbl_err->sbl_log_start);
+	cnss_pr_err("PBL_WLAN_BOOT_CFG: 0x%08x PBL_BOOTSTRAP_STATUS: 0x%08x\n",
+		    pbl_sbl_err->pbl_wlan_boot_cfg,
+		    pbl_sbl_err->pbl_bootstrap_status);
+
+	cnss_debug_print_pbl_data(pci_priv, &pbl_sbl_err->pbl_data[1]);
+
+	cnss_pr_err("\n");
+	cnss_debug_print_sbl_data(pci_priv, pbl_sbl_err);
+}
+
+void cnss_debug_cleanup_bl_data(struct dump_pbl_sbl_data *pbl_sbl_err)
+{
+	int i;
+
+	for (i = 0; i < MAX_PBL_DATA_SNAPSHOT; i++) {
+		kfree(pbl_sbl_err->pbl_data[i].pbl_vals);
+		kfree(pbl_sbl_err->pbl_data[i].pbl_reg_tbl);
+		pbl_sbl_err->pbl_data[i].pbl_vals = NULL;
+		pbl_sbl_err->pbl_data[i].pbl_reg_tbl = NULL;
+	}
+
+	kfree(pbl_sbl_err->sbl_vals);
+	kfree(pbl_sbl_err->noc_vals);
+	pbl_sbl_err->sbl_vals = NULL;
+	pbl_sbl_err->noc_vals = NULL;
+
+	kfree(pbl_sbl_err);
 }
 
 /**
- * cnss_pci_dump_bl_sram_mem - Dump WLAN FW bootloader debug log
+ * cnss_debug_dump_bl_sram_mem - Dump WLAN FW bootloader debug log
  * @pci_priv: PCI device private data structure of cnss platform driver
  *
  * Dump Primary and secondary bootloader debug log data. For SBL check the
@@ -424,24 +704,18 @@ static void cnss_dump_noc_errors(struct cnss_pci_data *pci_priv)
  */
 void cnss_pci_dump_bl_sram_mem(struct cnss_pci_data *pci_priv)
 {
-	int i;
-	int ret = 0;
-	u32 mem_addr, val, pbl_stage, sbl_log_start, sbl_log_size;
-	u32 pbl_wlan_boot_cfg, pbl_bootstrap_status;
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 	struct sbl_reg_addr sbl_data = {0};
 	struct pbl_reg_addr pbl_data = {0};
+	struct dump_pbl_sbl_data *pbl_sbl_err = NULL;
 	struct mhi_controller *mhi_ctrl = pci_priv->mhi_ctrl;
-	u32 remap_bar_ctrl = 0;
-	u32 soc_rc_shadow_reg = 0;
-	u32 parf_ltssm = 0;
-	u32 parf_pm_stts = 0;
-	u16 type0_status_cmd_reg = 0;
-	u32 gcc_ramss_cbcr = 0;
-#if defined(CONFIG_CNSS2_QCOM_KERNEL_DEPENDENCY) && (KERNEL_VERSION(6, 1, 0) > LINUX_VERSION_CODE)
-	u32 pcie_cfg_pcie_status = 0;
-#endif
+	int gfp = GFP_KERNEL;
 
+	if (test_bit(CNSS_MHI_MISSION_MODE, &pci_priv->mhi_state)) {
+		cnss_pr_err("%s: %s is already in Mission mode\n",
+			    __func__, plat_priv->device_name);
+		return;
+	}
 	switch (plat_priv->device_id) {
 	case QCN9000_DEVICE_ID:
 		sbl_data.sbl_sram_start = QCN9000_SRAM_START;
@@ -471,15 +745,6 @@ void cnss_pci_dump_bl_sram_mem(struct cnss_pci_data *pci_priv)
 		pbl_data.tcsr_pbl_logging_reg = QCN9224_TCSR_PBL_LOGGING_REG;
 		pbl_data.pbl_wlan_boot_cfg = QCN9224_PBL_WLAN_BOOT_CFG;
 		pbl_data.pbl_bootstrap_status = QCN9224_PBL_BOOTSTRAP_STATUS;
-#if defined(CONFIG_CNSS2_QCOM_KERNEL_DEPENDENCY) && (KERNEL_VERSION(6, 1, 0) > LINUX_VERSION_CODE)
-		ret = pcie_parf_read(pci_priv->pci_dev, PCIE_CFG_PCIE_STATUS,
-				     &pcie_cfg_pcie_status);
-		if (ret)
-			cnss_pr_err("%s failed, err = %d\n", __func__, ret);
-		else
-			cnss_pr_err("%s: PCIE_CFG_PCIE_STATUS: 0x%08x\n",
-				    __func__, pcie_cfg_pcie_status);
-#endif
 		break;
 	default:
 		cnss_pr_err("Unknown device type 0x%lx\n",
@@ -487,91 +752,17 @@ void cnss_pci_dump_bl_sram_mem(struct cnss_pci_data *pci_priv)
 		return;
 	}
 
-	/* Dump SRAM content twice before and after the register dump as
-	 * Q6 team requested. Please check with Q6 team before removing one
-	 * of the SRAM dump.
-	 */
-	cnss_pr_err("Dumping PBL log data\n");
-	/* cnss_pci_reg_read provides 32bit register values */
-	for (i = 0; i < pbl_data.pbl_log_sram_max_size; i += sizeof(val)) {
-		mem_addr = pbl_data.pbl_log_sram_start + i;
-		if (cnss_pci_reg_read(plat_priv, mem_addr, &val))
-			break;
-		cnss_pr_err("SRAM[0x%x] = 0x%x\n", mem_addr, val);
-	}
-	if (plat_priv->device_id == QCN9224_DEVICE_ID) {
-		cnss_pci_reg_read(plat_priv,
-				  QCN9224_PCIE_PCIE_LOCAL_REG_REMAP_BAR_CTRL,
-				  &remap_bar_ctrl);
-		cnss_pci_reg_read(plat_priv,
-				  QCN9224_WLAON_SOC_RESET_CAUSE_SHADOW_REG,
-				  &soc_rc_shadow_reg);
-		cnss_pci_reg_read(plat_priv,
-				  QCN9224_PCIE_PCIE_PARF_LTSSM,
-				  &parf_ltssm);
-		cnss_pci_reg_read(plat_priv,
-				  QCN9224_PCIE_PCIE_PARF_PM_STTS,
-				  &parf_pm_stts);
-		pci_read_config_word(pci_priv->pci_dev, PCI_COMMAND,
-				     &type0_status_cmd_reg);
-		cnss_pci_reg_read(plat_priv,
-				  QCN9224_GCC_RAMSS_CBCR,
-				  &gcc_ramss_cbcr);
-		cnss_pr_err("%s: LOCAL_REG_REMAP_BAR_CTRL: 0x%08x, WLAON_SOC_RESET_CAUSE_SHADOW_REG: 0x%08x, PARF_LTSSM: 0x%08x, PARF_PM_STTS: 0x%08x\n",
-			    __func__, remap_bar_ctrl, soc_rc_shadow_reg,
-			    parf_ltssm, parf_pm_stts);
-		cnss_pr_err("%s: TYPE0_STATUS_COMMAND_REG: 0x%08x, GCC_RAMSS_CBCR: 0x%08x\n",
-			    __func__, type0_status_cmd_reg, gcc_ramss_cbcr);
+	if (in_interrupt() || irqs_disabled())
+		gfp = GFP_ATOMIC;
 
-		cnss_dump_noc_errors(pci_priv);
-	}
+	pbl_sbl_err = kzalloc(sizeof(*pbl_sbl_err), gfp);
+	if (!pbl_sbl_err)
+		return;
 
-	if (cnss_pci_reg_read(plat_priv, sbl_data.sbl_log_start_reg,
-			      &sbl_log_start))
-		goto out;
-
-	cnss_pci_reg_read(plat_priv, pbl_data.tcsr_pbl_logging_reg, &pbl_stage);
-	cnss_pci_reg_read(plat_priv, pbl_data.pbl_wlan_boot_cfg,
-			  &pbl_wlan_boot_cfg);
-	cnss_pci_reg_read(plat_priv, pbl_data.pbl_bootstrap_status,
-			  &pbl_bootstrap_status);
-	cnss_pr_err("TCSR_PBL_LOGGING: 0x%08x PCIE_BHI_ERRDBG: Start: 0x%08x\n",
-		    pbl_stage, sbl_log_start);
-	cnss_pr_err("PBL_WLAN_BOOT_CFG: 0x%08x PBL_BOOTSTRAP_STATUS: 0x%08x\n",
-		    pbl_wlan_boot_cfg, pbl_bootstrap_status);
-
-	cnss_pr_err("Dumping PBL log data\n");
-	/* cnss_pci_reg_read provides 32bit register values */
-	for (i = 0; i < pbl_data.pbl_log_sram_max_size; i += sizeof(val)) {
-		mem_addr = pbl_data.pbl_log_sram_start + i;
-		if (cnss_pci_reg_read(plat_priv, mem_addr, &val))
-			break;
-		cnss_pr_err("SRAM[0x%x] = 0x%x\n", mem_addr, val);
-	}
-	cnss_pr_err("\n");
-
-	if (cnss_pci_reg_read(plat_priv, sbl_data.sbl_log_size_reg,
-			      &sbl_log_size))
-		goto out;
-
-	sbl_log_size = ((sbl_log_size >> sbl_data.sbl_log_size_shift) &
-			SBL_LOG_SIZE_MASK);
-	if (sbl_log_start < sbl_data.sbl_sram_start ||
-	    sbl_log_start > sbl_data.sbl_sram_end ||
-	    (sbl_log_start + sbl_log_size) > sbl_data.sbl_sram_end) {
-		goto out;
-	}
-
-	cnss_pr_err("Dumping SBL log data\n");
-	ret = cnss_dump_sbl_log(pci_priv, sbl_log_size, sbl_log_start);
-	if (ret)
-		cnss_pr_err("Failed to collect SBL log data for %s\n",
-			    plat_priv->device_name);
-
-	return;
-
-out:
-	cnss_pr_err("Invalid SBL log data\n");
+	cnss_debug_collect_bl_data(pci_priv, &pbl_data, &sbl_data,
+				   pbl_sbl_err);
+	cnss_debug_print_bl_data(pci_priv, pbl_sbl_err);
+	cnss_debug_cleanup_bl_data(pbl_sbl_err);
 }
 
 static int cnss_pin_connect_show(struct seq_file *s, void *data)

@@ -1187,6 +1187,8 @@ static char *cnss_mhi_state_to_str(enum cnss_mhi_state mhi_state)
 		return "RDDM_DONE";
 	case CNSS_MHI_SOC_RESET:
 		return "SOC_RESET";
+	case CNSS_MHI_MISSION_MODE:
+		return "MISSION_MODE";
 	default:
 		return "UNKNOWN";
 	}
@@ -1230,6 +1232,7 @@ static int cnss_pci_check_mhi_state_bit(struct cnss_pci_data *pci_priv,
 	case CNSS_MHI_RDDM:
 	case CNSS_MHI_RDDM_DONE:
 	case CNSS_MHI_SOC_RESET:
+	case CNSS_MHI_MISSION_MODE:
 		return 0;
 	default:
 		cnss_pr_err("Unhandled MHI state: %s(%d)\n",
@@ -1263,6 +1266,7 @@ static void cnss_pci_set_mhi_state_bit(struct cnss_pci_data *pci_priv,
 		clear_bit(CNSS_MHI_POWER_ON, &pci_priv->mhi_state);
 		clear_bit(CNSS_MHI_TRIGGER_RDDM, &pci_priv->mhi_state);
 		clear_bit(CNSS_MHI_RDDM_DONE, &pci_priv->mhi_state);
+		clear_bit(CNSS_MHI_MISSION_MODE, &pci_priv->mhi_state);
 		break;
 	case CNSS_MHI_SUSPEND:
 		set_bit(CNSS_MHI_SUSPEND, &pci_priv->mhi_state);
@@ -1281,6 +1285,9 @@ static void cnss_pci_set_mhi_state_bit(struct cnss_pci_data *pci_priv,
 		break;
 	case CNSS_MHI_SOC_RESET:
 		set_bit(CNSS_MHI_SOC_RESET, &pci_priv->mhi_state);
+		break;
+	case CNSS_MHI_MISSION_MODE:
+		set_bit(CNSS_MHI_MISSION_MODE, &pci_priv->mhi_state);
 		break;
 	default:
 		cnss_pr_err("Unhandled MHI state (%d)\n", mhi_state);
@@ -1353,6 +1360,7 @@ static int cnss_pci_set_mhi_state(struct cnss_pci_data *pci_priv,
 		ret = mhi_force_rddm_mode(pci_priv->mhi_ctrl);
 		break;
 	case CNSS_MHI_RDDM_DONE:
+	case CNSS_MHI_MISSION_MODE:
 		break;
 	case CNSS_MHI_SOC_RESET:
 		mhi_soc_reset(pci_priv->mhi_ctrl);
@@ -1440,7 +1448,6 @@ int cnss_pci_start_mhi(struct cnss_pci_data *pci_priv)
 		  jiffies + msecs_to_jiffies(BOOT_DEBUG_TIMEOUT_MS));
 
 	ret = cnss_pci_set_mhi_state(pci_priv, CNSS_MHI_POWER_ON);
-	del_timer(&pci_priv->boot_debug_timer);
 
 	if (ret)
 		goto out;
@@ -6517,6 +6524,8 @@ static void cnss_mhi_notify_status(struct mhi_controller *mhi_ctrl,
 		cnss_reason = CNSS_REASON_RDDM;
 		break;
 	case MHI_CB_EE_MISSION_MODE:
+		del_timer(&pci_priv->boot_debug_timer);
+		cnss_pci_set_mhi_state_bit(pci_priv, CNSS_MHI_MISSION_MODE);
 		return;
 	default:
 		cnss_pr_err("Unsupported MHI status cb reason: %d\n", reason);
@@ -6865,6 +6874,12 @@ static void cnss_boot_debug_timeout_hdlr(struct timer_list *timer)
 
 	if (test_bit(CNSS_MHI_POWER_ON, &pci_priv->mhi_state))
 		return;
+
+	if (test_bit(CNSS_MHI_MISSION_MODE, &pci_priv->mhi_state)) {
+		cnss_pr_err("%s: %s is already in Mission mode\n",
+			    __func__, plat_priv->device_name);
+		return;
+	}
 
 	if (cnss_mhi_scan_rddm_cookie(pci_priv,
 				 DEVICE_RDDM_COOKIE))
