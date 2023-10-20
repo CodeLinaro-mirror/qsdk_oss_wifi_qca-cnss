@@ -5037,6 +5037,24 @@ static void get_updated_qdss_trace_filename(struct cnss_plat_data *plat_priv,
 	}
 }
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
+static int cnss_qdss_trace_save_hdlr(struct cnss_plat_data *plat_priv,
+				     void *data)
+{
+	struct cnss_qmi_event_qdss_trace_save_data *event_data = data;
+
+	if (!plat_priv->qdss_mem_seg_len) {
+		cnss_pr_err("Memory for QDSS trace is not available\n");
+		return 0;
+	}
+
+	cnss_coredump_qdss_dump(plat_priv, event_data);
+
+	cnss_bus_free_qdss_mem(plat_priv);
+	plat_priv->qdss_mem_seg_len = 0;
+	return 0;
+}
+#else
 static int cnss_qdss_trace_save_hdlr(struct cnss_plat_data *plat_priv,
 				     void *data)
 {
@@ -5138,6 +5156,7 @@ out:
 	kfree(data);
 	return ret;
 }
+#endif
 
 static int cnss_qdss_trace_free_hdlr(struct cnss_plat_data *plat_priv)
 {
@@ -5153,6 +5172,7 @@ static int cnss_qdss_mem_ready_hdlr(struct cnss_plat_data *plat_priv)
 						  0);
 }
 
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 static void m3_dump_open_timeout_func(struct timer_list *timer)
 {
 	struct m3_dump *m3_dump_data =
@@ -5167,6 +5187,7 @@ static void m3_dump_open_timeout_func(struct timer_list *timer)
 	complete(&m3_dump_data->open_complete);
 	pr_err("M3 dump open failed\n");
 }
+#endif
 
 static void m3_dump_read_timeout_func(struct timer_list *timer)
 {
@@ -5324,6 +5345,7 @@ static void cnss_deinit_m3_dump_class(void)
 	m3_dump_major = 0;
 }
 
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 static int cnss_do_m3_dump_upload(struct cnss_plat_data *plat_priv,
 				  const char *dump_file_name)
 {
@@ -5460,6 +5482,7 @@ send_resp:
 
 	return ret;
 }
+#endif
 
 static int cnss_qdss_trace_req_data_hdlr(struct cnss_plat_data *plat_priv,
 					 void *data)
@@ -5632,8 +5655,12 @@ static void cnss_driver_event_work(struct work_struct *work)
 			ret = cnss_qdss_mem_ready_hdlr(plat_priv);
 			break;
 		case CNSS_DRIVER_EVENT_M3_DUMP_UPLOAD_REQ:
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
+			cnss_coredump_m3_dump(plat_priv, event->data);
+#else
 			ret = cnss_m3_dump_upload_req_hdlr(plat_priv,
 							   event->data);
+#endif
 			break;
 		case CNSS_DRIVER_EVENT_QDSS_TRACE_REQ_DATA:
 			ret = cnss_qdss_trace_req_data_hdlr(plat_priv,

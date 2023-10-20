@@ -27,6 +27,10 @@
 #include <soc/qcom/subsystem_restart.h>
 #include <linux/esoc_client.h>
 #endif
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
+#include "coredump.h"
+#endif
+
 
 #include "qmi/qmi.h"
 #include "bus/bus.h"
