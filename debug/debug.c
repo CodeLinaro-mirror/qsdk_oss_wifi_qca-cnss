@@ -1734,6 +1734,13 @@ static ssize_t cnss_platform_features_write(struct file *fp,
 	} else if (strcmp(cmd, "trace_qdss") == 0) {
 		switch (val) {
 		case CNSS_QDSS_STOP:
+			if (!test_bit(CNSS_QDSS_STARTED,
+						&plat_priv->driver_state)) {
+				cnss_pr_info("QDSS not started, ignoring stop command. 0x%lx\n",
+					     plat_priv->driver_state);
+				return -EINVAL;
+			}
+
 			if (cnss_check_be_target(plat_priv))
 				val = QMI_WLANFW_QDSS_STOP_ALL_TRACE_BE;
 			else
@@ -1744,6 +1751,13 @@ static ssize_t cnss_platform_features_write(struct file *fp,
 						val);
 			break;
 		case CNSS_QDSS_START:
+			if (test_bit(CNSS_QDSS_STARTED,
+						&plat_priv->driver_state)) {
+				cnss_pr_info("QDSS is already started: 0x%lx\n",
+					     plat_priv->driver_state);
+				return -EINVAL;
+			}
+
 			plat_priv->qdss_etr_sg_mode = 0;
 			cnss_wlfw_qdss_dnld_send_sync(plat_priv);
 			break;

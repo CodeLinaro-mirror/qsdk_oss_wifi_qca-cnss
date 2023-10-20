@@ -31,6 +31,7 @@ ipq_cnss2-objs += genl/genl.o
 ipq_cnss2-objs += qmi/cnss_plat_ipc_qmi.o
 ipq_cnss2-objs += cnss_plat_ipc_service_v01.o
 ipq_cnss2_stream-objs := stream.o
+ipq_cnss2-objs += coredump.o
 
 CNSS2_INCLUDE = -I$(obj)
 CNSS2_INCLUDE += -I$(obj)/include
