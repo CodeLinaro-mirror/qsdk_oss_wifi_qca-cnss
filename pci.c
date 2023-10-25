@@ -4141,6 +4141,12 @@ int cnss_pci_alloc_fw_mem(struct cnss_plat_data *plat_priv)
 	if (plat_priv->dma_alloc_supported) {
 		for (i = 0; i < plat_priv->fw_mem_seg_len; i++) {
 			if (!fw_mem[i].va && fw_mem[i].size) {
+				if ((fw_mem[i].type ==
+					CALDB_MEM_REGION_TYPE) &&
+					(!plat_priv->cold_boot_support)) {
+					continue;
+				}
+
 				if (fw_mem[i].type ==
 					QMI_WLFW_MLO_GLOBAL_MEM_V01) {
 					ret = cnss_mlo_mem_alloc(plat_priv, i);
@@ -6187,7 +6193,6 @@ int cnss_dump_all_ce_reg(struct cnss_plat_data *plat_priv)
 }
 EXPORT_SYMBOL(cnss_dump_all_ce_reg);
 
-#if defined(CONFIG_CNSS2_KERNEL_MSM) || defined(CONFIG_CNSS2_KERNEL_5_15)
 #define MAX_RAMDUMP_TABLE_SIZE	6
 #define COREDUMP_DESC		"Q6-COREDUMP"
 #define Q6_SFR_DESC		"Q6-SFR"
@@ -6217,12 +6222,14 @@ void cnss_get_crash_reason(struct cnss_pci_data *pci_priv)
 	struct cnss_ramdump_entry *ramdump_table;
 	char *msg = ERR_PTR(-EPROBE_DEFER);
 	struct pci_dev *pci_dev = plat_priv->pci_dev;
+	struct device *dev;
 
 	mhi_cntrl = pci_priv->mhi_ctrl;
 	rddm_image = mhi_cntrl->rddm_image;
 	mhi_buf = rddm_image->mhi_buf;
+	dev = &pci_dev->dev;
 
-	cnss_pr_err("CRASHED - [DID:DOMAIN:BUS:SLOT] - %x:%04u:%02u:%02u\n",
+	dev_err(dev, "CRASHED - [DID:DOMAIN:BUS:SLOT] - %x:%04u:%02u:%02u\n",
 		    pci_dev->device, pci_dev->bus->domain_nr,
 		    pci_dev->bus->number, PCI_SLOT(pci_dev->devfn));
 
@@ -6262,14 +6269,9 @@ void cnss_get_crash_reason(struct cnss_pci_data *pci_priv)
 	}
 
 	if (!IS_ERR(msg) && msg && msg[0])
-		cnss_pr_err("Fatal error received from wcss software!\n%s\n",
+		dev_err(dev, "Fatal error received from wcss software!\n%s\n",
 			    msg);
 }
-#else
-void cnss_get_crash_reason(struct cnss_pci_data *pci_priv)
-{
-}
-#endif
 
 void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 {
@@ -6317,9 +6319,7 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 		return;
 	}
 
-#if defined(CONFIG_CNSS2_KERNEL_MSM) || defined(CONFIG_CNSS2_KERNEL_5_15)
 	cnss_get_crash_reason(pci_priv);
-#endif
 
 	fw_image = pci_priv->mhi_ctrl->fbc_image;
 	rddm_image = pci_priv->mhi_ctrl->rddm_image;
