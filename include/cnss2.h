@@ -564,9 +564,14 @@ extern int cnss_get_fw_files_for_target(struct device *dev,
 					u32 target_type, u32 target_version);
 extern int cnss_get_platform_cap(struct device *dev,
 				 struct cnss_platform_cap *cap);
+#ifdef CONFIG_CNSS2_SMMU
 extern struct iommu_domain *cnss_smmu_get_domain(struct device *dev);
 extern int cnss_smmu_map(struct device *dev,
 			 phys_addr_t paddr, uint32_t *iova_addr, size_t size);
+#ifdef CONFIG_TARGET_SDX75
+extern int cnss_smmu_unmap(struct device *dev, uint32_t iova_addr, size_t size);
+#endif
+#endif
 extern int cnss_bus_get_soc_info(struct device *dev, struct cnss_soc_info *info);
 extern int cnss_request_bus_bandwidth(struct device *dev, int bandwidth);
 struct cnss_plat_data;
