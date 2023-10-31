@@ -21,10 +21,15 @@
 #include <linux/net.h>
 #include <linux/inet.h>
 
-#include "main.h"
-#include "debug.h"
-#include "pci.h"
-#include "bus.h"
+#include "../main.h"
+#ifdef CNSS_DEBUG_SUPPORT
+#include "debug/debug.h"
+#endif
+#if defined CNSS_PCI_SUPPORT
+#include "pci/pci.h"
+#endif
+#include "cnss_common/cnss_common.h"
+#include "bus/bus.h"
 
 extern struct cnss_plat_data *cnss_get_plat_priv_by_instance_id(
 			int instance_id);

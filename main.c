@@ -45,13 +45,18 @@
 #include "legacyirq/legacyirq.h"
 #endif
 
-#include "main.h"
-#include "debug.h"
-#include "pci.h"
-#include "qmi.h"
-#include "bus.h"
-#include "genl.h"
-#include "cnss_plat_ipc_qmi.h"
+#include "../main.h"
+#ifdef CNSS_DEBUG_SUPPORT
+#include "debug/debug.h"
+#endif
+#if defined CNSS_PCI_SUPPORT
+#include "pci/pci.h"
+#endif
+#include "cnss_common/cnss_common.h"
+#include "qmi/qmi.h"
+#include "bus/bus.h"
+#include "genl/genl.h"
+#include "qmi/cnss_plat_ipc_qmi.h"
 #if (KERNEL_VERSION(5, 15, 0) <= LINUX_VERSION_CODE)
 #include <linux/devcoredump.h>
 #include <linux/elf.h>
@@ -903,6 +908,7 @@ static int cnss_hif_power_up(struct cnss_plat_data *plat_priv)
 	plat_priv->target_asserted = 0;
 	plat_priv->target_assert_timestamp = 0;
 	set_bit(CNSS_DRIVER_LOADING, &plat_priv->driver_state);
+#if defined CNSS_PCI_SUPPORT
 	ret = cnss_pci_probe(plat_priv->pci_dev,
 			plat_priv->pci_dev_id,
 			plat_priv);
@@ -910,7 +916,7 @@ static int cnss_hif_power_up(struct cnss_plat_data *plat_priv)
 		pr_err("ERROR : %s:%d ret %d\n", __func__, __LINE__, ret);
 		return -ENODEV;
 	}
-
+#endif
 	ret = cnss_bus_dev_powerup(plat_priv);
 	if (ret) {
 		cnss_pr_err("%s: cnss_bus_dev_powerup failed(%d)\n", __func__,
@@ -1109,8 +1115,8 @@ EXPORT_SYMBOL(cnss_set_led_gpio);
 int cnss_athdiag_read(struct device *dev, u32 offset, u32 mem_type,
 		      u32 data_len, u8 *output)
 {
-	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
 	int ret = 0;
+	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
 
 	if (!plat_priv) {
 		pr_err("plat_priv is NULL!\n");
@@ -2473,7 +2479,7 @@ int cnss_idle_restart(struct device *dev)
 		goto out;
 
 	if (plat_priv->device_id == QCA6174_DEVICE_ID) {
-		ret = cnss_bus_call_driver_probe(plat_priv);
+		ret = cnss_bus_driver_probe(plat_priv);
 		goto out;
 	}
 
@@ -2699,6 +2705,7 @@ int cnss_wlan_probe_driver(void)
 		plat_priv->target_assert_timestamp = 0;
 		plat_priv->driver_status = CNSS_LOAD_UNLOAD;
 
+#if defined CNSS_PCI_SUPPORT
 		if (plat_priv->bus_type == CNSS_BUS_PCI) {
 			/* If plat_priv->pci_dev is NULL, the PCI device is not
 			 * enumerated, set driver status and skip that device
@@ -2708,10 +2715,11 @@ int cnss_wlan_probe_driver(void)
 				plat_priv->driver_status = CNSS_INITIALIZED;
 				continue;
 			}
-			cnss_pci_init(plat_priv);
+			if (plat_priv->ops->cnss_bus_init)
+				plat_priv->ops->cnss_bus_init(plat_priv);
 			set_bit(CNSS_DRIVER_LOADING, &plat_priv->driver_state);
 		}
-
+#endif
 		if (plat_priv->cold_boot_support && !plat_priv->cal_done)
 			plat_priv->cal_in_progress = true;
 
@@ -2770,7 +2778,7 @@ static int cnss_assign_lvirq(struct cnss_plat_data *plat_priv)
 int cnss_wlan_register_driver_ops(struct cnss_wlan_driver *driver_ops)
 {
 	int i;
-	struct cnss_plat_data *plat_priv;
+	struct cnss_plat_data *plat_priv = NULL;
 
 	for (i = 0; i < plat_env_index; i++) {
 		plat_priv = plat_env[i];
@@ -2819,7 +2827,7 @@ EXPORT_SYMBOL(cnss_is_dev_initialized);
 void *cnss_get_pci_dev_from_plat_dev(void *pdev)
 {
 	struct platform_device *plat_dev = (struct platform_device *)pdev;
-	struct cnss_plat_data *plat_priv;
+	struct cnss_plat_data *plat_priv = NULL;
 
 	if (!plat_dev)
 		return NULL;
@@ -2836,7 +2844,7 @@ EXPORT_SYMBOL(cnss_get_pci_dev_from_plat_dev);
 void *cnss_get_pci_dev_id_from_plat_dev(void *pdev)
 {
 	struct platform_device *plat_dev = (struct platform_device *)pdev;
-	struct cnss_plat_data *plat_priv;
+	struct cnss_plat_data *plat_priv = NULL;
 
 	if (!plat_dev)
 		return NULL;
@@ -2852,7 +2860,7 @@ EXPORT_SYMBOL(cnss_get_pci_dev_id_from_plat_dev);
 
 void cnss_wlan_unregister_driver(struct cnss_wlan_driver *driver_ops)
 {
-	struct cnss_plat_data *plat_priv;
+	struct cnss_plat_data *plat_priv = NULL;
 	struct cnss_subsys_info *subsys_info;
 	struct cnss_wlan_driver *ops;
 	int i;
@@ -3808,9 +3816,7 @@ EXPORT_SYMBOL(cnss_subsystem_get);
 
 void cnss_subsystem_put(struct device *dev)
 {
-	struct cnss_plat_data *plat_priv;
-
-	plat_priv = cnss_bus_dev_to_plat_priv(dev);
+	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
 
 	if (!plat_priv)
 		return;
@@ -3836,9 +3842,7 @@ EXPORT_SYMBOL(cnss_subsystem_get);
 
 void cnss_subsystem_put(struct device *dev)
 {
-	struct cnss_plat_data *plat_priv;
-
-	plat_priv = cnss_bus_dev_to_plat_priv(dev);
+	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
 
 	if (!plat_priv)
 		return;
@@ -3864,9 +3868,7 @@ EXPORT_SYMBOL(cnss_subsystem_get);
 
 void cnss_subsystem_put(struct device *dev)
 {
-	struct cnss_plat_data *plat_priv;
-
-	plat_priv = cnss_bus_dev_to_plat_priv(dev);
+	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
 
 	if (!plat_priv)
 		return;
@@ -3902,7 +3904,7 @@ static int cnss_modem_notifier_nb(struct notifier_block *nb,
 	else
 		return NOTIFY_DONE;
 
-	if (!cnss_bus_call_driver_modem_status(plat_priv,
+	if (!cnss_bus_driver_modem_status(plat_priv,
 					       esoc_info->modem_current_status))
 		return NOTIFY_DONE;
 
@@ -4015,8 +4017,7 @@ static int cnss_subsys_powerup(const struct subsys_desc *subsys_desc)
 static int cnss_subsys_powerup(struct rproc *subsys_desc)
 #endif
 {
-	int ret = 0;
-	struct cnss_plat_data *plat_priv;
+	struct cnss_plat_data *plat_priv = NULL;
 #ifdef CONFIG_CNSS2_KERNEL_SSR_FRAMEWORK
 	if (!subsys_desc->dev) {
 		printk(KERN_ERR "dev from subsys_desc is NULL\n");
@@ -4033,14 +4034,14 @@ static int cnss_subsys_powerup(struct rproc *subsys_desc)
 	plat_priv->target_asserted = 0;
 	plat_priv->target_assert_timestamp = 0;
 	set_bit(CNSS_DRIVER_LOADING, &plat_priv->driver_state);
-	ret = cnss_pci_probe(plat_priv->pci_dev,
+#if defined CNSS_PCI_SUPPORT
+	if (cnss_pci_probe(plat_priv->pci_dev,
 			     plat_priv->pci_dev_id,
-			     plat_priv);
-	if (ret) {
-		pr_err("ERROR : %s:%d ret %d\n", __func__, __LINE__, ret);
+			     plat_priv)) {
+		pr_err("ERROR : %s:%d \n", __func__, __LINE__);
 		return -ENODEV;
 	}
-
+#endif
 	if (!plat_priv->driver_state) {
 		cnss_pr_dbg("Powerup is ignored\n");
 		return 0;
@@ -4056,7 +4057,7 @@ static int cnss_subsys_shutdown(const struct subsys_desc *subsys_desc,
 static int cnss_subsys_shutdown(struct rproc *subsys_desc)
 #endif
 {
-	struct cnss_plat_data *plat_priv;
+	struct cnss_plat_data *plat_priv = NULL;
 
 #ifdef CONFIG_CNSS2_KERNEL_SSR_FRAMEWORK
 	if (!subsys_desc->dev) {
@@ -4157,7 +4158,7 @@ static void cnss_subsys_ramdump(struct rproc *subsys_desc,
 				struct rproc_dump_segment *segment,
 				void  *dest)
 {
-	struct cnss_plat_data *plat_priv;
+	struct cnss_plat_data *plat_priv = NULL;
 
 	plat_priv = dev_get_drvdata(subsys_desc->dev.parent);
 
@@ -4175,7 +4176,7 @@ static void cnss_subsys_ramdump(struct rproc *subsys_desc,
 static int cnss_subsys_add_ramdump_callback(struct rproc *subsys_desc,
 		const struct firmware *firmware)
 {
-	struct cnss_plat_data *plat_priv;
+	struct cnss_plat_data *plat_priv = NULL;
 	int ret = 0;
 
 	plat_priv = dev_get_drvdata(subsys_desc->dev.parent);
@@ -4237,7 +4238,6 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 		&plat_priv->subsys_info;
 #endif
 	unsigned long rddm_lock;
-	struct cnss_pci_data *pci_priv = NULL;
 	struct cnss_mlo_group_info *group_info = plat_priv->mlo_group_info;
 	int ret = 0, userpd = 0;
 
@@ -4308,10 +4308,12 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 			 * path. Target assert can happen in down path and
 			 * fatal is not called since the driver_ops is NULL.
 			 */
+#if defined CNSS_PCI_SUPPORT
+			struct cnss_pci_data *pci_priv = NULL;
 			pci_priv = plat_priv->bus_priv;
 			if ((plat_priv->bus_type == CNSS_BUS_PCI) && pci_priv)
 				plat_priv = pci_priv->plat_priv;
-
+#endif
 			CNSS_ASSERT(0);
 		}
 	}
@@ -4499,12 +4501,12 @@ int cnss_force_fw_assert(struct device *dev)
 		cnss_pr_info("Forced FW assert is not supported\n");
 		return -EOPNOTSUPP;
 	}
-
+#if defined CNSS_PCI_SUPPORT
 	if (cnss_pci_is_device_down(dev)) {
 		cnss_pr_info("Device is already in bad state, ignore force assert\n");
 		return 0;
 	}
-
+#endif
 	if (test_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state)) {
 		cnss_pr_info("Recovery is already in progress, ignore forced FW assert\n");
 		return 0;
@@ -4531,12 +4533,12 @@ int cnss_force_collect_rddm(struct device *dev)
 		cnss_pr_info("Force collect rddm is not supported\n");
 		return -EOPNOTSUPP;
 	}
-
+#if defined CNSS_PCI_SUPPORT
 	if (cnss_pci_is_device_down(dev)) {
 		cnss_pr_info("Device is already in bad state, ignore force collect rddm\n");
 		return 0;
 	}
-
+#endif
 	if (test_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state)) {
 		cnss_pr_info("Recovery is already in progress, ignore forced collect rddm\n");
 		return 0;
@@ -4855,7 +4857,7 @@ static void m3_dump_read_timeout_func(struct timer_list *timer)
 
 static int m3_dump_open(struct inode *inode, struct file *file)
 {
-	struct cnss_plat_data *plat_priv;
+	struct cnss_plat_data *plat_priv = NULL;
 	struct m3_dump *m3_dump_data;
 
 	plat_priv = cnss_get_plat_priv_by_instance_id(iminor(inode));
@@ -5067,7 +5069,7 @@ static int cnss_m3_dump_upload_req_hdlr(struct cnss_plat_data *plat_priv,
 		    event_data->pdev_id, event_data->addr, event_data->size);
 
 	for (i = 0; i < plat_priv->fw_mem_seg_len; i++) {
-		if (plat_priv->fw_mem[i].type == M3_DUMP_REGION_TYPE) {
+		if (plat_priv->fw_mem[i].type == QMI_WLFW_MEM_M3_V01) {
 			m3_mem = &plat_priv->fw_mem[i];
 			break;
 		}
@@ -6533,7 +6535,7 @@ static int cnss_set_device_name(struct cnss_plat_data *plat_priv)
 
 void cnss_update_platform_feature_support(u8 type, u32 instance_id, u32 value)
 {
-	struct cnss_plat_data *plat_priv;
+	struct cnss_plat_data *plat_priv = NULL;
 
 	plat_priv = cnss_get_plat_priv_by_instance_id(instance_id);
 	if (!plat_priv) {
@@ -7177,6 +7179,13 @@ static int cnss_probe(struct platform_device *plat_dev)
 		return -ENODEV;
 	}
 
+	if (plat_priv->bus_type == CNSS_BUS_AHB)
+		plat_priv->ops = cnss_ahb_get_ops();
+#ifdef CNSS_PCI_SUPPORT
+	else if (plat_priv->bus_type == CNSS_BUS_PCI)
+		plat_priv->ops = cnss_pci_get_ops();
+#endif
+
 	ret = cnss_set_device_name(plat_priv);
 	if (ret)
 		return -ENODEV;
@@ -7247,11 +7256,9 @@ static int cnss_probe(struct platform_device *plat_dev)
 	ret = cnss_qmi_init(plat_priv);
 	if (ret)
 		goto deinit_event_work;
-
 	ret = cnss_debugfs_create(plat_priv);
 	if (ret)
 		goto deinit_qmi;
-
 	ret = cnss_misc_init(plat_priv);
 	if (ret)
 		goto destroy_debugfs;
@@ -7353,7 +7360,9 @@ static int cnss_remove(struct platform_device *plat_dev)
 	cnss_unregister_coex_service(plat_priv);
 #endif
 	cnss_misc_deinit(plat_priv);
+#if defined CNSS_DEBUG_SUPPORT
 	cnss_debugfs_destroy(plat_priv);
+#endif
 	cnss_qmi_deinit(plat_priv);
 	cnss_event_work_deinit(plat_priv);
 	cnss_recovery_work_deinit(plat_priv);
@@ -7403,18 +7412,23 @@ static int __init cnss_initialize(void)
 {
 	int ret = 0;
 	struct cnss_plat_ipc_qmi_cb ipc_qmi_callbacks;
-
+#if defined CNSS_DEBUG_SUPPORT
 	cnss_debug_init();
+#endif
 	ret = platform_driver_register(&cnss_platform_driver);
 	if (ret) {
+#if defined CNSS_DEBUG_SUPPORT
 		cnss_debug_deinit();
+#endif
 		return ret;
 	}
 #ifdef CONFIG_CNSS2_LEGACY_IRQ
 	ret = cnss_legacy_irq_init();
 	if (ret) {
 		platform_driver_unregister(&cnss_platform_driver);
+#if defined CNSS_DEBUG_SUPPORT
 		cnss_debug_deinit();
+#endif
 		return ret;
 	}
 #endif
@@ -7438,7 +7452,9 @@ static void __exit cnss_exit(void)
 	cnss_legacy_irq_deinit();
 #endif
 	platform_driver_unregister(&cnss_platform_driver);
+#if defined CNSS_DEBUG_SUPPORT
 	cnss_debug_deinit();
+#endif
 }
 
 module_init(cnss_initialize);
