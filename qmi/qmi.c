@@ -18,13 +18,18 @@
 #include <linux/soc/qcom/qmi.h>
 #include <linux/of.h>
 
-#include "bus.h"
-#include "debug.h"
-#include "main.h"
-#include "qmi.h"
-#include "pci.h"
-#include "cnss_plat_ipc_qmi.h"
-#include "genl.h"
+#include "bus/bus.h"
+#ifdef CNSS_DEBUG_SUPPORT
+#include "debug/debug.h"
+#endif
+#include "../main.h"
+#include "qmi/qmi.h"
+#if defined CNSS_PCI_SUPPORT
+#include "pci/pci.h"
+#endif
+#include "cnss_common/cnss_common.h"
+#include "qmi/cnss_plat_ipc_qmi.h"
+#include "genl/genl.h"
 
 #define WLFW_SERVICE_INS_ID_V01		1
 #define WLFW_CLIENT_ID			0x4b4e454c

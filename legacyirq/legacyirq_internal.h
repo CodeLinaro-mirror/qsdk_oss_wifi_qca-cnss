@@ -27,8 +27,11 @@
 #include <linux/debugfs.h>
 #include <linux/uaccess.h>
 #include <cnss2.h>
-#include "../qmi.h"
-#include "../pci.h"
+#include "../qmi/qmi.h"
+#if defined CNSS_PCI_SUPPORT
+#include "../pci/pci.h"
+#endif
+#include "../cnss_common/cnss_common.h"
 #include "legacyirq.h"
 
 #define INTX_INT_STS0_REG_OFFSET        0x31B4

@@ -28,8 +28,8 @@
 #include <linux/esoc_client.h>
 #endif
 
-#include "qmi.h"
-#include "bus.h"
+#include "qmi/qmi.h"
+#include "bus/bus.h"
 
 #define MAX_NO_OF_MAC_ADDR		4
 #define QMI_WLFW_MAX_TIMESTAMP_LEN	32
@@ -581,6 +581,49 @@ enum cnss_recovery_type {
 	CNSS_SYNC_RECOVERY, /* synchronous recovery */
 };
 
+struct cnss_bus_ops {
+	int (*cnss_bus_init)(struct cnss_plat_data *plat_priv);
+	void (*cnss_bus_deinit)(struct cnss_plat_data *plat_priv);
+	int (*cnss_bus_alloc_fw_mem)(struct cnss_plat_data *plat_priv);
+	void (*cnss_bus_free_fw_mem)(struct cnss_plat_data *plat_priv);
+	int (*cnss_bus_alloc_qdss_mem)(struct cnss_plat_data *plat_priv);
+	void (*cnss_bus_free_qdss_mem)(struct cnss_plat_data *plat_priv);
+	int (*cnss_bus_driver_probe)(struct cnss_plat_data *plat_priv);
+	int (*cnss_bus_driver_remove)(struct cnss_plat_data *plat_priv);
+	int (*cnss_bus_dev_powerup)(struct cnss_plat_data *plat_priv);
+	int (*cnss_bus_dev_shutdown)(struct cnss_plat_data *plat_priv);
+	int (*cnss_bus_load_m3)(struct cnss_plat_data *plat_priv);
+	u32 (*cnss_bus_get_wake_irq)(struct cnss_plat_data *plat_priv);
+	int (*cnss_bus_force_fw_assert_hdlr)(struct cnss_plat_data *plat_priv);
+	void (*cnss_bus_fw_boot_timeout_hdlr)(struct timer_list *timer);
+	int (*cnss_bus_dev_crash_shutdown)(struct cnss_plat_data *plat_priv);
+	void (*cnss_bus_collect_dump_info)(struct cnss_plat_data *plat_priv,
+						bool in_panic);
+	int (*cnss_bus_dev_ramdump)(struct cnss_plat_data *plat_priv);
+	int (*cnss_bus_register_driver_hdlr)(struct cnss_plat_data *plat_priv,
+						void *data);
+	int (*cnss_bus_unregister_driver_hdlr)
+				(struct cnss_plat_data *plat_priv);
+	int (*cnss_bus_driver_modem_status)
+			(struct cnss_plat_data *plat_priv,
+					int modem_current_status);
+	int (*cnss_bus_update_status)(struct cnss_plat_data *plat_priv,
+					enum cnss_driver_status status);
+	int (*cnss_bus_reg_read)(struct device *dev, u32 addr, u32 *val,
+					void __iomem *base);
+	int (*cnss_bus_reg_write)(struct device *dev, u32 addr, u32 val,
+				void __iomem *base);
+	int (*cnss_bus_get_soc_info)
+			(struct device *dev, struct cnss_soc_info *info);
+	u64 (*cnss_bus_get_q6_time)(struct device *dev);
+	int (*cnss_bus_get_msi_irq)(struct device *dev, unsigned int vector);
+	void (*cnss_bus_get_msi_address)(struct device *dev, u32 *msi_addr_low,
+				u32 *msi_addr_high);
+	int (*cnss_bus_get_user_msi_assignment)(struct device *dev,
+				char *user_name, int *num_vectors,
+				u32 *user_base_data, u32 *base_vector);
+};
+
 struct cnss_plat_data {
 	void *wlan_priv;
 	struct platform_device *plat_dev;
@@ -720,6 +763,7 @@ struct cnss_plat_data {
 	struct srcu_notifier_head *notifier_list[2];
 #endif
 	struct completion soc_reset_request_complete;
+	struct cnss_bus_ops *ops;
 };
 
 #ifdef CONFIG_ARCH_QCOM

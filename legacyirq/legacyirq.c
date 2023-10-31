@@ -11,6 +11,7 @@
  */
 
 #include "legacyirq_internal.h"
+#include <linux/version.h>
 
 static inline void update_latency_stat(struct legacy2virtual_irqdata *lvirq,
 				       int irq, unsigned long delay)

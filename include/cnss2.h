@@ -277,7 +277,7 @@ static inline int cnss_get_platform_cap(struct device *dev,
 	return -EINVAL;
 }
 
-static inline int cnss_get_soc_info(struct device *dev,
+static inline int cnss_bus_get_soc_info(struct device *dev,
 				    struct cnss_soc_info *info)
 {
 	return -EINVAL;
@@ -300,7 +300,7 @@ static inline int cnss_wlan_pm_control(struct device *dev, bool vote)
 	return -EINVAL;
 }
 
-static inline int cnss_get_user_msi_assignment(struct device *dev,
+static inline int cnss_bus_get_user_msi_assignment(struct device *dev,
 					       char *user_name,
 					       int *num_vectors,
 					       uint32_t *user_base_data,
@@ -309,7 +309,7 @@ static inline int cnss_get_user_msi_assignment(struct device *dev,
 	return -EINVAL;
 }
 
-static inline int cnss_get_msi_irq(struct device *dev, unsigned int vector)
+static inline int cnss_bus_get_msi_irq(struct device *dev, unsigned int vector)
 {
 	return -EINVAL;
 }
@@ -319,7 +319,7 @@ static inline int cnss_get_pci_slot(struct device *dev)
 	return 0;
 }
 
-static inline void cnss_get_msi_address(struct device *dev,
+static inline void cnss_bus_get_msi_address(struct device *dev,
 					uint32_t *msi_addr_low,
 					uint32_t *msi_addr_high)
 {
@@ -403,7 +403,7 @@ static inline bool cnss_is_dev_initialized(struct device *dev)
 	return false;
 }
 
-static inline u64 cnss_get_q6_time(struct device *dev)
+static inline u64 cnss_bus_get_q6_time(struct device *dev)
 {
 	return 0;
 }
@@ -475,12 +475,12 @@ static inline int cnss_get_dev_link_ids(struct device *dev, u8 *link_ids,
 {
 	return -EINVAL;
 }
-static inline int cnss_reg_read(struct device *dev, u32 addr, u32 *val,
+static inline int cnss_bus_reg_read(struct device *dev, u32 addr, u32 *val,
 				void __iomem *base)
 {
 	return -EINVAL;
 }
-static inline int cnss_reg_write(struct device *dev, u32 addr, u32 val,
+static inline int cnss_bus_reg_write(struct device *dev, u32 addr, u32 val,
 				 void __iomem *base)
 {
 	return -EINVAL;
@@ -567,7 +567,7 @@ extern int cnss_get_platform_cap(struct device *dev,
 extern struct iommu_domain *cnss_smmu_get_domain(struct device *dev);
 extern int cnss_smmu_map(struct device *dev,
 			 phys_addr_t paddr, uint32_t *iova_addr, size_t size);
-extern int cnss_get_soc_info(struct device *dev, struct cnss_soc_info *info);
+extern int cnss_bus_get_soc_info(struct device *dev, struct cnss_soc_info *info);
 extern int cnss_request_bus_bandwidth(struct device *dev, int bandwidth);
 struct cnss_plat_data;
 extern int cnss_power_on_device(struct cnss_plat_data *plat_priv,
@@ -591,13 +591,13 @@ extern int cnss_pci_is_drv_connected(struct device *dev);
 extern int cnss_pci_force_wake_request(struct device *dev);
 extern int cnss_pci_is_device_awake(struct device *dev);
 extern int cnss_pci_force_wake_release(struct device *dev);
-extern int cnss_get_user_msi_assignment(struct device *dev, char *user_name,
+extern int cnss_bus_get_user_msi_assignment(struct device *dev, char *user_name,
 					int *num_vectors,
 					uint32_t *user_base_data,
 					uint32_t *base_vector);
-extern int cnss_get_msi_irq(struct device *dev, unsigned int vector);
+extern int cnss_bus_get_msi_irq(struct device *dev, unsigned int vector);
 extern int cnss_get_pci_slot(struct device *dev);
-extern void cnss_get_msi_address(struct device *dev, uint32_t *msi_addr_low,
+extern void cnss_bus_get_msi_address(struct device *dev, uint32_t *msi_addr_low,
 				 uint32_t *msi_addr_high);
 extern int cnss_wlan_enable(struct device *dev,
 			    struct cnss_wlan_enable_cfg *config,
@@ -624,7 +624,7 @@ extern int cnss_athdiag_write(struct device *dev, uint32_t offset,
 			      uint32_t mem_type, uint32_t data_len,
 			      uint8_t *input);
 bool cnss_is_dev_initialized(struct device *dev);
-u64 cnss_get_q6_time(struct device *dev);
+u64 cnss_bus_get_q6_time(struct device *dev);
 extern void cnss_dump_qmi_history(void);
 void cnss_get_ramdump_device_name(struct device *dev,
 				  char *ramdump_dev_name,
@@ -646,8 +646,10 @@ int cnss_get_mlo_chip_info(struct device *dev,
 int cnss_get_num_mlo_capable_devices(unsigned int *device_id,
 				     int num_elements);
 int cnss_get_dev_link_ids(struct device *dev, u8 *link_ids, int max_elements);
-int cnss_reg_read(struct device *dev, u32 addr, u32 *val, void __iomem *base);
-int cnss_reg_write(struct device *dev, u32 addr, u32 val, void __iomem *base);
+int cnss_bus_reg_read(struct device *dev, u32 addr, u32 *val,
+					void __iomem *base);
+int cnss_bus_reg_write(struct device *dev, u32 addr, u32 val,
+					void __iomem *base);
 int cnss_set_bar_addr(struct device *dev, void __iomem *mem);
 int cnss_set_mlo_config(struct cnss_module_param *modparam,
 			struct cnss_mlo_group_info *group_info);

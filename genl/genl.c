@@ -1,4 +1,5 @@
 /* Copyright (c) 2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -15,9 +16,11 @@
 #include <linux/err.h>
 #include <linux/module.h>
 
-#include "genl.h"
-#include "main.h"
-#include "debug.h"
+#include "genl/genl.h"
+#include "../main.h"
+#ifdef CNSS_DEBUG_SUPPORT
+#include "debug/debug.h"
+#endif
 
 #define CNSS_GENL_FAMILY_NAME "cnss-genl"
 #define CNSS_GENL_MCAST_GROUP_NAME "cnss-genl-grp"

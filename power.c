@@ -19,8 +19,11 @@
 #include <soc/qcom/cmd-db.h>
 #endif
 
-#include "main.h"
-#include "debug.h"
+#include "../main.h"
+#ifdef CNSS_DEBUG_SUPPORT
+#include "debug/debug.h"
+#endif
+#include "cnss_common/cnss_common.h"
 
 #ifdef CNSS2_VREG
 static struct cnss_vreg_cfg cnss_vreg_list[] = {
