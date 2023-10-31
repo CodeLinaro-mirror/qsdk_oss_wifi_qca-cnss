@@ -6185,6 +6185,7 @@ static void __cnss_subsystem_put_wrapper(struct cnss_plat_data *plat_priv)
 static void cnss_driver_cal_work(struct work_struct *work)
 {
 	int ret, index, count = 0;
+	u64 probe_time = 0;
 	struct cnss_plat_data *plat_priv =
 		container_of(work, struct cnss_plat_data, cal_work);
 	struct cnss_plat_data *prev_plat_priv;
@@ -6223,16 +6224,18 @@ static void cnss_driver_cal_work(struct work_struct *work)
 		/* Temporary change to preserve probe order */
 		if (index > 0) {
 			prev_plat_priv = plat_env[index - 1];
+			probe_time = jiffies;
 			while (prev_plat_priv->driver_status !=
-					CNSS_INITIALIZED) {
-				cnss_pr_dbg("Waiting for prev target to probe\n");
+							CNSS_INITIALIZED) {
 				msleep(FW_READY_DELAY);
 				if (count++ > probe_timeout * 10) {
-					cnss_pr_err("CNSS Driver probe timed out\n");
+					cnss_pr_err("CNSS Driver probe timed out %u ms\n",
+					jiffies_to_msecs(jiffies - probe_time));
 					CNSS_ASSERT(0);
 				}
 			}
-			cnss_pr_info("Previous target is probed\n");
+			cnss_pr_info("Previous target probe took %u ms\n",
+				     jiffies_to_msecs(jiffies - probe_time));
 		}
 		__cnss_subsystem_get_wrapper(plat_priv);
 	}
