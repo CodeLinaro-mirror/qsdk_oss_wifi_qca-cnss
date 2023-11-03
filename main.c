@@ -803,12 +803,13 @@ static int cnss_hif_shutdown(struct cnss_plat_data *plat_priv)
 	if (!plat_priv)
 		return -ENODEV;
 
+	if (test_bit(CNSS_DRIVER_UNLOADING, &plat_priv->driver_state))
+		return 0;
+
+	set_bit(CNSS_DRIVER_UNLOADING, &plat_priv->driver_state);
+
 	cnss_hif_notifier(plat_priv, CNSS_BEFORE_SHUTDOWN);
 
-	if (!plat_priv->driver_state) {
-		cnss_pr_dbg("shutdown is ignored\n");
-		return 0;
-	}
 	ret = cnss_bus_dev_shutdown(plat_priv);
 	if (ret != 0) {
 		cnss_pr_err("%s: cnss_bus_dev_shutdown failed(%d)\n", __func__,
@@ -847,8 +848,6 @@ fail:
 
 void __cnss_hif_put(struct cnss_plat_data *plat_priv)
 {
-	set_bit(CNSS_DRIVER_UNLOADING, &plat_priv->driver_state);
-
 	if (!plat_priv)
 		return;
 
@@ -3047,8 +3046,9 @@ void cnss_wlan_unregister_driver(struct cnss_wlan_driver *driver_ops)
 
 		if ((plat_priv->bus_type == CNSS_BUS_PCI) && ops &&
 		    (strcmp(driver_ops->name, "pld_pcie") == 0)) {
-			set_bit(CNSS_DRIVER_UNLOADING, &plat_priv->driver_state);
 #ifndef CONFIG_CNSS2_KERNEL_5_15
+			set_bit(CNSS_DRIVER_UNLOADING,
+				&plat_priv->driver_state);
 			subsys_info = &plat_priv->subsys_info;
 			if (subsys_info->subsys_handle &&
 			    !subsys_info->subsystem_put_in_progress) {
