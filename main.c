@@ -1038,6 +1038,9 @@ skip_cfg:
 		 * It is not required to wait until it gets connected here.
 		 * Hence pass the timeout value as 0.
 		 */
+#ifdef CONFIG_CNSS2_KERNEL_6_1
+		plat_priv->cal_time = jiffies;
+#else
 		if (is_ipc_qmi_client_connected
 				(CNSS_PLAT_IPC_DAEMON_QMI_CLIENT_V01, 0)) {
 			cnss_pr_dbg("%s: cal_file_size %u !\n", __func__,
@@ -1046,6 +1049,7 @@ skip_cfg:
 							   cal_file_size);
 			plat_priv->cal_time = jiffies;
 		}
+#endif
 	}
 
 	ret = cnss_wlfw_wlan_mode_send_sync(plat_priv, mode);
