@@ -1754,6 +1754,9 @@ u64 cnss_get_q6_time(struct device *dev)
 		return 0;
 	}
 
+	if (!test_bit(CNSS_FW_READY, &plat_priv->driver_state))
+		return 0;
+
 	switch (plat_priv->bus_type) {
 	case CNSS_BUS_PCI:
 		pci_priv = plat_priv->bus_priv;
