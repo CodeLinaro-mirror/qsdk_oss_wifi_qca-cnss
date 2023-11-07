@@ -34,56 +34,7 @@
 #include <linux/mhi_misc.h>
 #endif
 
-#include "main.h"
-
-#define QCATHR_VENDOR_ID		0x168C
-#define QCN_VENDOR_ID			0x17CB
-#define QCA6174_DEVICE_ID		0x003E
-#define QCA6174_REV_ID_OFFSET		0x08
-#define QCA6174_REV3_VERSION		0x5020000
-#define QCA6174_REV3_2_VERSION		0x5030000
-#define QCN9000_EMULATION_DEVICE_ID	0xABCD
-#define QCA8074_DEVICE_ID               0xFFFF
-#define QCA8074V2_DEVICE_ID             0xFFFE
-#define QCA6018_DEVICE_ID               0xFFFD
-#define QCA5018_DEVICE_ID               0xFFFC
-#define QCN6122_DEVICE_ID		0xFFFB
-#define QCA9574_DEVICE_ID		0xFFFA
-#define QCA5332_DEVICE_ID		0xFFF9
-#define QCN9160_DEVICE_ID		0xFFF8
-#define QCN6432_DEVICE_ID		0xFFF7
-#define QCA6174_DEVICE_ID		0x003E
-#define QCA6390_DEVICE_ID		0x1101
-#define QCA6490_DEVICE_ID		0x1103
-#define QCN9000_DEVICE_ID		0x1104
-#define QCN9224_DEVICE_ID		0x1109
-#define QCN6122_DEVICE_BAR_SIZE		0x200000
-#define QCN6122_ETR_DEV_NODE_PREFIX	"q6_qcn6122_etr"
-#define QCN9160_ETR_DEV_NODE_PREFIX	"q6_qcn9160_etr"
-#define QCN6432_ETR_DEV_NODE_PREFIX	"q6_qcn6432_etr"
-#define ETR_DEV_NODE_LEN		17
-#define QCN6122_M3_DUMP_PREFIX		"m3_dump_qcn6122"
-#define QCN9160_M3_DUMP_PREFIX		"m3_dump_qcn9160"
-#define QCN6432_M3_DUMP_PREFIX		"m3_dump_qcn6432"
-#define M3_DUMP_NODE_LEN		18
-#define HOST_DDR_REGION_TYPE		0x1
-#define BDF_MEM_REGION_TYPE		0x2
-#define M3_DUMP_REGION_TYPE		0x3
-#define CALDB_MEM_REGION_TYPE		0x4
-#define QDSS_ETR_MEM_REGION_TYPE	0x6
-#define QMI_WLFW_PAGEABLE_MEM_V01	0x9
-#define AFC_REGION_TYPE			0xA
-
-#define MLO_GROUP_MASTER_CHIP		0
-#define MODE_0_RECOVERY_MODE		1
-#define MODE_1_RECOVERY_MODE		2
-
-#define CNSS_ETR_SG_ENT(phys_pte)	(((phys_pte >> PAGE_SHIFT) << 4) | 0x2)
-#define CNSS_ETR_SG_NXT_TBL(phys_pte)	(((phys_pte >> PAGE_SHIFT) << 4) | 0x3)
-#define CNSS_ETR_SG_LST_ENT(phys_pte)	(((phys_pte >> PAGE_SHIFT) << 4) | 0x1)
-#define CNSS_ETR_SG_ENT_TO_BLK(phys_pte) (((phys_addr_t)phys_pte >> 4)   \
-					 << PAGE_SHIFT)
-#define MHI_SOC_RESET_DELAY	200  /* in msecs */
+#include "../main.h"
 
 enum cnss_mhi_state {
 	CNSS_MHI_INIT,
@@ -104,23 +55,6 @@ enum pci_link_status {
 	PCI_GEN1,
 	PCI_GEN2,
 	PCI_DEF,
-};
-
-struct cnss_msi_user {
-	char *name;
-	int num_vectors;
-	u32 base_vector;
-};
-
-struct cnss_msi_config {
-	int total_vectors;
-	int total_users;
-	struct cnss_msi_user *users;
-};
-
-struct cnss_pci_reg {
-	char *name;
-	u32 offset;
 };
 
 struct cnss_pci_debug_reg {
@@ -245,9 +179,7 @@ int cnss_pci_init(struct cnss_plat_data *plat_priv);
 void cnss_pci_deinit(struct cnss_plat_data *plat_priv);
 int cnss_ahb_alloc_fw_mem(struct cnss_plat_data *plat_priv);
 int cnss_pci_alloc_fw_mem(struct cnss_plat_data *plat_priv);
-void cnss_pci_free_fw_mem(struct cnss_plat_data *plat_priv);
 int cnss_pci_alloc_qdss_mem(struct cnss_pci_data *pci_priv);
-void cnss_pci_free_qdss_mem(struct cnss_plat_data *plat_priv);
 int cnss_pci_load_m3(struct cnss_pci_data *pci_priv);
 int cnss_pci_get_bar_info(struct cnss_pci_data *pci_priv, void __iomem **va,
 			  phys_addr_t *pa);
@@ -260,7 +192,6 @@ void cnss_pci_remove(struct pci_dev *pci_dev);
 int cnss_pci_probe(struct pci_dev *pci_dev,
 		   const struct pci_device_id *id,
 		   struct cnss_plat_data *plat_priv);
-u32 cnss_pci_get_wake_msi(struct cnss_pci_data *pci_priv);
 int cnss_pci_force_fw_assert_hdlr(struct cnss_pci_data *pci_priv);
 void cnss_pci_fw_boot_timeout_hdlr(struct cnss_pci_data *pci_priv);
 int cnss_pci_call_driver_probe(struct cnss_pci_data *pci_priv);
@@ -289,10 +220,9 @@ int cnss_ahb_update_status(struct cnss_plat_data *plat_priv,
 void cnss_pci_global_reset(struct cnss_pci_data *pci_priv);
 void cnss_free_soc_info(struct cnss_plat_data *plat_priv);
 void cnss_do_mlo_global_memset(struct cnss_plat_data *plat_priv, u64 mem_size);
-int cnss_bus_reg_read(struct cnss_plat_data *plat_priv, u32 reg_offset,
-		      u32 *val);
 int cnss_pci_reg_read(struct cnss_plat_data *plat_priv,
 			     u32 addr, u32 *val);
+struct cnss_bus_ops *cnss_pci_get_ops(void);
 #ifdef CONFIG_CNSS2_QGIC2M
 struct qgic2_msi *cnss_qgic2_enable_msi(struct cnss_plat_data *plat_priv);
 void cnss_qgic2_disable_msi(struct cnss_plat_data *plat_priv);

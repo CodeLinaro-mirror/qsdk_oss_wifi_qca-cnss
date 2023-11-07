@@ -15,21 +15,16 @@
 #include <linux/seq_file.h>
 #include <linux/debugfs.h>
 #include <linux/module.h>
-#include "main.h"
-#include "debug.h"
-#include "pci.h"
+#include "cnss_common/cnss_common.h"
+#include "../main.h"
+#include "debug/debug.h"
+#include "pci/pci.h"
 
 #if IS_ENABLED(CONFIG_IPC_LOGGING)
 void *cnss_ipc_log_context;
 void *cnss_ipc_log_long_context;
 #endif
 extern void cnss_dump_qmi_history(void);
-struct dentry *cnss_root_dentry = NULL;
-
-int log_level = CNSS_LOG_LEVEL_INFO;
-EXPORT_SYMBOL(log_level);
-module_param(log_level, int, 0644);
-MODULE_PARM_DESC(log_level, "CNSS2 Module Log Level");
 
 static struct cnss_ce_base_addr ce_base_addr_qca8074 = {
 	.src_base = QCA8074_CE_SRC_RING_REG_BASE,
@@ -89,7 +84,7 @@ static struct cnss_ce_base_addr ce_base_addr_qcn6432 = {
 	.max_ce_count = DEFAULT_CE_COUNT,
 };
 
-static struct cnss_pci_reg ce_src[] = {
+static struct cnss_reg_offset ce_src[] = {
 	{ "SRC_RING_BASE_LSB", CE_SRC_RING_BASE_LSB_OFFSET },
 	{ "SRC_RING_BASE_MSB", CE_SRC_RING_BASE_MSB_OFFSET },
 	{ "SRC_RING_ID", CE_SRC_RING_ID_OFFSET },
@@ -106,7 +101,7 @@ static struct cnss_pci_reg ce_src[] = {
 	{ NULL },
 };
 
-static struct cnss_pci_reg ce_dst[] = {
+static struct cnss_reg_offset ce_dst[] = {
 	{ "DEST_RING_BASE_LSB", CE_DEST_RING_BASE_LSB_OFFSET },
 	{ "DEST_RING_BASE_MSB", CE_DEST_RING_BASE_MSB_OFFSET },
 	{ "DEST_RING_ID", CE_DEST_RING_ID_OFFSET },
@@ -130,7 +125,7 @@ static struct cnss_pci_reg ce_dst[] = {
 	{ NULL },
 };
 
-static struct cnss_pci_reg ce_cmn[] = {
+static struct cnss_reg_offset ce_cmn[] = {
 	{ "GXI_ERR_INTS", CE_COMMON_GXI_ERR_INTS },
 	{ "GXI_ERR_STATS", CE_COMMON_GXI_ERR_STATS },
 	{ "GXI_WDOG_STATUS", CE_COMMON_GXI_WDOG_STATUS },
@@ -268,6 +263,7 @@ static void cnss_dump_ce_reg(struct cnss_plat_data *plat_priv,
 	u32 src_base;
 	u32 dst_base;
 	u32 common_base;
+	struct device *dev = &plat_priv->plat_dev->dev;
 
 	cnss_get_ce_base(plat_priv, ce_object, &src_base,
 			 &dst_base, &common_base);
@@ -276,7 +272,7 @@ static void cnss_dump_ce_reg(struct cnss_plat_data *plat_priv,
 			reg_offset = src_base +
 				ce_base + ce_src[i].offset;
 
-			if (cnss_bus_reg_read(plat_priv, reg_offset, &val))
+			if (cnss_bus_reg_read(dev, reg_offset, &val, NULL))
 				return;
 			cnss_get_ce_bar_from_ce_base(plat_priv, &reg_offset);
 			cnss_pr_info("CE_%02d_%s[0x%x] = 0x%x\n",
@@ -287,7 +283,7 @@ static void cnss_dump_ce_reg(struct cnss_plat_data *plat_priv,
 			reg_offset = dst_base +
 				ce_base + ce_dst[i].offset;
 
-			if (cnss_bus_reg_read(plat_priv, reg_offset, &val))
+			if (cnss_bus_reg_read(dev, reg_offset, &val, NULL))
 				return;
 			cnss_get_ce_bar_from_ce_base(plat_priv, &reg_offset);
 			cnss_pr_info("CE_%02d_%s[0x%x] = 0x%x\n",
@@ -298,7 +294,7 @@ static void cnss_dump_ce_reg(struct cnss_plat_data *plat_priv,
 			reg_offset = common_base +
 				ce_base + ce_cmn[i].offset;
 
-			if (cnss_bus_reg_read(plat_priv, reg_offset, &val))
+			if (cnss_bus_reg_read(dev, reg_offset, &val, NULL))
 				return;
 			cnss_get_ce_bar_from_ce_base(plat_priv, &reg_offset);
 			cnss_pr_info("CE_COMMON_%s[0x%x] = 0x%x\n",
@@ -909,7 +905,15 @@ static int cnss_debug_probe(struct pci_dev *pdev,
 {
 	struct platform_device *plat_dev = (struct platform_device *)pdev;
 	struct cnss_plat_data *plat_priv = cnss_get_plat_priv(plat_dev);
-	struct pci_dev *pci_dev = plat_priv->pci_dev;
+	struct pci_dev *pci_dev;
+
+	if (!plat_priv)
+		return -ENODEV;
+
+	pci_dev = plat_priv->pci_dev;
+
+	if (!pci_dev)
+		return -ENODEV;
 
 	cnss_pr_err("%s: %d: plat_priv %pK device %pK\n",
 		    __func__, __LINE__, plat_priv, pci_dev);
@@ -1770,38 +1774,6 @@ static const struct file_operations cnss_hds_support_fops = {
 };
 #endif
 
-static ssize_t cnss_qmi_record_debug_write(struct file *fp,
-					   const char __user *user_buf,
-					   size_t count, loff_t *off)
-{
-	char buf[4];
-
-	if (copy_from_user(buf, user_buf, 4))
-		return -EFAULT;
-	qmi_record(buf[0], 0xD000 | buf[1], buf[2], buf[3]);
-	return count;
-}
-
-static int cnss_qmi_record_debug_show(struct seq_file *s, void *data)
-{
-	cnss_dump_qmi_history();
-	return 0;
-}
-
-static int cnss_qmi_record_debug_open(struct inode *inode, struct file *file)
-{
-	return single_open(file, cnss_qmi_record_debug_show, inode->i_private);
-}
-
-static const struct file_operations cnss_qmi_record_debug_fops = {
-	.read		= seq_read,
-	.write		= cnss_qmi_record_debug_write,
-	.release	= single_release,
-	.open		= cnss_qmi_record_debug_open,
-	.owner		= THIS_MODULE,
-	.llseek		= seq_lseek,
-};
-
 #if !defined(CONFIG_CNSS2_KERNEL_5_15) && !defined(CONFIG_CNSS2_KERNEL_6_1)
 static ssize_t cnss_pci_write_switch_link(struct file *fp,
 					   const char __user *user_buf,
@@ -1866,26 +1838,7 @@ static const struct file_operations cnss_pci_switch_link_fops = {
 };
 #endif
 
-static int cnss_mlo_config_debug_show(struct seq_file *s, void *data)
-{
-	cnss_print_mlo_config();
-	return 0;
-}
-
-static int cnss_mlo_config_debug_open(struct inode *inode, struct file *file)
-{
-	return single_open(file, cnss_mlo_config_debug_show, inode->i_private);
-}
-
-static const struct file_operations cnss_mlo_config_debug_fops = {
-	.read		= seq_read,
-	.release	= single_release,
-	.open		= cnss_mlo_config_debug_open,
-	.owner		= THIS_MODULE,
-	.llseek		= seq_lseek,
-};
-
-static int cnss_create_debug_only_node(struct cnss_plat_data *plat_priv)
+int cnss_create_debug_only_node(struct cnss_plat_data *plat_priv)
 {
 	struct dentry *root_dentry = plat_priv->root_dentry;
 
@@ -1914,56 +1867,11 @@ static int cnss_create_debug_only_node(struct cnss_plat_data *plat_priv)
 	debugfs_create_file("pci_switch_link", 0600, root_dentry, plat_priv,
 			    &cnss_pci_switch_link_fops);
 #endif
-	return 0;
-}
-
-int cnss_debugfs_create(struct cnss_plat_data *plat_priv)
-{
-	int ret = 0;
-	struct dentry *root_dentry = NULL;
-
-	if (!cnss_root_dentry) {
-		cnss_root_dentry = debugfs_create_dir("cnss", 0);
-		if (IS_ERR(cnss_root_dentry)) {
-			ret = PTR_ERR(cnss_root_dentry);
-			cnss_pr_err("Unable to create debugfs %d\n", ret);
-			goto out;
-		}
-
-		/* Create qmi_record under /sys/kernel/debug/cnss2/ */
-		debugfs_create_file("qmi_record", 0600, cnss_root_dentry, NULL,
-				    &cnss_qmi_record_debug_fops);
-		debugfs_create_file("mlo_config", 0600, cnss_root_dentry, NULL,
-				    &cnss_mlo_config_debug_fops);
-	}
-
-	root_dentry = debugfs_create_dir((char *)&plat_priv->device_name,
-					 cnss_root_dentry);
-	if (IS_ERR(root_dentry)) {
-		ret = PTR_ERR(root_dentry);
-		cnss_pr_err("Unable to create debugfs %d\n", ret);
-		goto out;
-	}
-	plat_priv->root_dentry = root_dentry;
-
 	debugfs_create_file("pin_connect_result", 0644, root_dentry, plat_priv,
 			    &cnss_pin_connect_fops);
 	debugfs_create_file("stats", 0644, root_dentry, plat_priv,
 			    &cnss_stats_fops);
-
-	cnss_create_debug_only_node(plat_priv);
-
-out:
-	return ret;
-}
-
-void cnss_debugfs_destroy(struct cnss_plat_data *plat_priv)
-{
-	if (cnss_root_dentry) {
-		debugfs_remove_recursive(cnss_root_dentry);
-		cnss_root_dentry = NULL;
-	}
-	plat_priv->root_dentry = NULL;
+	return 0;
 }
 
 #if IS_ENABLED(CONFIG_IPC_LOGGING)
@@ -2009,28 +1917,4 @@ int cnss_debug_init(void)
 void cnss_debug_deinit(void) {}
 #endif
 
-bool cnss_wait_for_rddm_complete(struct cnss_plat_data *plat_priv)
-{
-	int count = 0;
 
-	if (!plat_priv)
-		return true;
-
-	if (test_bit(CNSS_RDDM_DUMP_IN_PROGRESS, &plat_priv->driver_state)) {
-		cnss_pr_dbg("Waiting for RDDM collection for device 0x%lx\n",
-			      plat_priv->device_id);
-		while (test_bit(CNSS_RDDM_DUMP_IN_PROGRESS,
-		       &plat_priv->driver_state)) {
-			msleep(RDDM_DONE_DELAY);
-			if (count++ > rddm_done_timeout * 10) {
-				cnss_pr_err("RDDM collection timed-out %d seconds\n",
-					    rddm_done_timeout);
-				CNSS_ASSERT(0);
-			}
-		}
-		cnss_pr_dbg("RDDM collection wait ended for device 0x%lx\n",
-			     plat_priv->device_id);
-	}
-
-	return true;
-}
