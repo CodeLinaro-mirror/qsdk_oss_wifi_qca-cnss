@@ -73,8 +73,8 @@
 #define FILE_SYSTEM_READY		1
 #define FW_ASSERT_TIMEOUT		5000
 #define CNSS_EVENT_PENDING		2989
-#define RPROC_ROOTPD_NAME		"d100000.remoteproc"
-#define RPROC_TEXTPD_NAME		"d100000.remoteproc:remoteproc_text_pd4"
+
+#define RPROC_ROOTPD_NAME		"remoteproc"
 
 #define CNSS_QUIRKS_DEFAULT		0
 #ifdef CONFIG_CNSS_EMULATION
@@ -5370,7 +5370,7 @@ int cnss_register_subsys(struct cnss_plat_data *plat_priv)
 #ifndef CONFIG_CNSS2_KERNEL_5_15
 	struct cnss_subsys_info *subsys_info = &plat_priv->subsys_info;
 	struct device *dev = &plat_priv->plat_dev->dev, *rproc_dev;
-	struct rproc *rproc_handle, *rproc_pd;
+	struct rproc *rproc_handle, *rproc_parent_pd;
 	phandle rproc_node;
 #endif
 	int ret = 0;
@@ -5401,28 +5401,49 @@ int cnss_register_subsys(struct cnss_plat_data *plat_priv)
 
 			rproc_handle = plat_priv->rproc_handle;
 
+			/* Register the Rootpd for the first userpd
+			 * which is being probed. Skip if already registered.
+			 */
 			if ((!rproc_rootpd) &&
 			    (plat_priv->recovery_type == CNSS_SYNC_RECOVERY)) {
+				/* Parent node of userpd will be always be
+				 * either rootpd or textpd.
+				 */
 				rproc_dev = rproc_handle->dev.parent;
-				rproc_pd = dev_get_drvdata(rproc_dev->parent);
-				if (rproc_pd) {
-					if (!strncmp(rproc_pd->name,
-					    RPROC_TEXTPD_NAME,
-					    sizeof(RPROC_TEXTPD_NAME))) {
-						rproc_textpd = rproc_pd;
-						rproc_dev = rproc_textpd->dev.parent;
-						rproc_pd = dev_get_drvdata(rproc_dev->parent);
-						cnss_pr_dbg("%s: Rproc textpd handle present for device %s\n",
-							    __func__,
-							    plat_priv->device_name);
-					}
-					if (!strncmp(rproc_pd->name,
-						RPROC_ROOTPD_NAME,
-						sizeof(RPROC_ROOTPD_NAME))) {
-						rproc_rootpd = rproc_pd;
-						cnss_pr_dbg("%s: Rproc rootpd handle present for device %s\n",
-							    __func__,
-							    plat_priv->device_name);
+				rproc_parent_pd = dev_get_drvdata(rproc_dev->parent);
+					/* The device tree structure is represented as,
+					 * Rootpd ->
+					 *      Textpd (For QCN6432 RDP only) ->
+					 *              Userpd_1
+					 *              ...
+					 *              Userpd_n
+					 * All the Rproc PD nodes have the
+					 * string "remoteproc" in their name.
+					 * Parent of rootpd node doesn't have
+					 * the string in its name. Traverse to
+					 * the first parent of userpd to get
+					 * textpd or rootpd. If there is node
+					 * above the first parent then that
+					 * parent is the textpd and the parent
+					 * of textpd is rootpd.
+					 */
+				if (rproc_parent_pd) {
+					if (strstr(rproc_parent_pd->name, RPROC_ROOTPD_NAME)) {
+						rproc_rootpd = rproc_parent_pd;
+						rproc_dev = rproc_parent_pd->dev.parent;
+						rproc_parent_pd = dev_get_drvdata(rproc_dev->parent);
+						if (rproc_parent_pd) {
+							if (strstr(rproc_parent_pd->name, RPROC_ROOTPD_NAME)) {
+								rproc_textpd = rproc_rootpd;
+								cnss_pr_info("%s: Rproc text pd handle %s\n",
+									__func__,
+									rproc_textpd->name);
+								rproc_rootpd = rproc_parent_pd;
+							}
+						}
+						cnss_pr_info("%s: Rproc root pd handle %s\n",
+								__func__,
+								rproc_rootpd->name);
 					}
 				}
 			}
