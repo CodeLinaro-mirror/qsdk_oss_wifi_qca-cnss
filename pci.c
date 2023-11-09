@@ -6265,12 +6265,14 @@ void cnss_get_crash_reason(struct cnss_pci_data *pci_priv)
 	struct cnss_ramdump_entry *ramdump_table;
 	char *msg = ERR_PTR(-EPROBE_DEFER);
 	struct pci_dev *pci_dev = plat_priv->pci_dev;
+	struct device *dev;
 
 	mhi_cntrl = pci_priv->mhi_ctrl;
 	rddm_image = mhi_cntrl->rddm_image;
 	mhi_buf = rddm_image->mhi_buf;
+	dev = &pci_dev->dev;
 
-	cnss_pr_err("CRASHED - [DID:DOMAIN:BUS:SLOT] - %x:%04u:%02u:%02u\n",
+	dev_err(dev, "CRASHED - [DID:DOMAIN:BUS:SLOT] - %x:%04u:%02u:%02u\n",
 		    pci_dev->device, pci_dev->bus->domain_nr,
 		    pci_dev->bus->number, PCI_SLOT(pci_dev->devfn));
 
@@ -6294,7 +6296,7 @@ void cnss_get_crash_reason(struct cnss_pci_data *pci_priv)
 	}
 
 	if (i == MAX_RAMDUMP_TABLE_SIZE) {
-		cnss_pr_err("Cannot find '%s' entry in ramdump\n",
+		dev_err(dev, "Cannot find '%s' entry in ramdump\n",
 			    COREDUMP_DESC);
 		return;
 	}
@@ -6310,7 +6312,7 @@ void cnss_get_crash_reason(struct cnss_pci_data *pci_priv)
 	}
 
 	if (!IS_ERR(msg) && msg && msg[0])
-		cnss_pr_err("Fatal error received from wcss software!\n%s\n",
+		dev_err(dev, "Fatal error received from wcss software!\n%s\n",
 			    msg);
 }
 #else
