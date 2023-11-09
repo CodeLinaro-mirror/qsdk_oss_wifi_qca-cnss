@@ -4832,6 +4832,14 @@ static void cnss_mhi_notify_status(struct mhi_controller *mhi_ctrl,
 			return;
 		}
 
+		/* check duplicate RDDM received from MHI */
+		if (mhi_get_exec_env(pci_priv->mhi_ctrl) == mhi_ctrl->ee) {
+			cnss_pr_dbg("Skip duplicate %s(%d) received from MHI for the same SoC\n",
+				    cnss_mhi_notify_status_to_str(reason),
+				    reason);
+			return;
+		}
+
 		/* In-case of Target Assert */
 		cnss_pci_set_mhi_state_bit(pci_priv, CNSS_MHI_RDDM);
 	}
