@@ -2583,9 +2583,13 @@ int cnss_qcn9000_ramdump(struct  cnss_pci_data *pci_priv)
 			goto free_seg_list;
 		}
 
+		if (dump_seg->type != meta_info.entry[dump_seg->type].type)
+			meta_info.total_entries++;
+
 		if (meta_info.entry[dump_seg->type].entry_start == 0) {
 			meta_info.entry[dump_seg->type].type = dump_seg->type;
-			meta_info.entry[dump_seg->type].entry_start = i + 1;
+			meta_info.entry[dump_seg->type].entry_start =
+							i + CNSS_NUM_META_INFO_SEGMENTS;
 		}
 		meta_info.entry[dump_seg->type].entry_num++;
 		seg->da = dump_seg->address;
@@ -2604,7 +2608,7 @@ int cnss_qcn9000_ramdump(struct  cnss_pci_data *pci_priv)
 	meta_info.magic = CNSS_RAMDUMP_MAGIC;
 	meta_info.version = CNSS_RAMDUMP_VERSION_V2;
 	meta_info.chipset = plat_priv->device_id;
-	meta_info.total_entries = CNSS_FW_DUMP_TYPE_MAX;
+	meta_info.total_entries += 1;
 	seg->va = &meta_info;
 	seg->size = sizeof(meta_info);
 	list_add(&seg->node, &head);
