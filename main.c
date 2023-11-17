@@ -3444,13 +3444,13 @@ static int cnss_qca8074_notifier_nb(struct notifier_block *nb,
 					  &plat_priv->driver_state);
 			cnss_bus_free_fw_mem(plat_priv);
 			cnss_bus_free_qdss_mem(plat_priv);
+			cnss_free_soc_info(plat_priv);
 		}
 		if (driver_ops)
 			driver_ops->update_status(
 					(struct pci_dev *)plat_priv->plat_dev,
 					(const struct pci_device_id *)
 					plat_priv->plat_dev_id, event_code);
-		cnss_free_soc_info(plat_priv);
 	}
 
 	return NOTIFY_OK;
