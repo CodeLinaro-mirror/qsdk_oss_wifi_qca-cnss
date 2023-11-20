@@ -664,7 +664,6 @@ struct cnss_plat_data {
 	unsigned long driver_state;
 	struct list_head event_list;
 	spinlock_t event_lock; /* spinlock for driver work event handling */
-	spinlock_t recovery_lock; /* spinlock for driver work event handling */
 	struct work_struct event_work;
 	struct work_struct recovery_work;
 	struct workqueue_struct *event_wq;

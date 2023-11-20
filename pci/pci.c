@@ -1913,8 +1913,6 @@ clear_dump_info:
 	kfree(meta_info);
 	kfree(ramdump_segs);
 
-	cnss_pci_clear_dump_info(pci_priv);
-
 	return ret;
 }
 #else
@@ -2102,17 +2100,34 @@ int cnss_qcn9000_ramdump(struct  cnss_pci_data *pci_priv)
 	struct cnss_dump_data *dump_data = &info_v2->dump_data;
 	struct cnss_dump_seg *dump_seg = info_v2->dump_data_vaddr;
 	struct qcom_dump_segment *seg;
-	struct cnss_dump_meta_info meta_info = {0};
+	struct cnss_dump_meta_info *meta_info;
 	struct list_head head;
-	int i, ret = 0;
+	int i, ret = 0, idx = 0;
 
-	if (!info_v2->dump_data_valid ||
-		dump_data->nentries == 0) {
-		cnss_pr_info("Dump collection is not enabled\n");
+	if (!info_v2->dump_data_valid || dump_data->nentries == 0)
 		return ret;
-	}
 
 	INIT_LIST_HEAD(&head);
+
+	meta_info = kzalloc(PAGE_SIZE, GFP_KERNEL);
+	if (!meta_info) {
+		ret = -ENOMEM;
+		goto free_seg_list;
+	}
+
+	seg = kcalloc(1, sizeof(*seg), GFP_KERNEL);
+	if (!seg) {
+		ret = -ENOMEM;
+		goto free_seg_list;
+	}
+
+	meta_info->magic = CNSS_RAMDUMP_MAGIC;
+	meta_info->version = CNSS_RAMDUMP_VERSION_V2;
+	meta_info->chipset = plat_priv->device_id;
+	seg->va = meta_info;
+	seg->size = sizeof(meta_info);
+	list_add(&seg->node, &head);
+
 	for (i = 0; i < dump_data->nentries; i++) {
 		if (dump_seg->type >= CNSS_FW_DUMP_TYPE_MAX) {
 			cnss_pr_err("Unsupported dump type: %d",
@@ -2126,11 +2141,14 @@ int cnss_qcn9000_ramdump(struct  cnss_pci_data *pci_priv)
 			goto free_seg_list;
 		}
 
-		if (meta_info.entry[dump_seg->type].entry_start == 0) {
-			meta_info.entry[dump_seg->type].type = dump_seg->type;
-			meta_info.entry[dump_seg->type].entry_start = i + 1;
+		if (dump_seg->type != meta_info->entry[idx].type)
+			idx++;
+
+		if (meta_info->entry[dump_seg->type].entry_start == 0) {
+			meta_info->entry[dump_seg->type].type = dump_seg->type;
+			meta_info->entry[dump_seg->type].entry_start = i + 1;
 		}
-		meta_info.entry[dump_seg->type].entry_num++;
+		meta_info->entry[dump_seg->type].entry_num++;
 		seg->da = dump_seg->address;
 		seg->va = dump_seg->v_address;
 		seg->size = dump_seg->size;
@@ -2138,19 +2156,15 @@ int cnss_qcn9000_ramdump(struct  cnss_pci_data *pci_priv)
 		dump_seg++;
 	}
 
-	seg = kcalloc(1, sizeof(*seg), GFP_KERNEL);
-	if (!seg) {
-		ret = -ENOMEM;
-		goto free_seg_list;
-	}
+	meta_info->total_entries = idx + 1;
 
-	meta_info.magic = CNSS_RAMDUMP_MAGIC;
-	meta_info.version = CNSS_RAMDUMP_VERSION_V2;
-	meta_info.chipset = plat_priv->device_id;
-	meta_info.total_entries = CNSS_FW_DUMP_TYPE_MAX;
-	seg->va = &meta_info;
-	seg->size = sizeof(meta_info);
-	list_add(&seg->node, &head);
+	cnss_pr_dbg("Dumping meta_info: total_entries: %d",
+		    meta_info->total_entries);
+	for (i = 0; i < meta_info->total_entries; i++)
+		cnss_pr_dbg("entry %d type %d entry_start %d entry_num %d",
+			    i, meta_info->entry[i].type,
+			    meta_info->entry[i].entry_start,
+			    meta_info->entry[i].entry_num);
 
 	ret = qcom_elf_dump(&head, info_v2->ramdump_dev, ELF_CLASS);
 free_seg_list:
@@ -2277,9 +2291,8 @@ int cnss_pci_dev_ramdump(struct cnss_pci_data *pci_priv)
 		if (ret)
 			cnss_pr_err("Failed to collect ramdump for %s\n",
 				    plat_priv->device_name);
-#ifdef CONFIG_CNSS2_KERNEL_5_15
 		cnss_pci_clear_dump_info(pci_priv);
-#endif
+
 		/* Shutdown was skipped in cnss_qcn9000_shutdown path
 		 * earlier in target assert case to finish the ramdump
 		 * collection.

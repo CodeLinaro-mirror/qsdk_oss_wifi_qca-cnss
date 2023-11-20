@@ -5583,6 +5583,27 @@ void cnss_unregister_subsys(struct cnss_plat_data *plat_priv)
 }
 #endif
 
+static u32 cnss_get_dump_desc_size(struct cnss_plat_data *plat_priv)
+{
+	u32 descriptor_size = 0;
+	u32 segment_len = CNSS_MHI_SEG_LEN;
+	u32 wlan_sram_size = plat_priv->ramdump_info_v2.ramdump_size;
+
+#if (KERNEL_VERSION(5, 15, 0) <= LINUX_VERSION_CODE)
+	segment_len = SZ_4K;
+#else
+	struct pci_dev *pci_dev = plat_priv->pci_dev;
+
+	of_property_read_u32(pci_dev->dev.of_node, "qti,rddm-seg-len",
+			     &segment_len);
+#endif
+	descriptor_size = (((wlan_sram_size / segment_len) +
+			    CNSS_DUMP_DESC_TOLERANCE) *
+			    sizeof(struct cnss_dump_seg));
+
+	return descriptor_size;
+}
+
 #if (KERNEL_VERSION(5, 15, 0) <= LINUX_VERSION_CODE)
 int cnss_register_ramdump(struct cnss_plat_data *plat_priv)
 {
@@ -5609,7 +5630,8 @@ int cnss_register_ramdump(struct cnss_plat_data *plat_priv)
 	info_v2->dump_data_vaddr = NULL;
 	info_v2->dump_data_valid = false;
 
-	info_v2->dump_data_vaddr = kzalloc(CNSS_DUMP_DESC_SIZE, gfp);
+	info_v2->dump_data_vaddr = kzalloc(cnss_get_dump_desc_size(plat_priv),
+					   gfp);
 	if (!info_v2->dump_data_vaddr)
 		return -ENOMEM;
 
@@ -5729,23 +5751,6 @@ static void cnss_unregister_ramdump_v1(struct cnss_plat_data *plat_priv)
 		dma_free_coherent(dev, ramdump_info->ramdump_size,
 				  ramdump_info->ramdump_va,
 				  ramdump_info->ramdump_pa);
-}
-
-static u32 cnss_get_dump_desc_size(struct cnss_plat_data *plat_priv)
-{
-	u32 descriptor_size = 0;
-	u32 segment_len = CNSS_MHI_SEG_LEN;
-	u32 wlan_sram_size = plat_priv->ramdump_info_v2.ramdump_size;
-	struct pci_dev *pci_dev = plat_priv->pci_dev;
-
-	of_property_read_u32(pci_dev->dev.of_node, "qti,rddm-seg-len",
-			     &segment_len);
-
-	descriptor_size = (((wlan_sram_size / segment_len) +
-			    CNSS_DUMP_DESC_TOLERANCE) *
-			    sizeof(struct cnss_dump_seg));
-
-	return descriptor_size;
 }
 
 #ifdef CONFIG_QTI_MEMORY_DUMP_V2
@@ -6036,7 +6041,6 @@ void cnss_daemon_connection_update_cb(void *cb_ctx, bool status)
 			clear_bit(CNSS_DAEMON_CONNECTED,
 				  &plat_env[i]->driver_state);
 	}
-
 }
 
 static ssize_t fs_ready_store(struct device *dev,
@@ -6124,7 +6128,6 @@ static int cnss_event_work_init(struct cnss_plat_data *plat_priv)
 
 static int cnss_recovery_work_init(struct cnss_plat_data *plat_priv)
 {
-	spin_lock_init(&plat_priv->recovery_lock);
 	plat_priv->recovery_wq = alloc_workqueue("cnss_driver_recovery",
 					      WQ_UNBOUND, 1);
 	if (!plat_priv->recovery_wq) {
