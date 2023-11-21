@@ -5184,6 +5184,10 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 		goto free_qdss_irq;
 	}
 
+#if (KERNEL_VERSION(5, 15, 0) <= LINUX_VERSION_CODE)
+	mhi_ctrl->rddm_prealloc = false;
+	mhi_ctrl->rddm_seg_len = SZ_4K;
+#endif
 	cnss_update_soc_version(pci_priv);
 
 	return 0;
