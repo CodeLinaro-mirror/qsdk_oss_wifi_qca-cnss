@@ -614,8 +614,14 @@ static int cnss_wlfw_host_cap_send_sync(struct cnss_plat_data *plat_priv)
 		kfree(req);
 		return -ENOMEM;
 	}
+
+	/* CNSS2 is the only client to FW as per the single QMI client model.
+	 * If cnss-daemon support is present, then it will be QMI client to
+	 * CNSS2.
+	 */
 	req->num_clients_valid = 1;
 	req->num_clients = 1;
+	cnss_pr_dbg("Number of QMI clients are %d\n", req->num_clients);
 
 	/* Check whether FW INI CFG file is present or not */
 	snprintf(filename, sizeof(filename), "%s" FW_INI_CFG_FILE_NAME,
@@ -630,20 +636,6 @@ static int cnss_wlfw_host_cap_send_sync(struct cnss_plat_data *plat_priv)
 
 	plat_priv->fw_ini_cfg_support = !!req->fw_ini_cfg_support;
 	release_firmware(fw);
-
-	/* Check if cnss-daemon is connected to cnss2 QMI service.
-	 * If so, send number of clients to FW as 1. Else, check
-	 * whether cnss-daemon support is available in plat_priv
-	 * and then send the number of clients as 2.
-	 */
-
-	if (!is_ipc_qmi_client_connected(CNSS_PLAT_IPC_DAEMON_QMI_CLIENT_V01,
-					 0)) {
-		if (plat_priv->daemon_support)
-			req->num_clients = 2;
-	}
-
-	cnss_pr_dbg("Number of clients is %d\n", req->num_clients);
 
 	req->mem_cfg_mode = plat_priv->tgt_mem_cfg_mode;
 	req->mem_cfg_mode_valid = 1;
