@@ -75,6 +75,10 @@
 #define QDSS_CONFIG_FILE_PREFIX		"qdss_trace_config"
 #define QDSS_CONFIG_FILE_SUFFIX		".bin"
 
+unsigned int pci_fw_mem_mode = 0xFF;
+module_param(pci_fw_mem_mode, uint, 0600);
+MODULE_PARM_DESC(pci_fw_mem_mode, "pci_fw_mem_mode");
+
 unsigned int qca8074_fw_mem_mode = 0xFF;
 module_param(qca8074_fw_mem_mode, uint, 0600);
 MODULE_PARM_DESC(qca8074_fw_mem_mode, "qca8074_fw_mem_mode");
@@ -3873,7 +3877,11 @@ int cnss_qmi_init(struct cnss_plat_data *plat_priv)
 			plat_priv->tgt_mem_cfg_mode = 0;
 		}
 	} else if (plat_priv->bus_type == CNSS_BUS_PCI) {
-		if (of_property_read_u32(dev->of_node,
+		if (pci_fw_mem_mode != 0xFF) {
+			plat_priv->tgt_mem_cfg_mode = pci_fw_mem_mode;
+			pr_info("Using pci_fw_mem_mode 0x%x\n",
+				pci_fw_mem_mode);
+		} else if (of_property_read_u32(dev->of_node,
 					 "tgt-mem-mode",
 					 &plat_priv->tgt_mem_cfg_mode)) {
 			pr_info("No tgt-mem-mode entry in dev-tree.\n");
