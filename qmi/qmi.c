@@ -54,7 +54,7 @@
 #define CAL_FILE_NAME_PREFIX		"caldata.b"
 #define DEFAULT_CAL_FILE_PREFIX         "caldata_"
 #define DEFAULT_CAL_FILE_SUFFIX         ".bin"
-#define FTM_CONF_FILE_PATH		"/ini/ftm.conf"
+#define FTM_CONF_FILE_PATH		"/tmp/ftm.conf"
 
 #define QMI_MSG_REQ_STR			"REQ"
 #define QMI_MSG_RESP_STR		"RESP"
