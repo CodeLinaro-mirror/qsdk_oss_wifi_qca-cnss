@@ -1631,7 +1631,7 @@ static const struct file_operations cnss_dynamic_feature_fops = {
 	.llseek = seq_lseek,
 };
 
-#ifdef CONFIG_CNSS2_KERNEL_6_1
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
 static ssize_t cnss_platform_features_write(struct file *fp,
 				      const char __user *user_buf,
 				      size_t count, loff_t *off)
@@ -1788,7 +1788,7 @@ static const struct file_operations cnss_hds_support_fops = {
 };
 #endif
 
-#if !defined(CONFIG_CNSS2_KERNEL_5_15) && !defined(CONFIG_CNSS2_KERNEL_6_1)
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0))
 static ssize_t cnss_pci_write_switch_link(struct file *fp,
 					   const char __user *user_buf,
 					   size_t count, loff_t *off)
@@ -1868,7 +1868,7 @@ int cnss_create_debug_only_node(struct cnss_plat_data *plat_priv)
 			    &cnss_control_params_debug_fops);
 	debugfs_create_file("dynamic_feature", 0600, root_dentry, plat_priv,
 			    &cnss_dynamic_feature_fops);
-#ifdef CONFIG_CNSS2_KERNEL_6_1
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
 	debugfs_create_file("platform_features", 0600, root_dentry, plat_priv,
 			    &cnss_platform_features_fops);
 #else
@@ -1877,7 +1877,7 @@ int cnss_create_debug_only_node(struct cnss_plat_data *plat_priv)
 #endif
 	debugfs_create_file("ce_info", 0600, root_dentry, plat_priv,
 			    &cnss_ce_reg_debug_fops);
-#if !defined(CONFIG_CNSS2_KERNEL_5_15) && !defined(CONFIG_CNSS2_KERNEL_6_1)
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0))
 	debugfs_create_file("pci_switch_link", 0600, root_dentry, plat_priv,
 			    &cnss_pci_switch_link_fops);
 #endif

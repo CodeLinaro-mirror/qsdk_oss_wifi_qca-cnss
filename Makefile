@@ -5,7 +5,7 @@ obj-m += ipq_cnss2.o
 
 ifneq ($(QCA_CNSS_STREAM_MOD),)
 ifneq ($(CONFIG_BUILD_OWRT),y)
-ifneq ($(QCA_CNSS_LINUX_6_1_SUPPORT),y)
+ifneq ($(QCA_CNSS_LINUX_6_x_SUPPORT),y)
 obj-m += ipq_cnss2_stream.o
 endif
 endif
@@ -37,7 +37,7 @@ CNSS2_INCLUDE += -I$(obj)/include
 
 ccflags-y += $(CNSS2_INCLUDE)
 ccflags-y += -Wall -Werror -Wno-format-security
-ifeq ($(QCA_CNSS_LINUX_6_1_SUPPORT),y)
+ifeq ($(QCA_CNSS_LINUX_6_x_SUPPORT),y)
 ccflags-y += -Wno-implicit-fallthrough
 endif
 
@@ -78,9 +78,6 @@ ifeq ($(QCA_CNSS_PCI_SUPPORT),y)
 endif
 ifeq ($(QCA_CNSS_KERNEL_DEPENDENCY),y)
 	ccflags-y += -DCONFIG_CNSS2_QCOM_KERNEL_DEPENDENCY
-endif
-ifeq ($(QCA_CNSS_LINUX_6_1_SUPPORT),y)
-	ccflags-y += -DCONFIG_CNSS2_KERNEL_6_1
 endif
 endif
 

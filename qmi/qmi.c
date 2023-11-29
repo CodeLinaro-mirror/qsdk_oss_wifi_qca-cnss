@@ -3262,7 +3262,11 @@ static void cnss_wlfw_request_mem_ind_cb(struct qmi_handle *qmi_wlfw,
 			       0, NULL);
 }
 
-#ifndef CONFIG_CNSS2_KERNEL_6_1
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
+static void cnss_cal_report_download(struct cnss_plat_data *plat_priv)
+{
+}
+#else
 static void cnss_cal_report_download(struct cnss_plat_data *plat_priv)
 {
 	u32 cal_file_size = 0;
@@ -3278,10 +3282,6 @@ static void cnss_cal_report_download(struct cnss_plat_data *plat_priv)
 				    __func__, plat_priv->cal_file_size);
 		}
 	}
-}
-#else
-static void cnss_cal_report_download(struct cnss_plat_data *plat_priv)
-{
 }
 #endif
 

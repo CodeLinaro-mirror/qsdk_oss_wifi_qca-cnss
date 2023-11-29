@@ -5307,7 +5307,7 @@ int cnss_pci_of_reserved_mem_device_init(struct cnss_plat_data *plat_priv)
 }
 #endif
 
-#if !defined(CONFIG_CNSS2_KERNEL_5_15) && !defined(CONFIG_CNSS2_KERNEL_6_1)
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0))
 void cnss_set_pci_link_speed_width(struct device *dev, u16 link_speed,
 					u16 link_width)
 {
@@ -5525,7 +5525,7 @@ unregister_ramdump:
 #endif
 	cnss_unregister_ramdump(plat_priv);
 unregister_subsys:
-#if !defined(CONFIG_CNSS2_KERNEL_5_15)  && !defined(CONFIG_CNSS2_KERNEL_6_1)
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0))
 	cnss_unregister_subsys(plat_priv);
 #else
 	cnss_bus_dev_shutdown(plat_priv);
@@ -5626,7 +5626,7 @@ int cnss_pci_get_bar_info(struct cnss_pci_data *pci_priv, void __iomem **va,
 	return 0;
 }
 
-#ifdef CONFIG_CNSS2_KERNEL_6_1
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
 static int cnss_get_qrtr_instance_id(struct pci_dev *pci_dev, u32 *node_id)
 {
 	struct cnss_plat_data *plat_priv = NULL;

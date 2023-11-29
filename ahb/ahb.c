@@ -78,7 +78,7 @@ static int cnss_ahb_alloc_fw_mem(struct cnss_plat_data *plat_priv)
 	struct device_node *mem_region_node = NULL;
 	phandle mem_region_phandle;
 	struct resource m3_dump;
-#ifdef CONFIG_CNSS2_KERNEL_6_1
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
 	const char *mem_phandle_node_name = "memory-region";
 #else
 	const char *mem_phandle_node_name = "mem-region";

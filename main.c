@@ -24,7 +24,8 @@
 #include <linux/timer.h>
 #include <linux/coresight.h>
 #include <linux/remoteproc.h>
-#ifdef CONFIG_CNSS2_KERNEL_6_1
+#include <linux/version.h>
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
 #include <linux/remoteproc/qcom_rproc.h>
 #endif
 #include <linux/of_address.h>
@@ -45,7 +46,7 @@
 #include "legacyirq/legacyirq.h"
 #endif
 
-#include "../main.h"
+#include "main.h"
 #ifdef CNSS_DEBUG_SUPPORT
 #include "debug/debug.h"
 #endif
@@ -288,7 +289,7 @@ static int cnss_get_event(unsigned long subsys_event)
 {
 	return subsys_event;
 }
-#elif defined(CONFIG_CNSS2_KERNEL_6_1)
+#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
 static int cnss_get_event(unsigned long subsys_event)
 {
 	int event = -EINVAL;
@@ -739,7 +740,7 @@ int cnss_get_platform_cap(struct device *dev, struct cnss_platform_cap *cap)
 }
 EXPORT_SYMBOL(cnss_get_platform_cap);
 
-#ifndef CONFIG_CNSS2_KERNEL_6_1
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 static int cnss_cal_db_mem_update(struct cnss_plat_data *plat_priv,
 				  enum cnss_cal_db_op op, u32 *size)
 {
@@ -849,7 +850,7 @@ static void cnss_cal_report_upload(struct cnss_plat_data *plat_priv)
 }
 #endif
 
-#if defined(CONFIG_CNSS2_KERNEL_5_15) || defined(CONFIG_CNSS2_KERNEL_6_1)
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
 static void cnss_hif_notifier(struct cnss_plat_data *plat_priv,
 				enum cnss_notif_type code)
 {
@@ -1044,7 +1045,7 @@ skip_cfg:
 		 * It is not required to wait until it gets connected here.
 		 * Hence pass the timeout value as 0.
 		 */
-#ifdef CONFIG_CNSS2_KERNEL_6_1
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
 		plat_priv->cal_time = jiffies;
 #else
 		if (is_ipc_qmi_client_connected
@@ -1097,6 +1098,10 @@ int cnss_wlan_disable(struct device *dev, enum cnss_driver_mode mode)
 	return cnss_wlfw_wlan_mode_send_sync(plat_priv, CNSS_OFF);
 }
 EXPORT_SYMBOL(cnss_wlan_disable);
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
+#define OF_GPIO_ACTIVE_LOW 0x1
+#endif
 
 void cnss_set_led_gpio(int led_gpio, unsigned int value, unsigned int flags)
 {
@@ -1188,7 +1193,7 @@ out:
 }
 EXPORT_SYMBOL(cnss_athdiag_write);
 
-#ifdef CONFIG_CNSS2_KERNEL_6_1
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
 /*
  * Return true if target is a lithium target. else return false
  */
@@ -2589,7 +2594,7 @@ static int cnss_set_ssr_recovery_type(struct cnss_plat_data *plat_priv)
 }
 
 #ifdef CONFIG_CNSS2_KERNEL_IPQ
-#ifndef CONFIG_CNSS2_KERNEL_6_1
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 static int cnss_qcn9000_notifier_atomic_nb(struct notifier_block *nb,
 					   unsigned long code,
 					   void *ss_handle)
@@ -2889,7 +2894,7 @@ void cnss_wlan_unregister_driver(struct cnss_wlan_driver *driver_ops)
 		if ((plat_priv->bus_type == CNSS_BUS_PCI) && ops &&
 		    (strcmp(driver_ops->name, "pld_pcie") == 0)) {
 			set_bit(CNSS_DRIVER_UNLOADING, &plat_priv->driver_state);
-#if !defined(CONFIG_CNSS2_KERNEL_5_15) && !defined(CONFIG_CNSS2_KERNEL_6_1)
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0))
 			subsys_info = &plat_priv->subsys_info;
 			if (subsys_info->subsys_handle &&
 			    !subsys_info->subsystem_put_in_progress) {
@@ -2918,8 +2923,45 @@ void cnss_wlan_unregister_driver(struct cnss_wlan_driver *driver_ops)
 }
 EXPORT_SYMBOL(cnss_wlan_unregister_driver);
 
-#ifndef CONFIG_CNSS2_KERNEL_5_15
-#ifdef CONFIG_CNSS2_KERNEL_6_1
+#ifdef CONFIG_CNSS2_KERNEL_5_15
+static int cnss_rproc_recovery(struct cnss_plat_data *plat_priv)
+{
+	return 0;
+}
+
+static int cnss_rproc_start(struct cnss_plat_data *plat_priv)
+{
+	return 0;
+}
+
+void *cnss_register_qcn9000_cb(struct cnss_plat_data *plat_priv)
+{
+	return NULL;
+}
+
+int cnss_unregister_qcn9000_cb(struct cnss_plat_data *plat_priv)
+{
+	return 0;
+}
+
+void *cnss_register_qca8074_cb(struct cnss_plat_data *plat_priv)
+{
+	return NULL;
+}
+
+int cnss_unregister_qca8074_cb(struct cnss_plat_data *plat_priv)
+{
+	return 0;
+}
+
+static int cnss_qcn9000_notifier_nb(struct notifier_block *nb,
+				    unsigned long code,
+				    void *ss_handle)
+{
+	return 0;
+}
+#else
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
 static int cnss_rproc_recovery(struct cnss_plat_data *plat_priv)
 {
 	struct rproc *rproc = NULL;
@@ -2955,6 +2997,7 @@ static int cnss_rproc_recovery(struct cnss_plat_data *plat_priv)
 	}
 	return 0;
 }
+
 static int cnss_rproc_start(struct cnss_plat_data *plat_priv)
 {
 	struct rproc *rproc_rpd;
@@ -3124,6 +3167,7 @@ static int cnss_rproc_recovery(struct cnss_plat_data *plat_priv)
 	}
 	return 0;
 }
+
 int cnss_handle_usrpd_in_rpd_start(struct cnss_plat_data *plat_priv)
 {
 	struct rproc *rproc;
@@ -3248,7 +3292,6 @@ static int cnss_get_node_id(struct platform_device *plat_dev,
 
 	return 0;
 }
-
 #endif
 
 void  *__cnss_subsystem_get(struct cnss_plat_data *plat_priv)
@@ -3539,7 +3582,7 @@ int cnss_unregister_qcn9000_cb(struct cnss_plat_data *plat_priv)
 
 #else /* CONFIG_CNSS2_KERNEL_RPROC_FRAMEWORK */
 
-#ifdef CONFIG_CNSS2_KERNEL_6_1
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
 void *cnss_register_qcn9000_cb(struct cnss_plat_data *plat_priv)
 {
 	return NULL;
@@ -3570,7 +3613,7 @@ void *cnss_register_qcn9000_cb(struct cnss_plat_data *plat_priv)
 }
 #endif
 
-#ifdef CONFIG_CNSS2_KERNEL_6_1
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
 void *cnss_register_qca8074_cb(struct cnss_plat_data *plat_priv)
 {
 	struct cnss_subsys_info *subsys_info;
@@ -3582,7 +3625,9 @@ void *cnss_register_qca8074_cb(struct cnss_plat_data *plat_priv)
 	plat_priv->modem_atomic_nb.notifier_call =
 					cnss_qca8074_notifier_atomic_nb;
 	plat_priv->notifier_list[0] = qcom_register_ssr_notifier(subsys_info->subsys_desc.name, &plat_priv->modem_nb);
-	plat_priv->notifier_list[1] = qcom_register_ssr_atomic_notifier(subsys_info->subsys_desc.name, &plat_priv->modem_atomic_nb);
+	plat_priv->notifier_list[1] =
+		qcom_register_ssr_atomic_notifier(subsys_info->subsys_desc.name,
+						  &plat_priv->modem_atomic_nb);
 
 	rproc_rpd = plat_priv->rproc_rpd_handle;
 	if (rproc_rpd) {
@@ -3590,7 +3635,9 @@ void *cnss_register_qca8074_cb(struct cnss_plat_data *plat_priv)
 		plat_priv->rpd_atomic_nb.notifier_call =
 			cnss_qca8074_rpd_notifier_atomic_nb;
 		plat_priv->notifier_list[0] = qcom_register_ssr_notifier(rproc_rpd->name, &plat_priv->rpd_nb);
-		plat_priv->notifier_list[1] = qcom_register_ssr_atomic_notifier(rproc_rpd->name, &plat_priv->rpd_atomic_nb);
+		plat_priv->notifier_list[1] =
+			qcom_register_ssr_atomic_notifier(rproc_rpd->name,
+						&plat_priv->rpd_atomic_nb);
 	}
 
 	ss_handle = subsys_info;
@@ -3603,7 +3650,8 @@ int cnss_unregister_qca8074_cb(struct cnss_plat_data *plat_priv)
 
 	if (plat_priv->modem_nb.notifier_call) {
 	qcom_unregister_ssr_notifier(plat_priv->notifier_list[0], &plat_priv->modem_nb);
-	qcom_unregister_ssr_atomic_notifier(plat_priv->notifier_list[1], &plat_priv->modem_atomic_nb);
+	qcom_unregister_ssr_atomic_notifier(plat_priv->notifier_list[1],
+					    &plat_priv->modem_atomic_nb);
 		memset(&plat_priv->modem_nb, 0, sizeof(struct notifier_block));
 		memset(&plat_priv->modem_atomic_nb, 0,
 		       sizeof(struct notifier_block));
@@ -3613,7 +3661,8 @@ int cnss_unregister_qca8074_cb(struct cnss_plat_data *plat_priv)
 	if (rproc_rpd) {
 		if (plat_priv->rpd_nb.notifier_call) {
 	qcom_unregister_ssr_notifier(plat_priv->notifier_list[0], &plat_priv->rpd_nb);
-	qcom_unregister_ssr_atomic_notifier(plat_priv->notifier_list[1], &plat_priv->rpd_atomic_nb);
+	qcom_unregister_ssr_atomic_notifier(plat_priv->notifier_list[1],
+					    &plat_priv->rpd_atomic_nb);
 			memset(&plat_priv->rpd_nb, 0,
 					sizeof(struct notifier_block));
 			memset(&plat_priv->rpd_atomic_nb, 0,
@@ -3698,7 +3747,7 @@ int cnss_unregister_qca8074_cb(struct cnss_plat_data *plat_priv)
 }
 #endif
 
-#ifdef CONFIG_CNSS2_KERNEL_6_1
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
 int cnss_unregister_qcn9000_cb(struct cnss_plat_data *plat_priv)
 {
 	return 0;
@@ -3727,46 +3776,9 @@ int cnss_unregister_qcn9000_cb(struct cnss_plat_data *plat_priv)
 }
 #endif
 #endif
-#else
-static int cnss_rproc_recovery(struct cnss_plat_data *plat_priv)
-{
-	return 0;
-}
-
-static int cnss_rproc_start(struct cnss_plat_data *plat_priv)
-{
-	return 0;
-}
-
-void *cnss_register_qcn9000_cb(struct cnss_plat_data *plat_priv)
-{
-	return NULL;
-}
-
-int cnss_unregister_qcn9000_cb(struct cnss_plat_data *plat_priv)
-{
-	return 0;
-}
-
-void *cnss_register_qca8074_cb(struct cnss_plat_data *plat_priv)
-{
-	return NULL;
-}
-
-int cnss_unregister_qca8074_cb(struct cnss_plat_data *plat_priv)
-{
-	return 0;
-}
-
-static int cnss_qcn9000_notifier_nb(struct notifier_block *nb,
-				    unsigned long code,
-				    void *ss_handle)
-{
-	return 0;
-}
 #endif
 
-#if defined(CONFIG_CNSS2_KERNEL_5_15) || defined(CONFIG_CNSS2_KERNEL_6_1)
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
 int cnss_handle_usrpd_in_rpd_crash(struct cnss_plat_data *plat_priv)
 {
 	return 0;
@@ -3810,7 +3822,7 @@ void cnss_subsystem_put(struct device *dev)
 	__cnss_hif_put(plat_priv);
 }
 EXPORT_SYMBOL(cnss_subsystem_put);
-#elif defined(CONFIG_CNSS2_KERNEL_6_1)
+#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
 void  *cnss_subsystem_get(struct device *dev, int device_id)
 {
 	struct cnss_plat_data *plat_priv = NULL;
@@ -3996,7 +4008,7 @@ static void cnss_unregister_esoc(struct cnss_plat_data *plat_priv)
 #endif
 #endif
 
-#if !defined(CONFIG_CNSS2_KERNEL_5_15) && !defined(CONFIG_CNSS2_KERNEL_6_1)
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0))
 #ifdef CONFIG_CNSS2_KERNEL_SSR_FRAMEWORK
 static int cnss_subsys_powerup(const struct subsys_desc *subsys_desc)
 #else /* CONFIG_CNSS2_KERNEL_RPROC_FRAMEWORK */
@@ -4103,7 +4115,7 @@ void cnss_device_crashed(struct device *dev)
 }
 EXPORT_SYMBOL(cnss_device_crashed);
 
-#if !defined(CONFIG_CNSS2_KERNEL_5_15) && !defined(CONFIG_CNSS2_KERNEL_6_1)
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0))
 #ifdef CONFIG_CNSS2_KERNEL_SSR_FRAMEWORK
 static void cnss_subsys_crash_shutdown(const struct subsys_desc *subsys_desc)
 #else /* CONFIG_CNSS2_KERNEL_RPROC_FRAMEWORK */
@@ -4139,7 +4151,6 @@ static int cnss_subsys_ramdump(int enable,
 	return cnss_bus_dev_ramdump(plat_priv);
 }
 #else /* CONFIG_CNSS2_KERNEL_RPROC_FRAMEWORK */
-#ifndef CONFIG_CNSS2_KERNEL_6_1
 static void cnss_subsys_ramdump(struct rproc *subsys_desc,
 				struct rproc_dump_segment *segment,
 				void  *dest)
@@ -4155,7 +4166,6 @@ static void cnss_subsys_ramdump(struct rproc *subsys_desc,
 
 	cnss_bus_dev_ramdump(plat_priv);
 }
-#endif
 #endif
 
 #ifdef CONFIG_CNSS2_KERNEL_RPROC_FRAMEWORK
@@ -4312,7 +4322,7 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 	subsystem_restart_dev(subsys_info->subsys_device);
 #else
 #ifndef CONFIG_CNSS2_KERNEL_5_15
-#ifndef CONFIG_CNSS2_KERNEL_6_1
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 	if (!subsys_info->subsys_handle)
 #else
 	if ((!subsys_info->subsys_handle) && (plat_priv->bus_type != CNSS_BUS_PCI))
@@ -4326,7 +4336,7 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 		 * correct sequence
 		 */
 		if (plat_priv->bus_type == CNSS_BUS_PCI) {
-#if defined(CONFIG_CNSS2_KERNEL_5_15) || defined(CONFIG_CNSS2_KERNEL_6_1)
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
 			cnss_hif_shutdown(plat_priv);
 			cnss_hif_notifier(plat_priv, CNSS_RAMDUMP_NOTIFICATION);
 			cnss_bus_dev_ramdump(plat_priv);
@@ -4365,7 +4375,7 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 		}
 	} else {
 		if (plat_priv->bus_type == CNSS_BUS_PCI) {
-#if defined(CONFIG_CNSS2_KERNEL_5_15) || defined(CONFIG_CNSS2_KERNEL_6_1)
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
 			schedule_work(&plat_priv->crash_work);
 #else
 			rproc_report_crash(subsys_info->subsys_handle,
@@ -4949,7 +4959,11 @@ static int cnss_init_m3_dump_class(struct cnss_plat_data *plat_priv)
 		goto out;
 	}
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0))
+	m3_dump_class = class_create("dump");
+#else
 	m3_dump_class = class_create(THIS_MODULE, "dump");
+#endif
 	if (IS_ERR(m3_dump_class)) {
 		cnss_pr_err("%s: Unable to create class = %ld",
 			    __func__, PTR_ERR(m3_dump_class));
@@ -5152,7 +5166,7 @@ static int cnss_event_ramdump_done_handler(struct cnss_plat_data *plat_priv)
 
 	return 0;
 }
-#elif defined(CONFIG_CNSS2_KERNEL_6_1)
+#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
 static int cnss_event_ramdump_done_handler(struct cnss_plat_data *plat_priv)
 {
 	int ret = 0;
@@ -5490,7 +5504,7 @@ int cnss_register_subsys(struct cnss_plat_data *plat_priv)
 #endif
 		break;
 	case CNSS_BUS_PCI:
-#if defined(CONFIG_CNSS2_KERNEL_5_15) || defined(CONFIG_CNSS2_KERNEL_6_1)
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
 		ret = cnss_hif_power_up(plat_priv);
 		if (ret != 0) {
 			cnss_pr_err("%s: cnss_hif_power_up failed(%d)\n",
@@ -5515,7 +5529,7 @@ int cnss_register_subsys(struct cnss_plat_data *plat_priv)
 
 	}
 
-#ifdef CONFIG_CNSS2_KERNEL_6_1
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
 	if (plat_priv->bus_type == CNSS_BUS_PCI)
 		return ret;
 #endif
@@ -5541,7 +5555,7 @@ int cnss_register_subsys(struct cnss_plat_data *plat_priv)
 }
 #endif
 
-#if !defined(CONFIG_CNSS2_KERNEL_5_15) && !defined(CONFIG_CNSS2_KERNEL_6_1)
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0))
 void cnss_unregister_subsys(struct cnss_plat_data *plat_priv)
 {
 	struct cnss_subsys_info *subsys_info;
@@ -6134,7 +6148,7 @@ static void cnss_recovery_work_deinit(struct cnss_plat_data *plat_priv)
 		destroy_workqueue(plat_priv->recovery_wq);
 }
 
-#if defined(CONFIG_CNSS2_KERNEL_5_15) || defined(CONFIG_CNSS2_KERNEL_6_1)
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
 static void cnss_report_crash_work(struct work_struct *work)
 {
 	int index;
@@ -6168,7 +6182,7 @@ static void __cnss_subsystem_put_wrapper(struct cnss_plat_data *plat_priv)
 {
 	__cnss_hif_put(plat_priv);
 }
-#elif defined(CONFIG_CNSS2_KERNEL_6_1)
+#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
 static void __cnss_subsystem_get_wrapper(struct cnss_plat_data *plat_priv)
 {
 	if (plat_priv->bus_type == CNSS_BUS_PCI)
@@ -6261,7 +6275,7 @@ static void cnss_cal_work_init(struct cnss_plat_data *plat_priv)
 	INIT_WORK(&plat_priv->cal_work, cnss_driver_cal_work);
 }
 
-#if defined(CONFIG_CNSS2_KERNEL_5_15) || defined(CONFIG_CNSS2_KERNEL_6_1)
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
 static void cnss_crash_work_init(struct cnss_plat_data *plat_priv)
 {
 	INIT_WORK(&plat_priv->crash_work, cnss_report_crash_work);
@@ -6746,7 +6760,7 @@ static void cnss_panic_notifier_register(void)
 #endif
 
 #ifdef CONFIG_CNSS2_KERNEL_RPROC_FRAMEWORK
-#ifndef CONFIG_CNSS2_KERNEL_6_1
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 const struct rproc_ops cnss_rproc_ops = {
 	.start = cnss_subsys_powerup,
 	.stop = cnss_subsys_shutdown,
@@ -7202,7 +7216,8 @@ static int cnss_probe(struct platform_device *plat_dev)
 		return -ENODEV;
 	cnss_set_ssr_recovery_type(plat_priv);
 
-#if defined(CONFIG_CNSS2_KERNEL_RPROC_FRAMEWORK) && !defined(CONFIG_CNSS2_KERNEL_6_1)
+#if defined(CONFIG_CNSS2_KERNEL_RPROC_FRAMEWORK) && \
+	(LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 	ret = cnss_rproc_register(plat_priv);
 	if (ret)
 		goto out;
@@ -7284,7 +7299,7 @@ static int cnss_probe(struct platform_device *plat_dev)
 	if (ret)
 		goto deinit_genl;
 	cnss_cal_work_init(plat_priv);
-#if defined(CONFIG_CNSS2_KERNEL_5_15) || defined(CONFIG_CNSS2_KERNEL_6_1)
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
 	cnss_crash_work_init(plat_priv);
 #endif
 

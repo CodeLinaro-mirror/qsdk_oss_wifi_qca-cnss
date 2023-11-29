@@ -674,7 +674,53 @@ void cnss_do_mlo_global_memset(struct cnss_plat_data *plat_priv, u64 mem_size)
 
 }
 
-#ifdef CONFIG_CNSS2_KERNEL_IPQ
+#if defined(CONFIG_CNSS2_KERNEL_IPQ) && \
+	(LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
+void cnss_etr_sg_tbl_free(uint32_t *vaddr,
+			  struct cnss_plat_data *plat_priv, uint32_t ents)
+{
+}
+int cnss_etr_sg_tbl_alloc(struct cnss_plat_data *plat_priv)
+{
+	return 0;
+}
+#else
+static void cnss_etr_sg_tbl_flush(uint32_t *vaddr,
+				  struct cnss_plat_data *plat_priv)
+{
+	uint32_t i = 0, pte_n = 0, last_pte;
+	uint32_t *virt_st_tbl, *virt_pte;
+	void *virt_blk;
+	phys_addr_t phys_pte;
+	struct cnss_fw_mem *qdss_mem = plat_priv->qdss_mem;
+	int total_ents = DIV_ROUND_UP(qdss_mem[0].size, PAGE_SIZE);
+	int ents_per_blk = PAGE_SIZE/sizeof(uint32_t);
+
+	virt_st_tbl = vaddr;
+	dmac_flush_range((void *)virt_st_tbl, (void *)virt_st_tbl + PAGE_SIZE);
+
+	while (i < total_ents) {
+		last_pte = ((i + ents_per_blk) > total_ents) ?
+			   total_ents : (i + ents_per_blk);
+		while (i < last_pte) {
+			virt_pte = virt_st_tbl + pte_n;
+			phys_pte = CNSS_ETR_SG_ENT_TO_BLK(*virt_pte);
+			virt_blk = phys_to_virt(phys_pte);
+
+				dmac_flush_range(virt_blk, virt_blk +
+					(2 * PAGE_SIZE));
+			if ((last_pte - i) > 1) {
+				pte_n++;
+			} else if (last_pte != total_ents) {
+				virt_st_tbl = (uint32_t *)virt_blk;
+				pte_n = 0;
+				break;
+			}
+			i++;
+		}
+	}
+}
+
 void cnss_etr_sg_tbl_free(uint32_t *vaddr,
 				 struct cnss_plat_data *plat_priv,
 				 uint32_t ents)
@@ -715,51 +761,6 @@ void cnss_etr_sg_tbl_free(uint32_t *vaddr,
 				free_page((unsigned long)virt_st_tbl);
 			} else {
 				free_page((unsigned long)virt_st_tbl);
-				virt_st_tbl = (uint32_t *)virt_blk;
-				pte_n = 0;
-				break;
-			}
-			i++;
-		}
-	}
-}
-#else
-static void cnss_etr_sg_tbl_free(uint32_t *vaddr,
-				 struct cnss_plat_data *plat_priv,
-				 uint32_t ents)
-{
-	return;
-}
-#endif
-
-#if defined(CONFIG_CNSS2_KERNEL_IPQ) && !defined(CONFIG_CNSS2_KERNEL_6_1)
-static void cnss_etr_sg_tbl_flush(uint32_t *vaddr,
-				  struct cnss_plat_data *plat_priv)
-{
-	uint32_t i = 0, pte_n = 0, last_pte;
-	uint32_t *virt_st_tbl, *virt_pte;
-	void *virt_blk;
-	phys_addr_t phys_pte;
-	struct cnss_fw_mem *qdss_mem = plat_priv->qdss_mem;
-	int total_ents = DIV_ROUND_UP(qdss_mem[0].size, PAGE_SIZE);
-	int ents_per_blk = PAGE_SIZE/sizeof(uint32_t);
-
-	virt_st_tbl = vaddr;
-	dmac_flush_range((void *)virt_st_tbl, (void *)virt_st_tbl + PAGE_SIZE);
-
-	while (i < total_ents) {
-		last_pte = ((i + ents_per_blk) > total_ents) ?
-			   total_ents : (i + ents_per_blk);
-		while (i < last_pte) {
-			virt_pte = virt_st_tbl + pte_n;
-			phys_pte = CNSS_ETR_SG_ENT_TO_BLK(*virt_pte);
-			virt_blk = phys_to_virt(phys_pte);
-
-				dmac_flush_range(virt_blk, virt_blk +
-					(2 * PAGE_SIZE));
-			if ((last_pte - i) > 1) {
-				pte_n++;
-			} else if (last_pte != total_ents) {
 				virt_st_tbl = (uint32_t *)virt_blk;
 				pte_n = 0;
 				break;
@@ -828,11 +829,6 @@ int cnss_etr_sg_tbl_alloc(struct cnss_plat_data *plat_priv)
 err:
 	cnss_etr_sg_tbl_free(virt_pgdir, plat_priv, i);
 	return ret;
-}
-#else
-int cnss_etr_sg_tbl_alloc(struct cnss_plat_data *plat_priv)
-{
-	return 0;
 }
 #endif
 

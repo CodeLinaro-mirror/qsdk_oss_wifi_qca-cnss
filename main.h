@@ -751,13 +751,13 @@ struct cnss_plat_data {
 	struct cnss_mlo_chip_info *adj_mlo_chip_info[CNSS_MAX_ADJ_CHIPS];
 	enum cnss_recovery_reason reason;
 	enum cnss_crash_type crash_type;
-#if !defined(CONFIG_CNSS2_KERNEL_5_15) && !defined(CONFIG_CNSS2_KERNEL_6_1)
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0))
 	u8 switch_link_enable;
 #endif
-#if defined(CONFIG_CNSS2_KERNEL_5_15) || defined(CONFIG_CNSS2_KERNEL_6_1)
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
 	struct work_struct crash_work;
 #endif
-#ifdef CONFIG_CNSS2_KERNEL_6_1
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
 	struct srcu_notifier_head *notifier_list[2];
 #endif
 	struct completion soc_reset_request_complete;
@@ -847,11 +847,11 @@ int cnss_cal_file_download_to_mem(struct cnss_plat_data *plat_priv,
 				  u32 *cal_file_size);
 struct cnss_plat_data *cnss_get_plat_priv_by_chip_id(int chip_id);
 int cnss_set_fw_type_and_name(struct cnss_plat_data *plat_priv);
-#if !defined(CONFIG_CNSS2_KERNEL_5_15) && !defined(CONFIG_CNSS2_KERNEL_6_1)
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0))
 void cnss_modify_link_speed(struct cnss_plat_data *plat_priv);
 #endif
 
-#ifdef CONFIG_CNSS2_KERNEL_6_1
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
 bool cnss_check_li_target(struct cnss_plat_data *plat_priv);
 bool cnss_check_be_target(struct cnss_plat_data *plat_priv);
 #endif
