@@ -803,12 +803,13 @@ static int cnss_hif_shutdown(struct cnss_plat_data *plat_priv)
 	if (!plat_priv)
 		return -ENODEV;
 
+	if (test_bit(CNSS_DRIVER_UNLOADING, &plat_priv->driver_state))
+		return 0;
+
+	set_bit(CNSS_DRIVER_UNLOADING, &plat_priv->driver_state);
+
 	cnss_hif_notifier(plat_priv, CNSS_BEFORE_SHUTDOWN);
 
-	if (!plat_priv->driver_state) {
-		cnss_pr_dbg("shutdown is ignored\n");
-		return 0;
-	}
 	ret = cnss_bus_dev_shutdown(plat_priv);
 	if (ret != 0) {
 		cnss_pr_err("%s: cnss_bus_dev_shutdown failed(%d)\n", __func__,
@@ -847,8 +848,6 @@ fail:
 
 void __cnss_hif_put(struct cnss_plat_data *plat_priv)
 {
-	set_bit(CNSS_DRIVER_UNLOADING, &plat_priv->driver_state);
-
 	if (!plat_priv)
 		return;
 
@@ -962,6 +961,11 @@ int cnss_wlan_disable(struct device *dev, enum cnss_driver_mode mode)
 }
 EXPORT_SYMBOL(cnss_wlan_disable);
 
+#ifdef CONFIG_CNSS2_KERNEL_5_15
+void cnss_set_led_gpio(int led_gpio, unsigned int value, unsigned int flags)
+{
+}
+#else
 void cnss_set_led_gpio(int led_gpio, unsigned int value, unsigned int flags)
 {
 	struct gpio_desc *led_gpio_desc;
@@ -978,6 +982,7 @@ void cnss_set_led_gpio(int led_gpio, unsigned int value, unsigned int flags)
 	}
 	gpiod_set_value(led_gpio_desc, value);
 }
+#endif
 EXPORT_SYMBOL(cnss_set_led_gpio);
 
 int cnss_athdiag_read(struct device *dev, u32 offset, u32 mem_type,
@@ -3047,8 +3052,9 @@ void cnss_wlan_unregister_driver(struct cnss_wlan_driver *driver_ops)
 
 		if ((plat_priv->bus_type == CNSS_BUS_PCI) && ops &&
 		    (strcmp(driver_ops->name, "pld_pcie") == 0)) {
-			set_bit(CNSS_DRIVER_UNLOADING, &plat_priv->driver_state);
 #ifndef CONFIG_CNSS2_KERNEL_5_15
+			set_bit(CNSS_DRIVER_UNLOADING,
+				&plat_priv->driver_state);
 			subsys_info = &plat_priv->subsys_info;
 			if (subsys_info->subsys_handle &&
 			    !subsys_info->subsystem_put_in_progress) {
@@ -3067,7 +3073,8 @@ void cnss_wlan_unregister_driver(struct cnss_wlan_driver *driver_ops)
 			cnss_unregister_subsys(plat_priv);
 			cnss_unregister_notifier_cb(plat_priv);
 #else
-			cnss_hif_shutdown(plat_priv);
+			if (plat_priv->driver_state)
+				cnss_hif_shutdown(plat_priv);
 #endif
 			plat_priv->driver_ops = NULL;
 			plat_priv->driver_status = CNSS_UNINITIALIZED;
