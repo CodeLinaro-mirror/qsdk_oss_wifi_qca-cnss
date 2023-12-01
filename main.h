@@ -488,7 +488,6 @@ struct cnss_control_params {
 	unsigned int qmi_timeout;
 	unsigned int bdf_type;
 	unsigned int time_sync_period;
-	unsigned int board_id;
 };
 
 struct cnss_cpr_info {
