@@ -3795,13 +3795,11 @@ void cnss_do_mlo_global_memset(struct cnss_plat_data *plat_priv, u64 mem_size)
 
 #ifndef CONFIG_CNSS2_KERNEL_5_15
 static int cnss_mlo_mem_get(struct cnss_plat_data *plat_priv, int group_id,
-			    phys_addr_t paddr, int idx)
+			    phys_addr_t paddr, int idx, u32 mem_size)
 {
-	struct cnss_fw_mem *fw_mem = plat_priv->fw_mem;
-
 	mlo_global_mem_phys[group_id] = paddr;
 	mlo_global_mem[group_id] = ioremap(mlo_global_mem_phys[group_id],
-					   fw_mem[idx].size);
+					   mem_size);
 
 	if (!mlo_global_mem[group_id])
 		cnss_pr_err("WARNING: Host DDR remap failed\n");
@@ -3819,7 +3817,7 @@ static int get_mlo_pa(struct cnss_plat_data *plat_priv, int group_id, int idx)
 
 #else
 static int cnss_mlo_mem_get(struct cnss_plat_data *plat_priv, int group_id,
-			    phys_addr_t paddr, int idx)
+			    phys_addr_t paddr, int idx, u32 mem_size)
 {
 	struct cnss_fw_mem *fw_mem = plat_priv->fw_mem;
 	int ret;
@@ -3920,7 +3918,8 @@ static int cnss_mlo_mem_alloc(struct cnss_plat_data *plat_priv, int index)
 					(unsigned int)fw_mem[i].size);
 		}
 
-		ret = cnss_mlo_mem_get(plat_priv, group_id, mlo_mem->base, i);
+		ret = cnss_mlo_mem_get(plat_priv, group_id, mlo_mem->base, i,
+				       mlo_global_mem_size);
 		if (ret != 0) {
 			cnss_pr_err("Error(%d): cnss_mlo_mem_get failed.\n",
 				    ret);
@@ -6923,6 +6922,7 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 	cnss_pci_mhi_config.timeout_ms *= timeout_factor;
 #endif
 
+	cnss_pr_dbg("Setting MHI fw image %s\n", plat_priv->firmware_name);
 	mhi_ctrl->fw_image = plat_priv->firmware_name;
 	mhi_ctrl->regs = pci_priv->bar;
 #ifdef CONFIG_CNSS2_KERNEL_5_15

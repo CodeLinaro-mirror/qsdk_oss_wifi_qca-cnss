@@ -776,4 +776,6 @@ struct cnss_plat_data *cnss_get_plat_priv_by_chip_id(int chip_id);
 #if !defined(CONFIG_CNSS2_KERNEL_5_15)
 void cnss_modify_link_speed(struct cnss_plat_data *plat_priv);
 #endif
+int cnss_set_fw_type_and_name(struct cnss_plat_data *plat_priv);
+
 #endif /* _CNSS_MAIN_H */

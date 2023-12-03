@@ -6218,7 +6218,7 @@ static void cnss_set_board_id(struct cnss_plat_data *plat_priv)
 		    plat_priv->device_name);
 }
 
-static int cnss_set_fw_type_and_name(struct cnss_plat_data *plat_priv)
+int cnss_set_fw_type_and_name(struct cnss_plat_data *plat_priv)
 {
 	const char *firmware_name = NULL;
 	struct device *dev = &plat_priv->plat_dev->dev;
@@ -6257,9 +6257,14 @@ static int cnss_set_fw_type_and_name(struct cnss_plat_data *plat_priv)
 		return -EINVAL;
 	}
 
-	plat_priv->firmware_name = kzalloc(firmware_name_len + 1, GFP_KERNEL);
-	if (!plat_priv->firmware_name)
-		return -ENOMEM;
+	if (!plat_priv->firmware_name) {
+		plat_priv->firmware_name =
+				kzalloc(firmware_name_len + 1, GFP_KERNEL);
+		if (!plat_priv->firmware_name)
+			return -ENOMEM;
+	} else {
+		memset(plat_priv->firmware_name, 0, firmware_name_len + 1);
+	}
 
 	snprintf(plat_priv->firmware_name, firmware_name_len + 1,
 		 "%s%s", cnss_get_fw_path(plat_priv), firmware_name);
