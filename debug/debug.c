@@ -1179,12 +1179,14 @@ static ssize_t cnss_control_params_debug_write(struct file *fp,
 {
 	struct cnss_plat_data *plat_priv =
 		((struct seq_file *)fp->private_data)->private;
+	unsigned int prev_board_id;
 	char buf[64];
 	char *sptr, *token;
 	char *cmd;
 	u32 val;
 	unsigned int len = 0;
 	const char *delim = " ";
+	int ret;
 
 	if (!plat_priv)
 		return -ENODEV;
@@ -1220,10 +1222,22 @@ static ssize_t cnss_control_params_debug_write(struct file *fp,
 	else if (strcmp(cmd, "time_sync_period") == 0)
 		plat_priv->ctrl_params.time_sync_period = val;
 	else if (strcmp(cmd, "board_id") == 0 &&
-			(plat_priv->bus_type == CNSS_BUS_PCI))
-		plat_priv->ctrl_params.board_id = val;
-	else
+			(plat_priv->bus_type == CNSS_BUS_PCI)) {
+		prev_board_id = plat_priv->board_info.board_id_override;
+		plat_priv->board_info.board_id_override = val;
+		ret = cnss_set_fw_type_and_name(plat_priv);
+		if (ret) {
+			cnss_pr_err("%s: Failed to override firmware type for %s\n",
+				    __func__, plat_priv->device_name);
+			plat_priv->board_info.board_id_override = prev_board_id;
+			cnss_set_fw_type_and_name(plat_priv);
+			return ret;
+		}
+		cnss_pr_dbg("Updated firmware type %s for %s\n",
+			    plat_priv->firmware_name, plat_priv->device_name);
+	} else {
 		return -EINVAL;
+	}
 
 	return count;
 }
@@ -1303,7 +1317,7 @@ static int cnss_control_params_debug_show(struct seq_file *s, void *data)
 		   plat_priv->ctrl_params.time_sync_period);
 	if (plat_priv->bus_type == CNSS_BUS_PCI)
 		seq_printf(s, "board_id: 0x%x\n",
-			   plat_priv->ctrl_params.board_id);
+			   plat_priv->board_info.board_id_override);
 
 	return 0;
 }

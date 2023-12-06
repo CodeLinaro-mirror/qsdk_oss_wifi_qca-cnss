@@ -5086,6 +5086,7 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 	cnss_pci_mhi_config.timeout_ms *= timeout_factor;
 #endif
 
+	cnss_pr_dbg("Setting MHI fw image %s\n", plat_priv->firmware_name);
 	mhi_ctrl->fw_image = plat_priv->firmware_name;
 	mhi_ctrl->regs = pci_priv->bar;
 #if (KERNEL_VERSION(5, 15, 0) <= LINUX_VERSION_CODE)

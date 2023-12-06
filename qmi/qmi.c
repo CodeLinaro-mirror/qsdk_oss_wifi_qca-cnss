@@ -597,14 +597,6 @@ static int cnss_wlfw_host_cap_send_sync(struct cnss_plat_data *plat_priv)
 	cnss_pr_dbg("Sending host capability message, state: 0x%lx\n",
 		    plat_priv->driver_state);
 
-	if (plat_priv->ctrl_params.board_id) {
-		plat_priv->board_info.board_id_override =
-				plat_priv->ctrl_params.board_id;
-
-		if (cnss_set_fw_type_and_name(plat_priv))
-			return -ENODEV;
-	}
-
 	req = kzalloc(sizeof(*req), GFP_KERNEL);
 	if (!req)
 		return -ENOMEM;
@@ -1307,9 +1299,7 @@ int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv,
 		/* If the ftm.conf is not found,
 		 * download caldata_x.bin which is the default file.
 		 */
-		if (plat_priv->ctrl_params.board_id)
-			board_id = plat_priv->ctrl_params.board_id;
-		else if (plat_priv->board_info.board_id_override)
+		if (plat_priv->board_info.board_id_override)
 			board_id = plat_priv->board_info.board_id_override;
 		else
 			board_id = plat_priv->board_info.board_id;
