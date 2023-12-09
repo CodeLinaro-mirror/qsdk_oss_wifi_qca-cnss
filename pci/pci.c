@@ -282,8 +282,7 @@ static struct mhi_controller_config cnss_pci_mhi_config = {
 };
 #endif
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0) && \
-!IS_ENABLED(CONFIG_MHI_BUS_MISC))
+#if defined(CONFIG_CNSS2_KERNEL_5_15) && !IS_ENABLED(CONFIG_MHI_BUS_MISC)
 static void cnss_mhi_debug_reg_dump(struct cnss_pci_data *pci_priv)
 {
 }
