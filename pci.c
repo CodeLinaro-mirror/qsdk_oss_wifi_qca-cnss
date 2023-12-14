@@ -1754,6 +1754,9 @@ u64 cnss_get_q6_time(struct device *dev)
 		return 0;
 	}
 
+	if (!test_bit(CNSS_FW_READY, &plat_priv->driver_state))
+		return 0;
+
 	switch (plat_priv->bus_type) {
 	case CNSS_BUS_PCI:
 		pci_priv = plat_priv->bus_priv;
@@ -2580,9 +2583,13 @@ int cnss_qcn9000_ramdump(struct  cnss_pci_data *pci_priv)
 			goto free_seg_list;
 		}
 
+		if (dump_seg->type != meta_info.entry[dump_seg->type].type)
+			meta_info.total_entries++;
+
 		if (meta_info.entry[dump_seg->type].entry_start == 0) {
 			meta_info.entry[dump_seg->type].type = dump_seg->type;
-			meta_info.entry[dump_seg->type].entry_start = i + 1;
+			meta_info.entry[dump_seg->type].entry_start =
+							i + CNSS_NUM_META_INFO_SEGMENTS;
 		}
 		meta_info.entry[dump_seg->type].entry_num++;
 		seg->da = dump_seg->address;
@@ -2601,7 +2608,7 @@ int cnss_qcn9000_ramdump(struct  cnss_pci_data *pci_priv)
 	meta_info.magic = CNSS_RAMDUMP_MAGIC;
 	meta_info.version = CNSS_RAMDUMP_VERSION_V2;
 	meta_info.chipset = plat_priv->device_id;
-	meta_info.total_entries = CNSS_FW_DUMP_TYPE_MAX;
+	meta_info.total_entries += 1;
 	seg->va = &meta_info;
 	seg->size = sizeof(meta_info);
 	list_add(&seg->node, &head);
@@ -3769,7 +3776,8 @@ static int cnss_mlo_mem_get(struct cnss_plat_data *plat_priv, int group_id,
 	return 0;
 }
 
-static int get_mlo_pa(struct cnss_plat_data *plat_priv, int group_id, int idx)
+static int get_mlo_pa(struct cnss_plat_data *plat_priv, int group_id, int idx,
+			unsigned int iova_base)
 {
 	struct cnss_fw_mem *fw_mem = plat_priv->fw_mem;
 
@@ -3805,27 +3813,37 @@ static int cnss_mlo_mem_get(struct cnss_plat_data *plat_priv, int group_id,
 	}
 
 	mlo_global_mem[group_id] = page_to_virt(page);
+	mlo_global_mem_phys[group_id] = page_to_phys(page);
 	of_reserved_mem_device_release(dev);
 
 	return 0;
 }
 
-static int get_mlo_pa(struct cnss_plat_data *plat_priv, int group_id, int idx)
+static int get_mlo_pa(struct cnss_plat_data *plat_priv, int group_id, int idx,
+			unsigned int iova_base)
 {
 	struct cnss_fw_mem *fw_mem = plat_priv->fw_mem;
+	struct cnss_pci_data *pci_priv = plat_priv->bus_priv;
+	int ret;
 
-	/*remap alocated mlo shared mem to pcie device*/
-	mlo_global_mem_phys[group_id] =
-		dma_map_single(&((struct pci_dev *)plat_priv->pci_dev)->dev,
-				mlo_global_mem[group_id],
-				fw_mem[idx].size, DMA_BIDIRECTIONAL);
-	if (dma_mapping_error(&((struct pci_dev *)plat_priv->pci_dev)->dev,
-				mlo_global_mem_phys[group_id])) {
-		cnss_pr_err("Error: dma_map_single failed.\n");
-		return -ENOMEM;
+	if (iova_base == 0) {
+		cnss_pr_err("Error: invalid data: 0x%x\n", iova_base);
+		return -EINVAL;
 	}
 
-	fw_mem[idx].pa =  mlo_global_mem_phys[group_id];
+	/*remap alocated mlo shared mem to pcie device*/
+	if (mlo_global_mem_phys[group_id] != iova_base) {
+		ret = iommu_map(pci_priv->iommu_domain, iova_base,
+				mlo_global_mem_phys[group_id],
+				fw_mem[idx].size, IOMMU_READ | IOMMU_WRITE);
+		if (ret < 0) {
+			cnss_pr_err("Error: MLO memory map failed.\n");
+			return -ENOMEM;
+		}
+	}
+
+	fw_mem[idx].pa = iova_base;
+	mlo_global_mem_phys[group_id] = iova_base;
 
 	return 0;
 }
@@ -3841,6 +3859,7 @@ static int cnss_mlo_mem_alloc(struct cnss_plat_data *plat_priv, int index)
 	struct reserved_mem *mlo_mem = NULL;
 	unsigned int mlo_global_mem_size;
 	int i = index;
+	static unsigned int mlo_iova_base[CNSS_MAX_MLO_GROUPS];
 	struct device *dev;
 
 	dev = &plat_priv->plat_dev->dev;
@@ -3864,6 +3883,12 @@ static int cnss_mlo_mem_alloc(struct cnss_plat_data *plat_priv, int index)
 			CNSS_ASSERT(0);
 			return -ENOMEM;
 		}
+
+		ret = of_property_read_u32(mlo_global_mem_node, "iova_base",
+					   &mlo_iova_base[group_id]);
+		if (ret)
+			cnss_pr_err("Error(%d): Unable to get MLO iova base\n",
+				    ret);
 
 		of_node_put(mlo_global_mem_node);
 		mlo_global_mem_size = mlo_mem->size;
@@ -3891,7 +3916,7 @@ static int cnss_mlo_mem_alloc(struct cnss_plat_data *plat_priv, int index)
 	} else
 		fw_mem[i].va = mlo_global_mem[group_id];
 
-	ret = get_mlo_pa(plat_priv, group_id, i);
+	ret = get_mlo_pa(plat_priv, group_id, i, mlo_iova_base[group_id]);
 	if (ret != 0) {
 		cnss_pr_err("Error: get_mlo_pa failed.");
 		CNSS_ASSERT(0);
@@ -4868,7 +4893,8 @@ static int cnss_pci_init_smmu(struct cnss_pci_data *pci_priv)
 
 	ret = of_property_read_string(of_node, "qcom,iommu-dma",
 				      &iommu_dma_type);
-	if (!ret && !strcmp("fastmap", iommu_dma_type)) {
+	if (!ret && (!strcmp("fastmap", iommu_dma_type) ||
+	    !strcmp("atomic", iommu_dma_type))) {
 		cnss_pr_dbg("Enabling SMMU S1 stage\n");
 		pci_priv->smmu_s1_enable = true;
 		iommu_set_fault_handler(pci_priv->iommu_domain,

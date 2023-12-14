@@ -170,6 +170,10 @@ static int enable_intx_bmap;
 module_param(enable_intx_bmap, int, 0644);
 MODULE_PARM_DESC(enable_intx_bmap, "enable_intx_bmap");
 
+static unsigned int mlo_max_peer;
+module_param(mlo_max_peer, uint, 0600);
+MODULE_PARM_DESC(mlo_max_peer, "MLO max peer");
+
 #define FW_READY_DELAY	100  /* in msecs */
 
 /* In platforms with low power CPU like IPQ5018 or SDX65, if CPU load
@@ -1829,7 +1833,11 @@ void cnss_set_default_mlo_config(void)
 			return;
 		}
 		mlo_group_info[group_id].group_id = group_id;
-		mlo_group_info[group_id].max_num_peers = 256;
+		if (mlo_max_peer == 0)
+			mlo_group_info[group_id].max_num_peers = 256;
+		else
+			mlo_group_info[group_id].max_num_peers = mlo_max_peer;
+
 		if (mlo_chip_bitmask & (1 << i)) {
 			/*Temporarily Hard coding group id as 0 */
 			num_chip = grp_chip_id[group_id];
@@ -5459,6 +5467,7 @@ static void cnss_report_crash_work(struct work_struct *work)
 static void cnss_driver_cal_work(struct work_struct *work)
 {
 	int ret, index, count = 0;
+	u64 probe_time = 0;
 	struct cnss_plat_data *plat_priv =
 		container_of(work, struct cnss_plat_data, cal_work);
 	struct cnss_plat_data *prev_plat_priv;
@@ -5501,16 +5510,18 @@ static void cnss_driver_cal_work(struct work_struct *work)
 		/* Temporary change to preserve probe order */
 		if (index > 0) {
 			prev_plat_priv = plat_env[index - 1];
+			probe_time = jiffies;
 			while (prev_plat_priv->driver_status !=
-					CNSS_INITIALIZED) {
-				cnss_pr_dbg("Waiting for prev target to probe\n");
+							CNSS_INITIALIZED) {
 				msleep(FW_READY_DELAY);
 				if (count++ > probe_timeout * 10) {
-					cnss_pr_err("CNSS Driver probe timed out\n");
+					cnss_pr_err("CNSS Driver probe timed out %u ms\n",
+					jiffies_to_msecs(jiffies - probe_time));
 					CNSS_ASSERT(0);
 				}
 			}
-			cnss_pr_info("Previous target is probed\n");
+			cnss_pr_info("Previous target probe took %u ms\n",
+				     jiffies_to_msecs(jiffies - probe_time));
 		}
 #ifndef CONFIG_CNSS2_KERNEL_5_15
 		(void)__cnss_subsystem_get(plat_priv);
