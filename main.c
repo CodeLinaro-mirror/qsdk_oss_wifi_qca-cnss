@@ -3073,8 +3073,7 @@ void cnss_wlan_unregister_driver(struct cnss_wlan_driver *driver_ops)
 			cnss_unregister_subsys(plat_priv);
 			cnss_unregister_notifier_cb(plat_priv);
 #else
-			if (plat_priv->driver_state)
-				cnss_hif_shutdown(plat_priv);
+			cnss_hif_shutdown(plat_priv);
 #endif
 			plat_priv->driver_ops = NULL;
 			plat_priv->driver_status = CNSS_UNINITIALIZED;
