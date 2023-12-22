@@ -196,6 +196,12 @@ enum cnss_recovery_reason {
 	CNSS_REASON_FATAL_SHUTDOWN
 };
 
+enum cnss_crash_type {
+	CNSS_NO_CRASH,
+	CNSS_USERPD_CRASH,
+	CNSS_ROOTPD_CRASH
+};
+
 struct cnss_mlo_chip_info {
 	u8 group_id;
 	u8 soc_id;

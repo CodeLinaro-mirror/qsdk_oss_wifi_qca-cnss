@@ -66,6 +66,8 @@
 #define FW_ASSERT_TIMEOUT		5000
 #define CNSS_EVENT_PENDING		2989
 
+#define RPROC_ROOTPD_NAME		"remoteproc"
+
 #define CNSS_QUIRKS_DEFAULT		0
 #ifdef CONFIG_CNSS_EMULATION
 #define CNSS_MHI_TIMEOUT_DEFAULT	3600
@@ -255,6 +257,7 @@ struct cnss_driver_event {
 /* M3 Dump related global structures/variables */
 static int m3_dump_major;
 static struct class *m3_dump_class;
+struct rproc *rproc_rootpd, *rproc_textpd;
 
 atomic_t cal_in_progress_count;
 
@@ -2427,7 +2430,6 @@ static int cnss_qca8074_notifier_atomic_nb(struct notifier_block *nb,
 {
 	struct cnss_plat_data *plat_priv =
 		container_of(nb, struct cnss_plat_data, modem_atomic_nb);
-	struct cnss_subsys_info *subsys_info = &plat_priv->subsys_info;
 	struct rproc *rproc;
 	struct cnss_wlan_driver *driver_ops;
 	int event_code = cnss_get_event(code, plat_priv);
@@ -2446,12 +2448,15 @@ static int cnss_qca8074_notifier_atomic_nb(struct notifier_block *nb,
 		plat_priv->target_asserted = 1;
 		plat_priv->target_assert_timestamp = ktime_to_ms(ktime_get());
 		if (plat_priv->recovery_type == CNSS_SYNC_RECOVERY) {
-			rproc = subsys_info->subsys_handle;
+			rproc = plat_priv->rproc_handle;
 			if (rproc) {
-				rproc->state = RPROC_CRASHED;
-				cnss_reason = CNSS_REASON_FATAL_SHUTDOWN;
-			       cnss_schedule_recovery(&plat_priv->plat_dev->dev,
-							cnss_reason);
+				if (rproc->state != RPROC_OFFLINE) {
+					plat_priv->crash_type = CNSS_USERPD_CRASH;
+					rproc->state = RPROC_CRASHED;
+					cnss_reason = CNSS_REASON_FATAL_SHUTDOWN;
+					cnss_schedule_recovery(&plat_priv->plat_dev->dev,
+								cnss_reason);
+				}
 			}
 		} else {
 			driver_ops->fatal((struct pci_dev *)plat_priv->plat_dev,
@@ -2586,7 +2591,6 @@ static int cnss_qca8074_rpd_notifier_atomic_nb(struct notifier_block *nb,
 		container_of(nb, struct cnss_plat_data, rpd_atomic_nb);
 	struct cnss_wlan_driver *driver_ops;
 	int event_code = cnss_get_event(code, plat_priv);
-	struct rproc *rproc_rpd;
 	enum cnss_recovery_reason cnss_reason;
 
 	driver_ops = plat_priv->driver_ops;
@@ -2602,12 +2606,16 @@ static int cnss_qca8074_rpd_notifier_atomic_nb(struct notifier_block *nb,
 			    cnss_get_plat_env_index_from_plat_priv(plat_priv));
 		plat_priv->target_asserted = 1;
 		plat_priv->target_assert_timestamp = ktime_to_ms(ktime_get());
-		rproc_rpd = plat_priv->rproc_rpd_handle;
-		if (rproc_rpd) {
-			rproc_rpd->state = RPROC_CRASHED;
-			cnss_reason = CNSS_REASON_FATAL_SHUTDOWN;
-			cnss_schedule_recovery(&plat_priv->plat_dev->dev,
-						cnss_reason);
+
+		if (rproc_rootpd) {
+			if ((rproc_rootpd->state != RPROC_OFFLINE) &&
+			   (rproc_rootpd->state != RPROC_CRASHED)) {
+				plat_priv->crash_type = CNSS_ROOTPD_CRASH;
+				rproc_rootpd->state = RPROC_CRASHED;
+				cnss_reason = CNSS_REASON_FATAL_SHUTDOWN;
+				cnss_schedule_recovery(&plat_priv->plat_dev->dev,
+							cnss_reason);
+			}
 		}
 	}
 
@@ -2703,8 +2711,8 @@ void *cnss_register_qcn9000_cb(struct cnss_plat_data *plat_priv)
 void *cnss_register_qca8074_cb(struct cnss_plat_data *plat_priv)
 {
 	struct cnss_subsys_info *subsys_info;
+	static struct rproc *rproc_rpd;
 	void *ss_handle = NULL;
-	struct rproc *rproc_rpd;
 	int ret = 0;
 
 	subsys_info = &plat_priv->subsys_info;
@@ -2719,12 +2727,13 @@ void *cnss_register_qca8074_cb(struct cnss_plat_data *plat_priv)
 		return NULL;
 	}
 
-	rproc_rpd = plat_priv->rproc_rpd_handle;
-	if (rproc_rpd) {
+	if ((rproc_rootpd) && (!rproc_rpd) &&
+	    (plat_priv->recovery_type == CNSS_SYNC_RECOVERY)) {
+		rproc_rpd = rproc_rootpd;
 		plat_priv->rpd_nb.notifier_call = cnss_qca8074_rpd_notifier_nb;
 		plat_priv->rpd_atomic_nb.notifier_call =
 			cnss_qca8074_rpd_notifier_atomic_nb;
-		ret = rproc_register_subsys_notifier(rproc_rpd->name,
+		ret = rproc_register_subsys_notifier(rproc_rootpd->name,
 				&plat_priv->rpd_nb, &plat_priv->rpd_atomic_nb);
 	}
 
@@ -2735,7 +2744,6 @@ void *cnss_register_qca8074_cb(struct cnss_plat_data *plat_priv)
 int cnss_unregister_qca8074_cb(struct cnss_plat_data *plat_priv)
 {
 	int ret = 0;
-	struct rproc *rproc_rpd;
 
 	if (plat_priv->modem_nb.notifier_call) {
 		ret = rproc_unregister_subsys_notifier(
@@ -2752,11 +2760,10 @@ int cnss_unregister_qca8074_cb(struct cnss_plat_data *plat_priv)
 		       sizeof(struct notifier_block));
 	}
 
-	rproc_rpd = plat_priv->rproc_rpd_handle;
-	if (rproc_rpd) {
+	if (rproc_rootpd) {
 		if (plat_priv->rpd_nb.notifier_call) {
 			ret = rproc_unregister_subsys_notifier(
-					rproc_rpd->name,
+					rproc_rootpd->name,
 					&plat_priv->rpd_nb,
 					&plat_priv->rpd_atomic_nb);
 			if (ret) {
@@ -2796,6 +2803,21 @@ int cnss_unregister_qcn9000_cb(struct cnss_plat_data *plat_priv)
 	return 0;
 }
 #endif
+#else
+static int cnss_rproc_recovery(struct cnss_plat_data *plat_priv)
+{
+	return 0;
+}
+
+static int cnss_rproc_start(struct cnss_plat_data *plat_priv)
+{
+	return 0;
+}
+
+int cnss_handle_usrpd_in_rpd_crash(struct cnss_plat_data *plat_priv)
+{
+	return 0;
+}
 #endif
 
 void *cnss_register_notifier_cb(struct cnss_plat_data *plat_priv)
@@ -3077,83 +3099,181 @@ void cnss_wlan_unregister_driver(struct cnss_wlan_driver *driver_ops)
 EXPORT_SYMBOL(cnss_wlan_unregister_driver);
 
 #ifndef CONFIG_CNSS2_KERNEL_5_15
-static int cnss_rproc_recovery(struct cnss_plat_data *plat_priv)
+int cnss_stop_rproc(struct cnss_plat_data *plat_priv, struct rproc *rproc)
 {
-	struct cnss_subsys_info *subsys_info =
-		&plat_priv->subsys_info;
-	struct rproc *rproc_rpd;
-	struct rproc *rproc = subsys_info->subsys_handle;
 	int ret;
 
-	cnss_bus_update_status(plat_priv, CNSS_FW_DOWN);
-	if (rproc) {
-		rproc->state = RPROC_CRASHED;
-		ret = rproc_stop(rproc, true);
-		if (ret < 0) {
-			cnss_pr_err("User pd rproc_stop failed\n");
-			return ret;
-		}
-		rproc->state = RPROC_SUSPENDED;
+	ret = rproc_stop(rproc, true);
+	if (ret < 0) {
+		cnss_pr_err("Rproc_stop failed for %s device\n",
+				rproc->name);
+		return ret;
 	}
-	rproc_rpd = plat_priv->rproc_rpd_handle;
-	if (rproc_rpd) {
-		rproc_rpd->state = RPROC_RUNNING;
-		ret = rproc_stop(rproc_rpd, true);
-		if (ret < 0) {
-			cnss_pr_err("Root pd rproc_stop failed\n");
-			return ret;
-		}
-		rproc_rpd->ops->coredump(rproc_rpd);
-	} else {
+	cnss_pr_info("The %s device is stopped\n", plat_priv->device_name);
+	return 0;
+}
+
+int cnss_start_rproc(struct cnss_plat_data *plat_priv, struct rproc *rproc)
+{
+	const struct firmware *firmware_p = NULL;
+	struct device *dev;
+	int ret = 0;
+
+	dev = &rproc->dev;
+	ret = request_firmware(&firmware_p, rproc->firmware, dev);
+	if (ret < 0) {
+		cnss_pr_err("Request_firmware failed: %d\n", ret);
+		return ret;
+	}
+	ret = rproc_start(rproc, firmware_p);
+	if (ret < 0) {
+		cnss_pr_err("Rproc_start failed for device %s\n", rproc->name);
+		release_firmware(firmware_p);
+		return ret;
+	}
+	return 0;
+}
+
+int cnss_handle_usrpd_in_rpd_crash(struct cnss_plat_data *plat_priv)
+{
+	struct rproc *rproc;
+	struct platform_device *pdev;
+	struct cnss_mlo_group_info *group_info;
+
+	if (!plat_priv)
+		return -1;
+
+	rproc = plat_priv->rproc_handle;
+	pdev = plat_priv->plat_dev;
+	group_info = plat_priv->mlo_group_info;
+	if (of_property_read_bool(pdev->dev.of_node, "qcom,multipd_arch")) {
 		if (rproc) {
-			cnss_qca8074_notifier_nb(&plat_priv->modem_nb,
-					CNSS_RAMDUMP_NOTIFICATION, NULL);
-			rproc->ops->coredump(rproc);
+			if (!plat_priv->recovery_enabled &&
+			    plat_priv->mlo_support) {
+				group_info->rddm_dump_all++;
+			} else {
+				if (rproc->state != RPROC_OFFLINE) {
+					cnss_bus_update_status(plat_priv,
+								CNSS_FW_DOWN);
+					rproc->state = RPROC_CRASHED;
+					cnss_stop_rproc(plat_priv, rproc);
+				}
+			}
+		}
+	}
+	return 0;
+}
+
+static int cnss_rproc_recovery(struct cnss_plat_data *plat_priv)
+{
+	struct rproc *rproc = NULL, *rproc_text_pd = NULL;
+	int user_pd_handle, ret = 0;
+
+	if (!plat_priv)
+		return 0;
+
+	rproc = plat_priv->rproc_handle;
+
+	/*RPROC Rootpd stop handling steps:
+	 * 1. Stop all Userpd devices.
+	 * 2. Stop any Textpd device if any present.
+	 * 3. Stop rootpd device and collect coredump.
+	 */
+	if ((rproc_rootpd) && (plat_priv->crash_type == CNSS_ROOTPD_CRASH)) {
+		if (rproc_rootpd->state != RPROC_OFFLINE) {
+			for (user_pd_handle = 0; user_pd_handle < plat_env_index; user_pd_handle++)
+				cnss_handle_usrpd_in_rpd_crash(plat_env[user_pd_handle]);
+			if (rproc_textpd) {
+				rproc_text_pd = rproc_textpd;
+				if (rproc_text_pd->state != RPROC_OFFLINE) {
+					rproc_text_pd->state = RPROC_CRASHED;
+					cnss_stop_rproc(plat_priv,
+							rproc_text_pd);
+				}
+			}
+			rproc_rootpd->state = RPROC_RUNNING;
+			ret = cnss_stop_rproc(plat_priv, rproc_rootpd);
+			if (!ret) {
+				cnss_qca8074_notifier_nb(&plat_priv->modem_nb,
+						CNSS_RAMDUMP_NOTIFICATION, NULL);
+				rproc_rootpd->ops->coredump(rproc_rootpd);
+			}
 		}
 	}
 
+	if (rproc) {
+		if ((rproc->state != RPROC_OFFLINE) &&
+			(plat_priv->crash_type == CNSS_USERPD_CRASH)) {
+			cnss_bus_update_status(plat_priv, CNSS_FW_DOWN);
+			rproc->state = RPROC_CRASHED;
+			ret = cnss_stop_rproc(plat_priv, rproc);
+			if (!ret) {
+				cnss_qca8074_notifier_nb(&plat_priv->modem_nb,
+						CNSS_RAMDUMP_NOTIFICATION, NULL);
+				rproc->ops->coredump(rproc);
+			}
+		}
+	}
+	return 0;
+}
+
+int cnss_handle_usrpd_in_rpd_start(struct cnss_plat_data *plat_priv)
+{
+	struct rproc *rproc;
+	struct platform_device *pdev;
+	int ret = 0;
+
+	if (!plat_priv)
+		return -1;
+
+	rproc = plat_priv->rproc_handle;
+	pdev = plat_priv->plat_dev;
+	if (of_property_read_bool(pdev->dev.of_node, "qcom,multipd_arch")) {
+		if (rproc->state != RPROC_RUNNING) {
+			ret = cnss_start_rproc(plat_priv, rproc);
+			if (!ret)
+				cnss_pr_info("The userpd device %s is started\n",
+					     plat_priv->device_name);
+		}
+	}
 	return 0;
 }
 
 static int cnss_rproc_start(struct cnss_plat_data *plat_priv)
 {
-	struct rproc *rproc_rpd;
-	const struct firmware *firmware_p = NULL;
-	struct rproc *rproc;
-	struct device *dev;
-	int ret;
+	struct rproc *rproc = NULL, *rproc_text_pd = NULL;
+	int user_pd_handle;
+
+	if (!plat_priv)
+		return 0;
 
 	rproc = plat_priv->rproc_handle;
-	rproc_rpd = plat_priv->rproc_rpd_handle;
-	if (rproc_rpd) {
-		dev = &rproc_rpd->dev;
-		ret = request_firmware(&firmware_p, rproc_rpd->firmware, dev);
-		if (ret < 0) {
-			cnss_pr_err("request_firmware failed: %d\n", ret);
-			return ret;
-		}
-		ret = rproc_start(rproc_rpd, firmware_p);
-		if (ret < 0) {
-			cnss_pr_err("Root pd rproc_start failed\n");
-			return ret;
-		}
-	} else {
-		if (rproc) {
-			dev = &rproc->dev;
-			ret = request_firmware(&firmware_p,
-						rproc->firmware, dev);
-			if (ret < 0) {
-				cnss_pr_err("request_firmware failed: %d\n",
-						ret);
-				return ret;
+
+	/*RPROC Rootpd start handling steps:
+	 * 1. Start rootpd device first.
+	 * 2. Start textpd device if any present.
+	 * 3. Start all userpd device.
+	 */
+	if ((rproc_rootpd) && (plat_priv->crash_type == CNSS_ROOTPD_CRASH)) {
+		if (rproc_rootpd->state != RPROC_RUNNING) {
+			cnss_start_rproc(plat_priv, rproc_rootpd);
+			if (rproc_textpd) {
+				rproc_text_pd = rproc_textpd;
+				if (rproc_text_pd->state != RPROC_RUNNING) {
+					cnss_start_rproc(plat_priv,
+							 rproc_text_pd);
+				}
 			}
-			ret = rproc_start(rproc, firmware_p);
-			if (ret < 0) {
-				cnss_pr_err("User pd rproc_start failed\n");
-				return ret;
-			}
+			for (user_pd_handle = 0; user_pd_handle < plat_env_index; user_pd_handle++)
+				cnss_handle_usrpd_in_rpd_start(plat_env[user_pd_handle]);
 		}
 	}
+
+	if ((rproc) && (plat_priv->crash_type == CNSS_USERPD_CRASH)) {
+		if (rproc->state != RPROC_RUNNING)
+			cnss_start_rproc(plat_priv, rproc);
+	}
+	plat_priv->crash_type = CNSS_NO_CRASH;
 	return 0;
 }
 #endif
@@ -3663,7 +3783,7 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 	unsigned long rddm_lock;
 	struct cnss_pci_data *pci_priv = NULL;
 	struct cnss_mlo_group_info *group_info = plat_priv->mlo_group_info;
-	int ret = 0;
+	int ret = 0, userpd = 0;
 
 	plat_priv->recovery_count++;
 
@@ -3686,7 +3806,8 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 		if (plat_priv->bus_type == CNSS_BUS_PCI)
 			cnss_bus_collect_dump_info(plat_priv, false);
 		if (plat_priv->mlo_support && !plat_priv->recovery_enabled &&
-				group_info != NULL) {
+				group_info != NULL &&
+				plat_priv->crash_type != CNSS_ROOTPD_CRASH) {
 			spin_lock_irqsave(&rddm_spinlock, rddm_lock);
 			group_info->rddm_dump_all++;
 			spin_unlock_irqrestore(&rddm_spinlock, rddm_lock);
@@ -3716,6 +3837,10 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 		if (plat_priv->mlo_support && group_info != NULL &&
 		    plat_priv->recovery_mode != MODE_1_RECOVERY_MODE &&
 		    !plat_priv->standby_mode) {
+			if (plat_priv->crash_type == CNSS_ROOTPD_CRASH) {
+				for (userpd = 0; userpd < plat_env_index; userpd++)
+					cnss_handle_usrpd_in_rpd_crash(plat_env[userpd]);
+			}
 			if (!test_bit(CNSS_FW_READY, &plat_priv->driver_state))
 				cnss_pr_info("FW_READY not received for the device, so early assert\n");
 			else if (group_info->num_chips != group_info->rddm_dump_all)
@@ -3752,41 +3877,58 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 		 * multiple targets in the MLO group are all powered up in the
 		 * correct sequence
 		 */
-#ifdef CONFIG_CNSS2_KERNEL_5_15
-		cnss_hif_shutdown(plat_priv);
-		cnss_hif_notifier(plat_priv, CNSS_RAMDUMP_NOTIFICATION);
-		cnss_bus_dev_ramdump(plat_priv);
-		set_bit(CNSS_RECOVERY_WAIT_FOR_DRIVER,
-			&plat_priv->driver_state);
-		cnss_hif_notifier(plat_priv,
-				  CNSS_RAMDUMP_DONE);
-#else
+
 		if (plat_priv->bus_type == CNSS_BUS_PCI) {
+#if defined(CONFIG_CNSS2_KERNEL_5_15) || defined(CONFIG_CNSS2_KERNEL_6_1)
+			cnss_hif_shutdown(plat_priv);
+			cnss_hif_notifier(plat_priv, CNSS_RAMDUMP_NOTIFICATION);
+			cnss_bus_dev_ramdump(plat_priv);
+			set_bit(CNSS_RECOVERY_WAIT_FOR_DRIVER,
+				&plat_priv->driver_state);
+			cnss_hif_notifier(plat_priv,
+					  CNSS_RAMDUMP_DONE);
+			return 0;
+#else
 			rproc_shutdown(subsys_info->subsys_handle);
 			cnss_qcn9000_notifier_nb(&plat_priv->modem_nb,
 					CNSS_RAMDUMP_NOTIFICATION, NULL);
 			cnss_subsys_ramdump(subsys_info->subsys_handle,
 								NULL, NULL);
-		} else
-			cnss_rproc_recovery(plat_priv);
-
-		set_bit(CNSS_RECOVERY_WAIT_FOR_DRIVER,
-			&plat_priv->driver_state);
-		cnss_qcn9000_notifier_nb(&plat_priv->modem_nb,
-				CNSS_RAMDUMP_DONE, NULL);
+			set_bit(CNSS_RECOVERY_WAIT_FOR_DRIVER,
+				&plat_priv->driver_state);
+			cnss_qcn9000_notifier_nb(&plat_priv->modem_nb,
+						 CNSS_RAMDUMP_DONE, NULL);
 #endif
+		} else if ((plat_priv->bus_type == CNSS_BUS_AHB) &&
+			(plat_priv->recovery_type == CNSS_SYNC_RECOVERY)) {
+			cnss_rproc_recovery(plat_priv);
+			set_bit(CNSS_RECOVERY_WAIT_FOR_DRIVER,
+				&plat_priv->driver_state);
+			if (plat_priv->crash_type == CNSS_ROOTPD_CRASH) {
+				for (userpd = 0; userpd < plat_env_index; userpd++) {
+					if (plat_env[userpd]->bus_type == CNSS_BUS_AHB) {
+						cnss_qca8074_notifier_nb(&plat_env[userpd]->modem_nb,
+									CNSS_RAMDUMP_DONE, NULL);
+					}
+				}
+			} else {
+				cnss_qca8074_notifier_nb(&plat_priv->modem_nb,
+							CNSS_RAMDUMP_DONE, NULL);
+			}
+		}
 	} else {
-#ifdef CONFIG_CNSS2_KERNEL_5_15
-		schedule_work(&plat_priv->crash_work);
+		if (plat_priv->bus_type == CNSS_BUS_PCI) {
+#if defined(CONFIG_CNSS2_KERNEL_5_15) || defined(CONFIG_CNSS2_KERNEL_6_1)
+			schedule_work(&plat_priv->crash_work);
 #else
-		if (plat_priv->bus_type == CNSS_BUS_PCI)
 			rproc_report_crash(subsys_info->subsys_handle,
 					RPROC_FATAL_ERROR);
-		else {
+#endif
+		} else if ((plat_priv->bus_type == CNSS_BUS_AHB) &&
+			(plat_priv->recovery_type == CNSS_SYNC_RECOVERY)) {
 			cnss_rproc_recovery(plat_priv);
 			cnss_rproc_start(plat_priv);
 		}
-#endif
 	}
 
 #endif
@@ -4795,11 +4937,9 @@ int cnss_register_subsys(struct cnss_plat_data *plat_priv)
 {
 #ifndef CONFIG_CNSS2_KERNEL_5_15
 	struct cnss_subsys_info *subsys_info = &plat_priv->subsys_info;
-	struct device *dev = &plat_priv->plat_dev->dev;
-	struct rproc *rproc_handle;
+	struct device *dev = &plat_priv->plat_dev->dev, *rproc_dev;
+	struct rproc *rproc_handle, *rproc_parent_pd;
 	phandle rproc_node;
-	struct rproc *rproc_rpd_handle;
-	phandle rproc_rpd_node;
 #endif
 	int ret = 0;
 
@@ -4827,21 +4967,57 @@ int cnss_register_subsys(struct cnss_plat_data *plat_priv)
 				return -EINVAL;
 			}
 
-			of_property_read_u32(dev->of_node, "qcom,rproc_rpd",
-						 &rproc_rpd_node);
-			plat_priv->rproc_rpd_handle =
-				rproc_get_by_phandle(rproc_rpd_node);
-			if (IS_ERR_OR_NULL(plat_priv->rproc_rpd_handle)) {
-				cnss_pr_err("%s: Failed to get rproc handle \
-					    %ld for device %s\n", __func__,
-					    PTR_ERR(
-					    plat_priv->rproc_rpd_handle),
-					    plat_priv->device_name);
+			rproc_handle = plat_priv->rproc_handle;
+
+			/* Register the Rootpd for the first userpd
+			 * which is being probed. Skip if already registered.
+			 */
+			if ((!rproc_rootpd) &&
+			    (plat_priv->recovery_type == CNSS_SYNC_RECOVERY)) {
+				/* Parent node of userpd will be always be
+				 * either rootpd or textpd.
+				 */
+				rproc_dev = rproc_handle->dev.parent;
+				rproc_parent_pd = dev_get_drvdata(rproc_dev->parent);
+					/* The device tree structure is represented as,
+					 * Rootpd ->
+					 *      Textpd (For QCN6432 RDP only) ->
+					 *              Userpd_1
+					 *              ...
+					 *              Userpd_n
+					 * All the Rproc PD nodes have the
+					 * string "remoteproc" in their name.
+					 * Parent of rootpd node doesn't have
+					 * the string in its name. Traverse to
+					 * the first parent of userpd to get
+					 * textpd or rootpd. If there is node
+					 * above the first parent then that
+					 * parent is the textpd and the parent
+					 * of textpd is rootpd.
+					 */
+				if (rproc_parent_pd) {
+					if (strstr(rproc_parent_pd->name, RPROC_ROOTPD_NAME)) {
+						rproc_rootpd = rproc_parent_pd;
+						rproc_dev = rproc_parent_pd->dev.parent;
+						rproc_parent_pd = dev_get_drvdata(rproc_dev->parent);
+						if (rproc_parent_pd) {
+							if (strstr(rproc_parent_pd->name, RPROC_ROOTPD_NAME)) {
+								rproc_textpd = rproc_rootpd;
+								cnss_pr_info("%s: Rproc text pd handle %s\n",
+									__func__,
+									rproc_textpd->name);
+								rproc_rootpd = rproc_parent_pd;
+							}
+						}
+						cnss_pr_info("%s: Rproc root pd handle %s\n",
+								__func__,
+								rproc_rootpd->name);
+					}
+				}
 			}
 		}
 
 		rproc_handle = plat_priv->rproc_handle;
-		rproc_rpd_handle = plat_priv->rproc_rpd_handle;
 		subsys_info->subsys_desc.name = rproc_handle->name;
 #endif
 		break;
