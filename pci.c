@@ -1336,8 +1336,12 @@ static char *cnss_mhi_state_to_str(enum cnss_mhi_state mhi_state)
 		return "RESUME";
 	case CNSS_MHI_TRIGGER_RDDM:
 		return "TRIGGER_RDDM";
+	case CNSS_MHI_RDDM:
+		return "MHI_RDDM";
 	case CNSS_MHI_RDDM_DONE:
 		return "RDDM_DONE";
+	case CNSS_MHI_SOC_RESET:
+		return "SOC_RESET";
 	default:
 		return "UNKNOWN";
 	}
@@ -1378,7 +1382,9 @@ static int cnss_pci_check_mhi_state_bit(struct cnss_pci_data *pci_priv,
 		    !test_bit(CNSS_MHI_TRIGGER_RDDM, &pci_priv->mhi_state))
 			return 0;
 		break;
+	case CNSS_MHI_RDDM:
 	case CNSS_MHI_RDDM_DONE:
+	case CNSS_MHI_SOC_RESET:
 		return 0;
 	default:
 		cnss_pr_err("Unhandled MHI state: %s(%d)\n",
@@ -1422,8 +1428,14 @@ static void cnss_pci_set_mhi_state_bit(struct cnss_pci_data *pci_priv,
 	case CNSS_MHI_TRIGGER_RDDM:
 		set_bit(CNSS_MHI_TRIGGER_RDDM, &pci_priv->mhi_state);
 		break;
+	case CNSS_MHI_RDDM:
+		set_bit(CNSS_MHI_RDDM, &pci_priv->mhi_state);
+		break;
 	case CNSS_MHI_RDDM_DONE:
 		set_bit(CNSS_MHI_RDDM_DONE, &pci_priv->mhi_state);
+		break;
+	case CNSS_MHI_SOC_RESET:
+		set_bit(CNSS_MHI_SOC_RESET, &pci_priv->mhi_state);
 		break;
 	default:
 		cnss_pr_err("Unhandled MHI state (%d)\n", mhi_state);
@@ -1496,6 +1508,9 @@ static int cnss_pci_set_mhi_state(struct cnss_pci_data *pci_priv,
 		ret = mhi_force_rddm_mode(pci_priv->mhi_ctrl);
 		break;
 	case CNSS_MHI_RDDM_DONE:
+		break;
+	case CNSS_MHI_SOC_RESET:
+		mhi_soc_reset(pci_priv->mhi_ctrl);
 		break;
 	default:
 		cnss_pr_err("Unhandled MHI state (%d)\n", mhi_state);
@@ -2210,6 +2225,26 @@ out:
 	return ret;
 }
 
+static void cnss_mhi_soc_reset(struct pci_dev *pci_dev)
+{
+	struct cnss_pci_data *pci_priv = cnss_get_pci_priv(pci_dev);
+	struct cnss_plat_data *plat_priv =
+		cnss_bus_dev_to_plat_priv(&pci_dev->dev);
+
+	if (test_bit(CNSS_MHI_RDDM, &pci_priv->mhi_state)) {
+		cnss_pr_info("MHI SOC_RESET is not required as MHI is already in RDDM state\n");
+		clear_bit(CNSS_MHI_RDDM, &pci_priv->mhi_state);
+		return;
+	}
+
+	cnss_pci_set_mhi_state(pci_priv, CNSS_MHI_SOC_RESET);
+	if (!wait_for_completion_timeout(&plat_priv->soc_reset_request_complete,
+				msecs_to_jiffies(MHI_SOC_RESET_DELAY))) {
+		cnss_pr_err("%s: Failed to switch RDDM state\n", __func__);
+		reinit_completion(&plat_priv->soc_reset_request_complete);
+	}
+}
+
 static int cnss_qcn9000_shutdown(struct cnss_pci_data *pci_priv)
 {
 	int ret = 0;
@@ -2229,6 +2264,8 @@ static int cnss_qcn9000_shutdown(struct cnss_pci_data *pci_priv)
 		cnss_pr_info("Skipping shutdown to wait for dump collection\n");
 		return ret;
 	}
+
+	cnss_mhi_soc_reset(plat_priv->pci_dev);
 
 	cnss_pr_info("Shutting down %s\n", plat_priv->device_name);
 	cnss_pci_pm_runtime_resume(pci_priv);
@@ -3762,6 +3799,7 @@ void cnss_do_mlo_global_memset(struct cnss_plat_data *plat_priv, u64 mem_size)
 
 #ifndef CONFIG_CNSS2_KERNEL_5_15
 static int cnss_mlo_mem_get(struct cnss_plat_data *plat_priv, int group_id,
+<<<<<<< HEAD
 			    phys_addr_t paddr, int idx)
 {
 	struct cnss_fw_mem *fw_mem = plat_priv->fw_mem;
@@ -3769,6 +3807,13 @@ static int cnss_mlo_mem_get(struct cnss_plat_data *plat_priv, int group_id,
 	mlo_global_mem_phys[group_id] = paddr;
 	mlo_global_mem[group_id] = ioremap(mlo_global_mem_phys[group_id],
 					   fw_mem[idx].size);
+=======
+			    phys_addr_t paddr, int idx, u32 mem_size)
+{
+	mlo_global_mem_phys[group_id] = paddr;
+	mlo_global_mem[group_id] = ioremap(mlo_global_mem_phys[group_id],
+					   mem_size);
+>>>>>>> win_wlan_host.1.0.r19.2-231228
 
 	if (!mlo_global_mem[group_id])
 		cnss_pr_err("WARNING: Host DDR remap failed\n");
@@ -3787,7 +3832,11 @@ static int get_mlo_pa(struct cnss_plat_data *plat_priv, int group_id, int idx,
 
 #else
 static int cnss_mlo_mem_get(struct cnss_plat_data *plat_priv, int group_id,
+<<<<<<< HEAD
 			    phys_addr_t paddr, int idx)
+=======
+			    phys_addr_t paddr, int idx, u32 mem_size)
+>>>>>>> win_wlan_host.1.0.r19.2-231228
 {
 	struct cnss_fw_mem *fw_mem = plat_priv->fw_mem;
 	int ret;
@@ -3905,7 +3954,12 @@ static int cnss_mlo_mem_alloc(struct cnss_plat_data *plat_priv, int index)
 					(unsigned int)fw_mem[i].size);
 		}
 
+<<<<<<< HEAD
 		ret = cnss_mlo_mem_get(plat_priv, group_id, mlo_mem->base, i);
+=======
+		ret = cnss_mlo_mem_get(plat_priv, group_id, mlo_mem->base, i,
+				       mlo_global_mem_size);
+>>>>>>> win_wlan_host.1.0.r19.2-231228
 		if (ret != 0) {
 			cnss_pr_err("Error(%d): cnss_mlo_mem_get failed.\n",
 				    ret);
@@ -3929,7 +3983,12 @@ static int cnss_mlo_mem_alloc(struct cnss_plat_data *plat_priv, int index)
 		else
 			chip_id = cnss_get_mlo_chip_id(dev);
 
+<<<<<<< HEAD
 		if (chip_id == MLO_GROUP_MASTER_CHIP)
+=======
+		if (chip_id == MLO_GROUP_MASTER_CHIP &&
+			!plat_priv->standby_mode)
+>>>>>>> win_wlan_host.1.0.r19.2-231228
 			cnss_do_mlo_global_memset(plat_priv, fw_mem[i].size);
 	}
 
@@ -5846,6 +5905,7 @@ static int cnss_pci_enable_bus(struct cnss_pci_data *pci_priv)
 	u16 device_id;
 
 	pci_read_config_word(pci_dev, PCI_DEVICE_ID, &device_id);
+
 	if (device_id != pci_priv->pci_device_id->device)  {
 		cnss_pr_err("PCI device ID mismatch, config ID: 0x%x, probe ID: 0x%x\n",
 			    device_id, pci_priv->pci_device_id->device);
@@ -6279,7 +6339,7 @@ void cnss_get_crash_reason(struct cnss_pci_data *pci_priv)
 	}
 
 	if (i == MAX_RAMDUMP_TABLE_SIZE) {
-		cnss_pr_err("Cannot find '%s' entry in ramdump\n",
+		dev_err(dev, "Cannot find '%s' entry in ramdump\n",
 			    COREDUMP_DESC);
 		return;
 	}
@@ -6311,21 +6371,21 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 	struct cnss_fw_mem *qdss_mem = plat_priv->qdss_mem;
 	int ret, i, skip_count = 0;
 
-	if (test_bit(CNSS_RDDM_IN_PROGRESS, &plat_priv->driver_state)) {
+	if (test_bit(CNSS_RDDM_DUMP_IN_PROGRESS, &plat_priv->driver_state)) {
 		cnss_pr_dbg("RAM dump is in progress for PCI%d, skip\n",
 			    plat_priv->pci_slot_id);
 		return;
 	}
-	set_bit(CNSS_RDDM_IN_PROGRESS, &plat_priv->driver_state);
+	set_bit(CNSS_RDDM_DUMP_IN_PROGRESS, &plat_priv->driver_state);
 
 	if (test_bit(CNSS_MHI_RDDM_DONE, &pci_priv->mhi_state)) {
 		cnss_pr_dbg("RAM dump is already collected, skip\n");
-		clear_bit(CNSS_RDDM_IN_PROGRESS, &plat_priv->driver_state);
+		clear_bit(CNSS_RDDM_DUMP_IN_PROGRESS, &plat_priv->driver_state);
 		return;
 	}
 
 	if (cnss_pci_check_link_status(pci_priv)) {
-		clear_bit(CNSS_RDDM_IN_PROGRESS, &plat_priv->driver_state);
+		clear_bit(CNSS_RDDM_DUMP_IN_PROGRESS, &plat_priv->driver_state);
 		return;
 	}
 
@@ -6341,7 +6401,7 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 			       ret);
 		cnss_pci_dump_qdss_reg(pci_priv);
 		cnss_dump_all_ce_reg(plat_priv);
-		clear_bit(CNSS_RDDM_IN_PROGRESS, &plat_priv->driver_state);
+		clear_bit(CNSS_RDDM_DUMP_IN_PROGRESS, &plat_priv->driver_state);
 		return;
 	}
 
@@ -6514,7 +6574,7 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 		plat_priv->ramdump_info_v2.dump_data_valid = true;
 
 	cnss_pci_set_mhi_state(pci_priv, CNSS_MHI_RDDM_DONE);
-	clear_bit(CNSS_RDDM_IN_PROGRESS, &plat_priv->driver_state);
+	clear_bit(CNSS_RDDM_DUMP_IN_PROGRESS, &plat_priv->driver_state);
 	complete(&plat_priv->rddm_complete);
 }
 
@@ -6632,6 +6692,19 @@ static void cnss_mhi_notify_status(struct mhi_controller *mhi_ctrl,
 	}
 
 	plat_priv = pci_priv->plat_priv;
+
+	if (reason == MHI_CB_EE_RDDM) {
+		/* In-case of RDDM switched by MHI SoC Reset */
+		if (test_bit(CNSS_MHI_SOC_RESET, &pci_priv->mhi_state)) {
+			cnss_pr_dbg("Switched from MHI SOC_RESET to RDDM state\n");
+			complete(&plat_priv->soc_reset_request_complete);
+			clear_bit(CNSS_MHI_SOC_RESET, &pci_priv->mhi_state);
+			return;
+		}
+
+		/* In-case of Target Assert */
+		cnss_pci_set_mhi_state_bit(pci_priv, CNSS_MHI_RDDM);
+	}
 
 	if (reason != MHI_CB_IDLE)
 		cnss_pr_info("MHI status cb is called with reason %s(%d)\n",
@@ -6886,6 +6959,7 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 	cnss_pci_mhi_config.timeout_ms *= timeout_factor;
 #endif
 
+	cnss_pr_dbg("Setting MHI fw image %s\n", plat_priv->firmware_name);
 	mhi_ctrl->fw_image = plat_priv->firmware_name;
 	mhi_ctrl->regs = pci_priv->bar;
 #ifdef CONFIG_CNSS2_KERNEL_5_15
@@ -6938,7 +7012,7 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 
 		mhi_ctrl->iova_start = (dma_addr_t)memory.start;
 		mhi_ctrl->iova_stop = (dma_addr_t)(memory.start +
-						   resource_size(&memory));
+						  (resource_size(&memory) - 1));
 	} else {
 		/* No Memory DT node, assign full 32-bit region as iova */
 		mhi_ctrl->iova_start = 0;
@@ -7066,6 +7140,59 @@ int cnss_pci_of_reserved_mem_device_init(struct cnss_plat_data *plat_priv)
 }
 #endif
 
+#if !defined(CONFIG_CNSS2_KERNEL_5_15)
+void cnss_set_pci_link_speed_width(struct device *dev, u16 link_speed,
+					u16 link_width)
+{
+	struct cnss_plat_data *plat_priv;
+	struct pci_dev *root_port, *pci_dev;
+	struct cnss_pci_data *pci_priv;
+	int ret = 0;
+
+	plat_priv = cnss_bus_dev_to_plat_priv(dev);
+	if (!plat_priv) {
+		cnss_pr_err("The plat_priv is NULL\n");
+		return;
+	}
+
+	pci_dev = plat_priv->pci_dev;
+	if (!pci_dev) {
+		cnss_pr_err("Pci dev is NULL\n");
+		return;
+	}
+
+	pci_priv = cnss_get_pci_priv(pci_dev);
+	if (!pci_priv) {
+		cnss_pr_err("Pci priv is NULL\n");
+		return;
+	}
+
+	root_port = pci_find_pcie_root_port(pci_priv->pci_dev);
+	if (!root_port) {
+		cnss_pr_info("The root port is NULL\n");
+		return;
+	}
+
+	cnss_pr_dbg("Selected link speed is %d, link_width is %d\n",
+			link_speed, link_width);
+
+	ret = pcie_set_link_speed(root_port, link_speed);
+	if (ret)
+		cnss_pr_err("%s Failed to set link speed %d\n", __func__, ret);
+	else
+		cnss_pr_info("%s The PCI Generation is %d\n", __func__,
+				link_speed);
+
+	ret = pcie_set_link_width(root_port, link_width);
+	if (ret)
+		cnss_pr_err("%s Failed to set link width %d\n", __func__, ret);
+	else
+		cnss_pr_info("%s The PCI link width is %d\n", __func__,
+				link_width);
+}
+EXPORT_SYMBOL(cnss_set_pci_link_speed_width);
+#endif
+
 int cnss_pci_probe(struct pci_dev *pci_dev,
 		   const struct pci_device_id *id,
 		   struct cnss_plat_data *plat_priv)
@@ -7105,6 +7232,7 @@ int cnss_pci_probe(struct pci_dev *pci_dev,
 	cnss_set_pci_priv(pci_dev, pci_priv);
 	plat_priv->device_id = pci_dev->device;
 	plat_priv->bus_priv = pci_priv;
+	reinit_completion(&plat_priv->soc_reset_request_complete);
 
 	if (plat_priv->enable_intx) {
 		pci_priv->os_legacy_irq =

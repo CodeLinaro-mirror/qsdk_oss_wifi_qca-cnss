@@ -1,5 +1,5 @@
 /* Copyright (c) 2016-2018, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -52,6 +52,8 @@
  */
 #define CNSS_FW_TYPE_MASK		0xF000
 #define CNSS_FW_TYPE_SHIFT		12
+
+#define CNSS_PCI_SWITCH_LINK_MASK      GENMASK(1, 0)
 
 #ifdef CONFIG_CNSS2_KERNEL_5_15
 typedef void ramdump_device_t;
@@ -417,7 +419,7 @@ enum cnss_driver_state {
 	CNSS_DAEMON_CONNECTED,
 	CNSS_QDSS_STARTED,
 	CNSS_RECOVERY_WAIT_FOR_DRIVER,
-	CNSS_RDDM_IN_PROGRESS,
+	CNSS_RDDM_DUMP_IN_PROGRESS,
 };
 
 struct cnss_recovery_data {
@@ -610,6 +612,7 @@ struct cnss_plat_data {
 	enum cnss_driver_status driver_status;
 	u32 recovery_count;
 	u8 recovery_mode;
+	u8 standby_mode;
 	unsigned long driver_state;
 	struct list_head event_list;
 	spinlock_t event_lock; /* spinlock for driver work event handling */
@@ -701,9 +704,12 @@ struct cnss_plat_data {
 	bool mlo_default_cfg;
 	struct cnss_mlo_chip_info *adj_mlo_chip_info[CNSS_MAX_ADJ_CHIPS];
 	enum cnss_recovery_reason reason;
-#ifdef CONFIG_CNSS2_KERNEL_5_15
+#if defined(CONFIG_CNSS2_KERNEL_5_15)
 	struct work_struct crash_work;
+#else
+	u8 switch_link_enable;
 #endif
+	struct completion soc_reset_request_complete;
 };
 
 #ifdef CONFIG_ARCH_QCOM
@@ -767,5 +773,9 @@ const char *cnss_get_fw_path(struct cnss_plat_data *plat_priv);
 int cnss_cal_file_download_to_mem(struct cnss_plat_data *plat_priv,
 				  u32 *cal_file_size);
 struct cnss_plat_data *cnss_get_plat_priv_by_chip_id(int chip_id);
+#if !defined(CONFIG_CNSS2_KERNEL_5_15)
+void cnss_modify_link_speed(struct cnss_plat_data *plat_priv);
+#endif
+int cnss_set_fw_type_and_name(struct cnss_plat_data *plat_priv);
 
 #endif /* _CNSS_MAIN_H */

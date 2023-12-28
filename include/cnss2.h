@@ -1,5 +1,5 @@
 /* Copyright (c) 2016-2018, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -419,6 +419,10 @@ static inline int cnss_set_driver_mode(unsigned int mode)
 {
 	return -EINVAL;
 }
+static inline bool cnss_get_global_mlo_support(void)
+{
+	return false;
+}
 static inline
 int cnss_send_buffer_to_afcmem(struct device *dev, char *afcdb, uint32_t len,
 			       uint8_t slotid)
@@ -526,6 +530,17 @@ static inline void cnss_set_recovery_mode(struct device *dev, u8 recovery_mode)
 {
 	return -EINVAL;
 }
+static inline void cnss_set_standby_mode(struct device *dev, u8 standby_mode)
+{
+	return -EINVAL;
+}
+#if !defined(CONFIG_CNSS2_KERNEL_5_15)
+static inline void cnss_set_pci_link_speed_width(struct device *dev,
+						u16 link_speed, u16 link_width);
+{
+	return -EINVAL;
+}
+#endif
 #else
 extern int cnss_wlan_register_driver_ops(struct cnss_wlan_driver *driver);
 extern int cnss_wlan_probe_driver(void);
@@ -613,6 +628,7 @@ void cnss_get_ramdump_device_name(struct device *dev,
 				  size_t ramdump_dev_name_len);
 unsigned int cnss_get_driver_mode(void);
 int cnss_set_driver_mode(unsigned int mode);
+bool cnss_get_global_mlo_support(void);
 int cnss_send_buffer_to_afcmem(struct device *dev, char *afcdb, uint32_t len,
 			    uint8_t slotid);
 int cnss_reset_afcmem(struct device *dev, uint8_t slotid);
@@ -643,5 +659,10 @@ bool cnss_get_mlo_group_info(uint8_t grp_id,
 			struct cnss_mlo_group_info *grp_info);
 int cnss_get_mlo_group_id(struct device *dev);
 void cnss_set_recovery_mode(struct device *dev, u8 recovery_mode);
+void cnss_set_standby_mode(struct device *dev, u8 standby_mode);
+#if !defined(CONFIG_CNSS2_KERNEL_5_15)
+void cnss_set_pci_link_speed_width(struct device *dev, u16 link_speed,
+					u16 link_width);
+#endif
 #endif
 #endif /* _NET_CNSS2_H */

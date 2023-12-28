@@ -1,5 +1,5 @@
 /* Copyright (c) 2016-2018, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -80,6 +80,8 @@
 #define CNSS_ETR_SG_LST_ENT(phys_pte)	(((phys_pte >> PAGE_SHIFT) << 4) | 0x1)
 #define CNSS_ETR_SG_ENT_TO_BLK(phys_pte) (((phys_addr_t)phys_pte >> 4)   \
 					 << PAGE_SHIFT)
+#define MHI_SOC_RESET_DELAY	200  /* in msecs */
+
 enum cnss_mhi_state {
 	CNSS_MHI_INIT,
 	CNSS_MHI_DEINIT,
@@ -91,6 +93,7 @@ enum cnss_mhi_state {
 	CNSS_MHI_TRIGGER_RDDM,
 	CNSS_MHI_RDDM,
 	CNSS_MHI_RDDM_DONE,
+	CNSS_MHI_SOC_RESET,
 };
 
 enum pci_link_status {
