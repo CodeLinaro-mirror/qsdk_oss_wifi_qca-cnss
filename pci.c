@@ -3797,9 +3797,8 @@ void cnss_do_mlo_global_memset(struct cnss_plat_data *plat_priv, u64 mem_size)
 
 }
 
-#ifndef CONFIG_CNSS2_KERNEL_5_15
+#ifndef CONFIG_TARGET_SDX75
 static int cnss_mlo_mem_get(struct cnss_plat_data *plat_priv, int group_id,
-<<<<<<< HEAD
 			    phys_addr_t paddr, int idx)
 {
 	struct cnss_fw_mem *fw_mem = plat_priv->fw_mem;
@@ -3807,13 +3806,6 @@ static int cnss_mlo_mem_get(struct cnss_plat_data *plat_priv, int group_id,
 	mlo_global_mem_phys[group_id] = paddr;
 	mlo_global_mem[group_id] = ioremap(mlo_global_mem_phys[group_id],
 					   fw_mem[idx].size);
-=======
-			    phys_addr_t paddr, int idx, u32 mem_size)
-{
-	mlo_global_mem_phys[group_id] = paddr;
-	mlo_global_mem[group_id] = ioremap(mlo_global_mem_phys[group_id],
-					   mem_size);
->>>>>>> win_wlan_host.1.0.r19.2-231228
 
 	if (!mlo_global_mem[group_id])
 		cnss_pr_err("WARNING: Host DDR remap failed\n");
@@ -3832,11 +3824,7 @@ static int get_mlo_pa(struct cnss_plat_data *plat_priv, int group_id, int idx,
 
 #else
 static int cnss_mlo_mem_get(struct cnss_plat_data *plat_priv, int group_id,
-<<<<<<< HEAD
 			    phys_addr_t paddr, int idx)
-=======
-			    phys_addr_t paddr, int idx, u32 mem_size)
->>>>>>> win_wlan_host.1.0.r19.2-231228
 {
 	struct cnss_fw_mem *fw_mem = plat_priv->fw_mem;
 	int ret;
@@ -3908,7 +3896,9 @@ static int cnss_mlo_mem_alloc(struct cnss_plat_data *plat_priv, int index)
 	struct reserved_mem *mlo_mem = NULL;
 	unsigned int mlo_global_mem_size;
 	int i = index;
+#ifdef CONFIG_TARGET_SDX75
 	static unsigned int mlo_iova_base[CNSS_MAX_MLO_GROUPS];
+#endif
 	struct device *dev;
 
 	dev = &plat_priv->plat_dev->dev;
@@ -3933,11 +3923,13 @@ static int cnss_mlo_mem_alloc(struct cnss_plat_data *plat_priv, int index)
 			return -ENOMEM;
 		}
 
+#ifdef CONFIG_TARGET_SDX75
 		ret = of_property_read_u32(mlo_global_mem_node, "iova_base",
 					   &mlo_iova_base[group_id]);
 		if (ret)
 			cnss_pr_err("Error(%d): Unable to get MLO iova base\n",
 				    ret);
+#endif
 
 		of_node_put(mlo_global_mem_node);
 		mlo_global_mem_size = mlo_mem->size;
@@ -3954,12 +3946,7 @@ static int cnss_mlo_mem_alloc(struct cnss_plat_data *plat_priv, int index)
 					(unsigned int)fw_mem[i].size);
 		}
 
-<<<<<<< HEAD
 		ret = cnss_mlo_mem_get(plat_priv, group_id, mlo_mem->base, i);
-=======
-		ret = cnss_mlo_mem_get(plat_priv, group_id, mlo_mem->base, i,
-				       mlo_global_mem_size);
->>>>>>> win_wlan_host.1.0.r19.2-231228
 		if (ret != 0) {
 			cnss_pr_err("Error(%d): cnss_mlo_mem_get failed.\n",
 				    ret);
@@ -3970,7 +3957,11 @@ static int cnss_mlo_mem_alloc(struct cnss_plat_data *plat_priv, int index)
 	} else
 		fw_mem[i].va = mlo_global_mem[group_id];
 
+#ifdef CONFIG_TARGET_SDX75
 	ret = get_mlo_pa(plat_priv, group_id, i, mlo_iova_base[group_id]);
+#else
+	ret = get_mlo_pa(plat_priv, group_id, i);
+#endif
 	if (ret != 0) {
 		cnss_pr_err("Error: get_mlo_pa failed.");
 		CNSS_ASSERT(0);
@@ -3983,12 +3974,8 @@ static int cnss_mlo_mem_alloc(struct cnss_plat_data *plat_priv, int index)
 		else
 			chip_id = cnss_get_mlo_chip_id(dev);
 
-<<<<<<< HEAD
-		if (chip_id == MLO_GROUP_MASTER_CHIP)
-=======
 		if (chip_id == MLO_GROUP_MASTER_CHIP &&
 			!plat_priv->standby_mode)
->>>>>>> win_wlan_host.1.0.r19.2-231228
 			cnss_do_mlo_global_memset(plat_priv, fw_mem[i].size);
 	}
 
