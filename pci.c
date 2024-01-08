@@ -4835,9 +4835,6 @@ int cnss_pci_force_fw_assert_hdlr(struct cnss_pci_data *pci_priv)
 	if (!plat_priv)
 		return -ENODEV;
 
-	cnss_fatal_err("Triggering CNSS_ASSERT\n");
-	CNSS_ASSERT(0);
-
 	cnss_auto_resume(&pci_priv->pci_dev->dev);
 	cnss_pci_dump_shadow_reg(pci_priv);
 
@@ -4877,9 +4874,16 @@ static int cnss_pci_smmu_fault_handler(struct iommu_domain *domain,
 				       int flags, void *handler_token)
 {
 	struct cnss_pci_data *pci_priv = handler_token;
-	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
+	struct cnss_plat_data *plat_priv;
+
+	if (!pci_priv)
+		return -ENODEV;
+
+	plat_priv = pci_priv->plat_priv;
 
 	cnss_pr_err("SMMU fault happened with IOVA 0x%lx\n", iova);
+
+	cnss_force_fw_assert(&pci_priv->pci_dev->dev);
 
 	/* IOMMU driver requires non-zero return value to print debug info. */
 	return -EINVAL;
