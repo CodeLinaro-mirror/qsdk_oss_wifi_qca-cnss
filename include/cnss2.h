@@ -502,11 +502,18 @@ static inline int cnss_set_mlo_config(struct cnss_module_param *modparam,
 {
 	return 0;
 }
+static
+inline int cnss_set_mlo_group_config(struct cnss_mlo_group_info *src_mlo_config,
+				     uint8_t group_id)
+{
+	return 0;
+}
 static inline void cnss_set_default_mlo_config(void)
 {
 }
-static inline void cnss_reset_mlo_config(void)
+static inline int cnss_reset_mlo_config(uint32_t group_id)
 {
+	return 0;
 }
 static inline void cnss_print_mlo_config(void)
 {
@@ -653,8 +660,10 @@ int cnss_bus_reg_write(struct device *dev, u32 addr, u32 val,
 int cnss_set_bar_addr(struct device *dev, void __iomem *mem);
 int cnss_set_mlo_config(struct cnss_module_param *modparam,
 			struct cnss_mlo_group_info *group_info);
+int cnss_set_mlo_group_config(struct cnss_mlo_group_info *src_mlo_config,
+			      uint8_t group_id);
 void cnss_set_default_mlo_config(void);
-void cnss_reset_mlo_config(void);
+int cnss_reset_mlo_config(uint32_t group_id);
 void cnss_print_mlo_config(void);
 void cnss_set_led_gpio(int led_gpio, unsigned int value, unsigned int flags);
 bool cnss_get_enable_intx(struct device *dev);
