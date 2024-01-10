@@ -4248,7 +4248,7 @@ void cnss_pci_global_reset(struct cnss_pci_data *pci_priv)
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 	int resetcount = 0, tx_count = 0;
 	u32 errdbg1 = 0;
-#if defined(CONFIG_CNSS2_QCOM_KERNEL_DEPENDENCY) && (KERNEL_VERSION(6, 1, 0) > LINUX_VERSION_CODE)
+#if defined(CONFIG_CNSS2_QCOM_KERNEL_DEPENDENCY) && IS_ENABLED(CONFIG_PCIE_QCOM)
 	u32 pcie_cfg_pcie_status = 0;
 	int ret = 0;
 #endif
@@ -4275,7 +4275,7 @@ void cnss_pci_global_reset(struct cnss_pci_data *pci_priv)
 	if (tx_count > 25)
 		cnss_pr_warn("Dump time exceeds %d mseconds\n", tx_count * 20);
 
-#if defined(CONFIG_CNSS2_QCOM_KERNEL_DEPENDENCY) && (KERNEL_VERSION(6, 1, 0) > LINUX_VERSION_CODE)
+#if defined(CONFIG_CNSS2_QCOM_KERNEL_DEPENDENCY) && IS_ENABLED(CONFIG_PCIE_QCOM)
 	ret = pcie_parf_read(pci_priv->pci_dev, PCIE_CFG_PCIE_STATUS,
 			     &pcie_cfg_pcie_status);
 	if (ret)
@@ -4307,7 +4307,7 @@ void cnss_pci_global_reset(struct cnss_pci_data *pci_priv)
 {
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 	u32 val, delay, iRet = 0;
-#if defined(CONFIG_CNSS2_QCOM_KERNEL_DEPENDENCY) && (KERNEL_VERSION(6, 1, 0) > LINUX_VERSION_CODE)
+#if defined(CONFIG_CNSS2_QCOM_KERNEL_DEPENDENCY) && IS_ENABLED(CONFIG_PCIE_QCOM)
 	u32 pcie_cfg_pcie_status = 0;
 	int ret = 0;
 
@@ -4352,7 +4352,8 @@ void cnss_pci_global_reset(struct cnss_pci_data *pci_priv)
 }
 #endif
 
-#if defined(ONFIG_CNSS2_KERNEL_MSM) || (KERNEL_VERSION(5, 7, 0) <= LINUX_VERSION_CODE)
+#if defined(CONFIG_CNSS2_KERNEL_MSM) || \
+	(KERNEL_VERSION(5, 7, 0) <= LINUX_VERSION_CODE)
 static void cnss_reset_mhi_state(struct cnss_pci_data *pci_priv)
 {
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
@@ -4377,7 +4378,8 @@ static void cnss_pci_disable_bus(struct cnss_pci_data *pci_priv)
 	/* On SOC_GLOBAL_RESET, target waits in PBL for host to set the
 	 * MHI_RESET bit to 1.
 	 */
-#if defined(ONFIG_CNSS2_KERNEL_MSM) || (KERNEL_VERSION(5, 7, 0) <= LINUX_VERSION_CODE)
+#if defined(CONFIG_CNSS2_KERNEL_MSM) || \
+	(KERNEL_VERSION(5, 7, 0) <= LINUX_VERSION_CODE)
 	cnss_reset_mhi_state(pci_priv);
 #else
 	mhi_set_mhi_state(pci_priv->mhi_ctrl, MHI_STATE_RESET);
@@ -5306,14 +5308,22 @@ int cnss_pci_of_reserved_mem_device_init(struct cnss_plat_data *plat_priv)
 }
 #endif
 
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0))
+#ifdef CONFIG_CNSS2_KERNEL_5_15
+void cnss_set_pci_link_speed_width(struct device *dev, u16 link_speed,
+					u16 link_width)
+{
+}
+EXPORT_SYMBOL(cnss_set_pci_link_speed_width);
+#else
 void cnss_set_pci_link_speed_width(struct device *dev, u16 link_speed,
 					u16 link_width)
 {
 	struct cnss_plat_data *plat_priv;
 	struct pci_dev *root_port, *pci_dev;
 	struct cnss_pci_data *pci_priv;
+#if defined(CONFIG_CNSS2_QCOM_KERNEL_DEPENDENCY) && IS_ENABLED(CONFIG_PCIE_QCOM)
 	int ret = 0;
+#endif
 
 	plat_priv = cnss_bus_dev_to_plat_priv(dev);
 	if (!plat_priv) {
@@ -5333,15 +5343,23 @@ void cnss_set_pci_link_speed_width(struct device *dev, u16 link_speed,
 		return;
 	}
 
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0))
 	root_port = pci_find_pcie_root_port(pci_priv->pci_dev);
 	if (!root_port) {
 		cnss_pr_info("The root port is NULL\n");
 		return;
 	}
+#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
+	root_port = pcie_find_root_port(pci_priv->pci_dev);
+	if (!root_port) {
+		cnss_pr_info("The root port is NULL\n");
+		return;
+	}
+#endif
 
+#if defined(CONFIG_CNSS2_QCOM_KERNEL_DEPENDENCY) && IS_ENABLED(CONFIG_PCIE_QCOM)
 	cnss_pr_dbg("Selected link speed is %d, link_width is %d\n",
 			link_speed, link_width);
-
 	ret = pcie_set_link_speed(root_port, link_speed);
 	if (ret)
 		cnss_pr_err("%s Failed to set link speed %d\n", __func__, ret);
@@ -5355,12 +5373,7 @@ void cnss_set_pci_link_speed_width(struct device *dev, u16 link_speed,
 	else
 		cnss_pr_info("%s The PCI link width is %d\n", __func__,
 				link_width);
-}
-EXPORT_SYMBOL(cnss_set_pci_link_speed_width);
-#else
-void cnss_set_pci_link_speed_width(struct device *dev, u16 link_speed,
-					u16 link_width)
-{
+#endif
 }
 EXPORT_SYMBOL(cnss_set_pci_link_speed_width);
 #endif

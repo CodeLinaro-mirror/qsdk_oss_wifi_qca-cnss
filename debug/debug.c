@@ -485,8 +485,7 @@ static int cnss_debug_read_misc_data(struct cnss_pci_data *pci_priv,
 		return -EINVAL;
 	}
 	if (plat_priv->device_id == QCN9224_DEVICE_ID) {
-#if defined(CONFIG_CNSS2_QCOM_KERNEL_DEPENDENCY) && \
-		(KERNEL_VERSION(6, 1, 0) > LINUX_VERSION_CODE)
+#if defined(CONFIG_CNSS2_QCOM_KERNEL_DEPENDENCY) && IS_ENABLED(CONFIG_PCIE_QCOM)
 		pcie_parf_read(pci_priv->pci_dev, PCIE_CFG_PCIE_STATUS,
 			       &pbl_sbl_err->pcie_cfg_pcie_status);
 #endif
@@ -635,8 +634,7 @@ static void cnss_debug_print_bl_data(struct cnss_pci_data *pci_priv,
 {
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 
-#if defined(CONFIG_CNSS2_QCOM_KERNEL_DEPENDENCY) && \
-		(KERNEL_VERSION(6, 1, 0) > LINUX_VERSION_CODE)
+#if defined(CONFIG_CNSS2_QCOM_KERNEL_DEPENDENCY) && IS_ENABLED(CONFIG_PCIE_QCOM)
 	if (plat_priv->device_id == QCN9224_DEVICE_ID)
 		cnss_pr_err("%s: PCIE_CFG_PCIE_STATUS: 0x%08x\n",
 			    __func__, pbl_sbl_err->pcie_cfg_pcie_status);
@@ -1788,7 +1786,8 @@ static const struct file_operations cnss_hds_support_fops = {
 };
 #endif
 
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0))
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0) || \
+		LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
 static ssize_t cnss_pci_write_switch_link(struct file *fp,
 					   const char __user *user_buf,
 					   size_t count, loff_t *off)
@@ -1877,7 +1876,8 @@ int cnss_create_debug_only_node(struct cnss_plat_data *plat_priv)
 #endif
 	debugfs_create_file("ce_info", 0600, root_dentry, plat_priv,
 			    &cnss_ce_reg_debug_fops);
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0))
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0) || \
+		LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
 	debugfs_create_file("pci_switch_link", 0600, root_dentry, plat_priv,
 			    &cnss_pci_switch_link_fops);
 #endif

@@ -3444,8 +3444,7 @@ static int cnss_qca8074_notifier_nb(struct notifier_block *nb,
 					(struct pci_dev *)plat_priv->plat_dev);
 	} else if (event_code == CNSS_RAMDUMP_NOTIFICATION) {
 #ifdef CONFIG_CNSS2_KERNEL_IPQ
-/* Need to enable this in Linux6.1, once kernel side integration is done. */
-#if (KERNEL_VERSION(6, 1, 0) > LINUX_VERSION_CODE)
+#if IS_ENABLED(CONFIG_CORESIGHT)
 		coresight_abort();
 #endif
 #endif
