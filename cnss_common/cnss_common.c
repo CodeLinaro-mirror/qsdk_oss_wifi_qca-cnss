@@ -566,12 +566,9 @@ static int get_mlo_pa(struct cnss_plat_data *plat_priv, int group_id, int idx)
 int cnss_mlo_mem_alloc(struct cnss_plat_data *plat_priv, int index)
 {
 	struct cnss_fw_mem *fw_mem = plat_priv->fw_mem;
-	int ret, group_id, chip_id;
+	int ret, group_id;
 	char mlo_node_name[20];
 	struct device_node *mlo_global_mem_node = NULL;
-#if defined CNSS_PCI_SUPPORT
-	struct cnss_pci_data *pci_priv = plat_priv->bus_priv;
-#endif
 	struct reserved_mem *mlo_mem = NULL;
 	unsigned int mlo_global_mem_size;
 	int i = index;
@@ -632,19 +629,8 @@ int cnss_mlo_mem_alloc(struct cnss_plat_data *plat_priv, int index)
 		CNSS_ASSERT(0);
 	}
 
-	if (mlo_global_mem[group_id] != NULL) {
-#if defined CNSS_PCI_SUPPORT
-		if (plat_priv->bus_type == CNSS_BUS_PCI)
-			chip_id =
-			    cnss_get_mlo_chip_id(&pci_priv->pci_dev->dev);
-		else
-#endif
-			chip_id = cnss_get_mlo_chip_id(dev);
-
-		if (chip_id == MLO_GROUP_MASTER_CHIP &&
-			!plat_priv->standby_mode)
-			cnss_do_mlo_global_memset(plat_priv, fw_mem[i].size);
-	}
+	if (mlo_global_mem[group_id])
+		cnss_do_mlo_global_memset(plat_priv, fw_mem[i].size);
 
 	if (!fw_mem[i].va) {
 		cnss_pr_err("Failed to allocate memory for FW, size: 0x%zx, type: %u\n",
@@ -656,23 +642,40 @@ int cnss_mlo_mem_alloc(struct cnss_plat_data *plat_priv, int index)
 	return 0;
 }
 
+static bool cnss_get_mlo_group_master_chip(struct cnss_plat_data *plat_priv)
+{
+	struct cnss_mlo_group_info *mlo_group_info;
+
+	if (!plat_priv || !plat_priv->mlo_support)
+		return false;
+
+	if (!plat_priv->mlo_capable || !plat_priv->mlo_chip_info ||
+	    !plat_priv->mlo_group_info)
+		return false;
+
+	mlo_group_info = plat_priv->mlo_group_info;
+
+	return plat_priv->mlo_chip_info->chip_id ==
+		mlo_group_info->chip_info[MLO_GROUP_MASTER_CHIP].chip_id;
+}
+
 void cnss_do_mlo_global_memset(struct cnss_plat_data *plat_priv, u64 mem_size)
 {
-	switch (plat_priv->recovery_mode) {
-	case MODE_1_RECOVERY_MODE:
-		break;
-	case MODE_0_RECOVERY_MODE:
-	default:
-		if (!test_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state)) {
-			cnss_pr_info("Resetting the MLO Global mem, memory size is %lld\n",
-				      mem_size);
-			memset_io(mlo_global_mem[
-					   plat_priv->mlo_group_info->group_id],
-					   0, mem_size);
-		}
-	}
+	if ((plat_priv->recovery_mode == MODE_1_RECOVERY_MODE) ||
+	    (plat_priv->standby_mode) ||
+	    (test_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state)))
+		return;
 
+	if (!cnss_get_mlo_group_master_chip(plat_priv))
+		return;
+
+	cnss_pr_info("Resetting the MLO Global mem, memory size is %lld\n",
+		     mem_size);
+	/* Reset the Shared memory only for the first invocation */
+	memset_io(mlo_global_mem[plat_priv->mlo_group_info->group_id], 0,
+		  mem_size);
 }
+
 
 #if defined(CONFIG_CNSS2_KERNEL_IPQ) && \
 	(LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
