@@ -4858,6 +4858,19 @@ static void cnss_mhi_notify_status(struct mhi_controller *mhi_ctrl,
 			return;
 		}
 
+		/* Target Assert happens in down path and call BUG_ON instead
+		 * of CNSS_ASSERT. This immediate BUG_ON will help to stop
+		 * concurrent execution of dirver shutdown flow in another
+		 * context. QMI history is not required in down path.
+		 */
+		if (test_bit(CNSS_DRIVER_UNLOADING, &plat_priv->driver_state) ||
+		    test_bit(CNSS_DRIVER_IDLE_SHUTDOWN,
+			     &plat_priv->driver_state)) {
+			cnss_pr_err("Driver unload or shutdown is in progress, called Host Assert\n");
+			BUG_ON(1);
+			return;
+		}
+
 		/* In-case of Target Assert */
 		cnss_pci_set_mhi_state_bit(pci_priv, CNSS_MHI_RDDM);
 	}
