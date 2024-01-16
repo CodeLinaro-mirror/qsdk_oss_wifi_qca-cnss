@@ -768,9 +768,21 @@ static void cnss_hif_notifier(struct cnss_plat_data *plat_priv,
 static int cnss_hif_power_up(struct cnss_plat_data *plat_priv)
 {
 	int ret = 0;
+	static atomic_t pip = ATOMIC_INIT(1);
 
 	if (!plat_priv)
 		return -ENODEV;
+
+	if (plat_priv->powered_on) {
+		cnss_pr_info("Already powered on, ignored\n");
+		return 0;
+	}
+
+	if (!atomic_dec_and_test(&pip)) {
+		cnss_pr_info("Powerup in progress, ignored\n");
+		atomic_set(&pip, 0);
+		return 0;
+	}
 
 	cnss_hif_notifier(plat_priv, CNSS_BEFORE_POWERUP);
 	plat_priv->target_asserted = 0;
@@ -781,6 +793,7 @@ static int cnss_hif_power_up(struct cnss_plat_data *plat_priv)
 			plat_priv);
 	if (ret) {
 		pr_err("ERROR : %s:%d ret %d\n", __func__, __LINE__, ret);
+		atomic_set(&pip, 1);
 		return -ENODEV;
 	}
 
@@ -792,23 +805,34 @@ static int cnss_hif_power_up(struct cnss_plat_data *plat_priv)
 	}
 	cnss_hif_notifier(plat_priv, CNSS_AFTER_POWERUP);
 
+	plat_priv->powered_on = 1;
+	atomic_set(&pip, 1);
+
 	return ret;
 }
-
 
 static int cnss_hif_shutdown(struct cnss_plat_data *plat_priv)
 {
 	int ret = 0;
+	static atomic_t sip = ATOMIC_INIT(1);
 
 	if (!plat_priv)
 		return -ENODEV;
 
-	if (test_bit(CNSS_DRIVER_UNLOADING, &plat_priv->driver_state))
+	if (!atomic_dec_and_test(&sip)) {
+		cnss_pr_info("Shutdown in progress, ignored\n");
+		atomic_set(&sip, 0);
 		return 0;
-
-	set_bit(CNSS_DRIVER_UNLOADING, &plat_priv->driver_state);
+	}
 
 	cnss_hif_notifier(plat_priv, CNSS_BEFORE_SHUTDOWN);
+
+	if (!plat_priv->powered_on) {
+		cnss_pr_info("Shutdown is ignored, powered_on:%d\n",
+			     plat_priv->powered_on);
+		atomic_set(&sip, 1);
+		return 0;
+	}
 
 	ret = cnss_bus_dev_shutdown(plat_priv);
 	if (ret != 0) {
@@ -817,6 +841,9 @@ static int cnss_hif_shutdown(struct cnss_plat_data *plat_priv)
 		CNSS_ASSERT(0);
 	}
 	cnss_hif_notifier(plat_priv, CNSS_AFTER_SHUTDOWN);
+
+	plat_priv->powered_on = 0;
+	atomic_set(&sip, 1);
 
 	return 0;
 }
@@ -850,6 +877,8 @@ void __cnss_hif_put(struct cnss_plat_data *plat_priv)
 {
 	if (!plat_priv)
 		return;
+
+	set_bit(CNSS_DRIVER_UNLOADING, &plat_priv->driver_state);
 
 	cnss_hif_shutdown(plat_priv);
 	plat_priv->driver_state = 0;
@@ -3052,9 +3081,8 @@ void cnss_wlan_unregister_driver(struct cnss_wlan_driver *driver_ops)
 
 		if ((plat_priv->bus_type == CNSS_BUS_PCI) && ops &&
 		    (strcmp(driver_ops->name, "pld_pcie") == 0)) {
+			set_bit(CNSS_DRIVER_UNLOADING, &plat_priv->driver_state);
 #ifndef CONFIG_CNSS2_KERNEL_5_15
-			set_bit(CNSS_DRIVER_UNLOADING,
-				&plat_priv->driver_state);
 			subsys_info = &plat_priv->subsys_info;
 			if (subsys_info->subsys_handle &&
 			    !subsys_info->subsystem_put_in_progress) {
@@ -3073,8 +3101,7 @@ void cnss_wlan_unregister_driver(struct cnss_wlan_driver *driver_ops)
 			cnss_unregister_subsys(plat_priv);
 			cnss_unregister_notifier_cb(plat_priv);
 #else
-			if (plat_priv->driver_state)
-				cnss_hif_shutdown(plat_priv);
+			cnss_hif_shutdown(plat_priv);
 #endif
 			plat_priv->driver_ops = NULL;
 			plat_priv->driver_status = CNSS_UNINITIALIZED;
@@ -4909,7 +4936,7 @@ void cnss_unregister_subsys(struct cnss_plat_data *plat_priv)
 int cnss_register_ramdump(struct cnss_plat_data *plat_priv)
 {
 	struct cnss_ramdump_info_v2 *info_v2 = &plat_priv->ramdump_info_v2;
-	struct cnss_dump_data *dump_data = dump_data = &info_v2->dump_data;
+	struct cnss_dump_data *dump_data = &info_v2->dump_data;
 	struct device *dev = &plat_priv->plat_dev->dev;
 	int gfp = GFP_KERNEL;
 	u32 ramdump_size = 0;
@@ -4927,7 +4954,8 @@ int cnss_register_ramdump(struct cnss_plat_data *plat_priv)
 	  * before allocating again
 	  */
 	info_v2->ramdump_dev = NULL;
-	kfree(info_v2->dump_data_vaddr);
+	if (info_v2->dump_data_vaddr)
+		kfree(info_v2->dump_data_vaddr);
 	info_v2->dump_data_vaddr = NULL;
 	info_v2->dump_data_valid = false;
 
@@ -5483,7 +5511,10 @@ static void cnss_report_crash_work(struct work_struct *work)
 	cnss_hif_shutdown(plat_priv);
 	cnss_hif_notifier(plat_priv, CNSS_RAMDUMP_NOTIFICATION);
 	cnss_bus_dev_ramdump(plat_priv);
-	cnss_hif_power_up(plat_priv);
+
+	/* Shutdown was skipped if recovery is disabled. */
+	if (plat_priv->recovery_enabled)
+		cnss_hif_power_up(plat_priv);
 }
 #endif
 
