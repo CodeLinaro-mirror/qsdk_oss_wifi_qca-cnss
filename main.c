@@ -170,6 +170,10 @@ static int enable_intx_bmap;
 module_param(enable_intx_bmap, int, 0644);
 MODULE_PARM_DESC(enable_intx_bmap, "enable_intx_bmap");
 
+static unsigned int mlo_max_peer;
+module_param(mlo_max_peer, uint, 0600);
+MODULE_PARM_DESC(mlo_max_peer, "MLO max peer");
+
 #define FW_READY_DELAY	100  /* in msecs */
 
 /* In platforms with low power CPU like IPQ5018 or SDX65, if CPU load
@@ -1860,7 +1864,11 @@ void cnss_set_default_mlo_config(void)
 			return;
 		}
 		mlo_group_info[group_id].group_id = group_id;
-		mlo_group_info[group_id].max_num_peers = 256;
+		if (mlo_max_peer == 0)
+			mlo_group_info[group_id].max_num_peers = 256;
+		else
+			mlo_group_info[group_id].max_num_peers = mlo_max_peer;
+
 		if (mlo_chip_bitmask & (1 << i)) {
 			/*Temporarily Hard coding group id as 0 */
 			num_chip = grp_chip_id[group_id];
@@ -5591,7 +5599,6 @@ static int cnss_misc_init(struct cnss_plat_data *plat_priv)
 	init_completion(&plat_priv->cal_complete);
 	init_completion(&plat_priv->rddm_complete);
 	init_completion(&plat_priv->recovery_complete);
-	init_completion(&plat_priv->soc_reset_request_complete);
 	mutex_init(&plat_priv->dev_lock);
 
 	return 0;
@@ -5599,7 +5606,6 @@ static int cnss_misc_init(struct cnss_plat_data *plat_priv)
 
 static void cnss_misc_deinit(struct cnss_plat_data *plat_priv)
 {
-	complete_all(&plat_priv->soc_reset_request_complete);
 	complete_all(&plat_priv->recovery_complete);
 	complete_all(&plat_priv->rddm_complete);
 	complete_all(&plat_priv->cal_complete);

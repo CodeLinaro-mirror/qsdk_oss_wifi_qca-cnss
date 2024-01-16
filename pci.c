@@ -1336,12 +1336,8 @@ static char *cnss_mhi_state_to_str(enum cnss_mhi_state mhi_state)
 		return "RESUME";
 	case CNSS_MHI_TRIGGER_RDDM:
 		return "TRIGGER_RDDM";
-	case CNSS_MHI_RDDM:
-		return "MHI_RDDM";
 	case CNSS_MHI_RDDM_DONE:
 		return "RDDM_DONE";
-	case CNSS_MHI_SOC_RESET:
-		return "SOC_RESET";
 	default:
 		return "UNKNOWN";
 	}
@@ -1382,9 +1378,7 @@ static int cnss_pci_check_mhi_state_bit(struct cnss_pci_data *pci_priv,
 		    !test_bit(CNSS_MHI_TRIGGER_RDDM, &pci_priv->mhi_state))
 			return 0;
 		break;
-	case CNSS_MHI_RDDM:
 	case CNSS_MHI_RDDM_DONE:
-	case CNSS_MHI_SOC_RESET:
 		return 0;
 	default:
 		cnss_pr_err("Unhandled MHI state: %s(%d)\n",
@@ -1428,14 +1422,8 @@ static void cnss_pci_set_mhi_state_bit(struct cnss_pci_data *pci_priv,
 	case CNSS_MHI_TRIGGER_RDDM:
 		set_bit(CNSS_MHI_TRIGGER_RDDM, &pci_priv->mhi_state);
 		break;
-	case CNSS_MHI_RDDM:
-		set_bit(CNSS_MHI_RDDM, &pci_priv->mhi_state);
-		break;
 	case CNSS_MHI_RDDM_DONE:
 		set_bit(CNSS_MHI_RDDM_DONE, &pci_priv->mhi_state);
-		break;
-	case CNSS_MHI_SOC_RESET:
-		set_bit(CNSS_MHI_SOC_RESET, &pci_priv->mhi_state);
 		break;
 	default:
 		cnss_pr_err("Unhandled MHI state (%d)\n", mhi_state);
@@ -1508,9 +1496,6 @@ static int cnss_pci_set_mhi_state(struct cnss_pci_data *pci_priv,
 		ret = mhi_force_rddm_mode(pci_priv->mhi_ctrl);
 		break;
 	case CNSS_MHI_RDDM_DONE:
-		break;
-	case CNSS_MHI_SOC_RESET:
-		mhi_soc_reset(pci_priv->mhi_ctrl);
 		break;
 	default:
 		cnss_pr_err("Unhandled MHI state (%d)\n", mhi_state);
@@ -2225,26 +2210,6 @@ out:
 	return ret;
 }
 
-static void cnss_mhi_soc_reset(struct pci_dev *pci_dev)
-{
-	struct cnss_pci_data *pci_priv = cnss_get_pci_priv(pci_dev);
-	struct cnss_plat_data *plat_priv =
-		cnss_bus_dev_to_plat_priv(&pci_dev->dev);
-
-	if (test_bit(CNSS_MHI_RDDM, &pci_priv->mhi_state)) {
-		cnss_pr_info("MHI SOC_RESET is not required as MHI is already in RDDM state\n");
-		clear_bit(CNSS_MHI_RDDM, &pci_priv->mhi_state);
-		return;
-	}
-
-	cnss_pci_set_mhi_state(pci_priv, CNSS_MHI_SOC_RESET);
-	if (!wait_for_completion_timeout(&plat_priv->soc_reset_request_complete,
-				msecs_to_jiffies(MHI_SOC_RESET_DELAY))) {
-		cnss_pr_err("%s: Failed to switch RDDM state\n", __func__);
-		reinit_completion(&plat_priv->soc_reset_request_complete);
-	}
-}
-
 static int cnss_qcn9000_shutdown(struct cnss_pci_data *pci_priv)
 {
 	int ret = 0;
@@ -2264,8 +2229,6 @@ static int cnss_qcn9000_shutdown(struct cnss_pci_data *pci_priv)
 		cnss_pr_info("Skipping shutdown to wait for dump collection\n");
 		return ret;
 	}
-
-	cnss_mhi_soc_reset(plat_priv->pci_dev);
 
 	cnss_pr_info("Shutting down %s\n", plat_priv->device_name);
 	cnss_pci_pm_runtime_resume(pci_priv);
@@ -2620,9 +2583,13 @@ int cnss_qcn9000_ramdump(struct  cnss_pci_data *pci_priv)
 			goto free_seg_list;
 		}
 
+		if (dump_seg->type != meta_info.entry[dump_seg->type].type)
+			meta_info.total_entries++;
+
 		if (meta_info.entry[dump_seg->type].entry_start == 0) {
 			meta_info.entry[dump_seg->type].type = dump_seg->type;
-			meta_info.entry[dump_seg->type].entry_start = i + 1;
+			meta_info.entry[dump_seg->type].entry_start =
+							i + CNSS_NUM_META_INFO_SEGMENTS;
 		}
 		meta_info.entry[dump_seg->type].entry_num++;
 		seg->da = dump_seg->address;
@@ -2641,7 +2608,7 @@ int cnss_qcn9000_ramdump(struct  cnss_pci_data *pci_priv)
 	meta_info.magic = CNSS_RAMDUMP_MAGIC;
 	meta_info.version = CNSS_RAMDUMP_VERSION_V2;
 	meta_info.chipset = plat_priv->device_id;
-	meta_info.total_entries = CNSS_FW_DUMP_TYPE_MAX;
+	meta_info.total_entries += 1;
 	seg->va = &meta_info;
 	seg->size = sizeof(meta_info);
 	list_add(&seg->node, &head);
@@ -3793,13 +3760,15 @@ void cnss_do_mlo_global_memset(struct cnss_plat_data *plat_priv, u64 mem_size)
 
 }
 
-#ifndef CONFIG_CNSS2_KERNEL_5_15
+#ifndef CONFIG_TARGET_SDX75
 static int cnss_mlo_mem_get(struct cnss_plat_data *plat_priv, int group_id,
-			    phys_addr_t paddr, int idx, u32 mem_size)
+			    phys_addr_t paddr, int idx)
 {
+	struct cnss_fw_mem *fw_mem = plat_priv->fw_mem;
+
 	mlo_global_mem_phys[group_id] = paddr;
 	mlo_global_mem[group_id] = ioremap(mlo_global_mem_phys[group_id],
-					   mem_size);
+					   fw_mem[idx].size);
 
 	if (!mlo_global_mem[group_id])
 		cnss_pr_err("WARNING: Host DDR remap failed\n");
@@ -3818,7 +3787,7 @@ static int get_mlo_pa(struct cnss_plat_data *plat_priv, int group_id, int idx,
 
 #else
 static int cnss_mlo_mem_get(struct cnss_plat_data *plat_priv, int group_id,
-			    phys_addr_t paddr, int idx, u32 mem_size)
+			    phys_addr_t paddr, int idx)
 {
 	struct cnss_fw_mem *fw_mem = plat_priv->fw_mem;
 	int ret;
@@ -3890,7 +3859,9 @@ static int cnss_mlo_mem_alloc(struct cnss_plat_data *plat_priv, int index)
 	struct reserved_mem *mlo_mem = NULL;
 	unsigned int mlo_global_mem_size;
 	int i = index;
+#ifdef CONFIG_TARGET_SDX75
 	static unsigned int mlo_iova_base[CNSS_MAX_MLO_GROUPS];
+#endif
 	struct device *dev;
 
 	dev = &plat_priv->plat_dev->dev;
@@ -3915,11 +3886,13 @@ static int cnss_mlo_mem_alloc(struct cnss_plat_data *plat_priv, int index)
 			return -ENOMEM;
 		}
 
+#ifdef CONFIG_TARGET_SDX75
 		ret = of_property_read_u32(mlo_global_mem_node, "iova_base",
 					   &mlo_iova_base[group_id]);
 		if (ret)
 			cnss_pr_err("Error(%d): Unable to get MLO iova base\n",
 				    ret);
+#endif
 
 		of_node_put(mlo_global_mem_node);
 		mlo_global_mem_size = mlo_mem->size;
@@ -3936,8 +3909,7 @@ static int cnss_mlo_mem_alloc(struct cnss_plat_data *plat_priv, int index)
 					(unsigned int)fw_mem[i].size);
 		}
 
-		ret = cnss_mlo_mem_get(plat_priv, group_id, mlo_mem->base, i,
-				       mlo_global_mem_size);
+		ret = cnss_mlo_mem_get(plat_priv, group_id, mlo_mem->base, i);
 		if (ret != 0) {
 			cnss_pr_err("Error(%d): cnss_mlo_mem_get failed.\n",
 				    ret);
@@ -3948,7 +3920,11 @@ static int cnss_mlo_mem_alloc(struct cnss_plat_data *plat_priv, int index)
 	} else
 		fw_mem[i].va = mlo_global_mem[group_id];
 
+#ifdef CONFIG_TARGET_SDX75
 	ret = get_mlo_pa(plat_priv, group_id, i, mlo_iova_base[group_id]);
+#else
+	ret = get_mlo_pa(plat_priv, group_id, i);
+#endif
 	if (ret != 0) {
 		cnss_pr_err("Error: get_mlo_pa failed.");
 		CNSS_ASSERT(0);
@@ -6253,7 +6229,6 @@ int cnss_dump_all_ce_reg(struct cnss_plat_data *plat_priv)
 }
 EXPORT_SYMBOL(cnss_dump_all_ce_reg);
 
-#if defined(CONFIG_CNSS2_KERNEL_MSM) || defined(CONFIG_CNSS2_KERNEL_5_15)
 #define MAX_RAMDUMP_TABLE_SIZE	6
 #define COREDUMP_DESC		"Q6-COREDUMP"
 #define Q6_SFR_DESC		"Q6-SFR"
@@ -6333,11 +6308,6 @@ void cnss_get_crash_reason(struct cnss_pci_data *pci_priv)
 		dev_err(dev, "Fatal error received from wcss software!\n%s\n",
 			    msg);
 }
-#else
-void cnss_get_crash_reason(struct cnss_pci_data *pci_priv)
-{
-}
-#endif
 
 void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 {
@@ -6351,21 +6321,21 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 	struct cnss_fw_mem *qdss_mem = plat_priv->qdss_mem;
 	int ret, i, skip_count = 0;
 
-	if (test_bit(CNSS_RDDM_DUMP_IN_PROGRESS, &plat_priv->driver_state)) {
+	if (test_bit(CNSS_RDDM_IN_PROGRESS, &plat_priv->driver_state)) {
 		cnss_pr_dbg("RAM dump is in progress for PCI%d, skip\n",
 			    plat_priv->pci_slot_id);
 		return;
 	}
-	set_bit(CNSS_RDDM_DUMP_IN_PROGRESS, &plat_priv->driver_state);
+	set_bit(CNSS_RDDM_IN_PROGRESS, &plat_priv->driver_state);
 
 	if (test_bit(CNSS_MHI_RDDM_DONE, &pci_priv->mhi_state)) {
 		cnss_pr_dbg("RAM dump is already collected, skip\n");
-		clear_bit(CNSS_RDDM_DUMP_IN_PROGRESS, &plat_priv->driver_state);
+		clear_bit(CNSS_RDDM_IN_PROGRESS, &plat_priv->driver_state);
 		return;
 	}
 
 	if (cnss_pci_check_link_status(pci_priv)) {
-		clear_bit(CNSS_RDDM_DUMP_IN_PROGRESS, &plat_priv->driver_state);
+		clear_bit(CNSS_RDDM_IN_PROGRESS, &plat_priv->driver_state);
 		return;
 	}
 
@@ -6381,13 +6351,11 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 			       ret);
 		cnss_pci_dump_qdss_reg(pci_priv);
 		cnss_dump_all_ce_reg(plat_priv);
-		clear_bit(CNSS_RDDM_DUMP_IN_PROGRESS, &plat_priv->driver_state);
+		clear_bit(CNSS_RDDM_IN_PROGRESS, &plat_priv->driver_state);
 		return;
 	}
 
-#if defined(CONFIG_CNSS2_KERNEL_MSM) || defined(CONFIG_CNSS2_KERNEL_5_15)
 	cnss_get_crash_reason(pci_priv);
-#endif
 
 	fw_image = pci_priv->mhi_ctrl->fbc_image;
 	rddm_image = pci_priv->mhi_ctrl->rddm_image;
@@ -6556,7 +6524,7 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 		plat_priv->ramdump_info_v2.dump_data_valid = true;
 
 	cnss_pci_set_mhi_state(pci_priv, CNSS_MHI_RDDM_DONE);
-	clear_bit(CNSS_RDDM_DUMP_IN_PROGRESS, &plat_priv->driver_state);
+	clear_bit(CNSS_RDDM_IN_PROGRESS, &plat_priv->driver_state);
 	complete(&plat_priv->rddm_complete);
 }
 
@@ -6674,19 +6642,6 @@ static void cnss_mhi_notify_status(struct mhi_controller *mhi_ctrl,
 	}
 
 	plat_priv = pci_priv->plat_priv;
-
-	if (reason == MHI_CB_EE_RDDM) {
-		/* In-case of RDDM switched by MHI SoC Reset */
-		if (test_bit(CNSS_MHI_SOC_RESET, &pci_priv->mhi_state)) {
-			cnss_pr_dbg("Switched from MHI SOC_RESET to RDDM state\n");
-			complete(&plat_priv->soc_reset_request_complete);
-			clear_bit(CNSS_MHI_SOC_RESET, &pci_priv->mhi_state);
-			return;
-		}
-
-		/* In-case of Target Assert */
-		cnss_pci_set_mhi_state_bit(pci_priv, CNSS_MHI_RDDM);
-	}
 
 	if (reason != MHI_CB_IDLE)
 		cnss_pr_info("MHI status cb is called with reason %s(%d)\n",
@@ -7214,7 +7169,6 @@ int cnss_pci_probe(struct pci_dev *pci_dev,
 	cnss_set_pci_priv(pci_dev, pci_priv);
 	plat_priv->device_id = pci_dev->device;
 	plat_priv->bus_priv = pci_priv;
-	reinit_completion(&plat_priv->soc_reset_request_complete);
 
 	if (plat_priv->enable_intx) {
 		pci_priv->os_legacy_irq =
