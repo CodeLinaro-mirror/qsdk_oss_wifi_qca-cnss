@@ -820,7 +820,7 @@ int cnss_get_plat_env_index_from_plat_priv(struct cnss_plat_data *plat_priv);
 int cnss_qca9000_shutdown_part2(struct cnss_plat_data *plat_priv);
 
 #if defined(CNSS_LOWMEM_PROFILE) && defined(CONFIG_CNSS2_KERNEL_IPQ) && \
-	defined(QCA_CNSS_QCA5332)
+	defined(CNSS_FW_MOUNT_SUPPORT)
 #define MOUNT_PATH			"/lib/wifi/mount/mount_fw_partition.sh"
 #define UMOUNT_PATH			"/lib/wifi/mount/umount_fw_partition.sh"
 

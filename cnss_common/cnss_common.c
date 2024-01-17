@@ -299,6 +299,7 @@ enum cnss_dev_bus_type cnss_get_bus_type(unsigned long device_id)
 	case QCA9574_DEVICE_ID:
 	case QCA5332_DEVICE_ID:
 	case QCN6432_DEVICE_ID:
+	case QCA5424_DEVICE_ID:
 		return CNSS_BUS_AHB;
 	default:
 		pr_err("Unknown device_id: 0x%lx\n", device_id);
@@ -891,6 +892,7 @@ void cnss_free_soc_info(struct cnss_plat_data *plat_priv)
 	case QCA5018_DEVICE_ID:
 	case QCA5332_DEVICE_ID:
 	case QCA9574_DEVICE_ID:
+	case QCA5424_DEVICE_ID:
 		/* PCI BAR not applicable for other AHB targets */
 		break;
 	default:

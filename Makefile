@@ -45,8 +45,8 @@ ifeq ($(QCA_CNSS_LOWMEM_PROFILE),y)
 ccflags-y += -DCNSS_LOWMEM_PROFILE
 endif
 
-ifeq ($(ENABLE_QCA5332_HEADER),y)
-ccflags-y += -DQCA_CNSS_QCA5332
+ifeq ($(ENABLE_FW_MOUNT_SUPPORT),y)
+ccflags-y += -DCNSS_FW_MOUNT_SUPPORT
 endif
 
 ccflags-y += -DCONFIG_CNSS_QCN9000

@@ -63,6 +63,13 @@ static struct cnss_ce_base_addr ce_base_addr_qca5332 = {
 	.max_ce_count = DEFAULT_CE_COUNT,
 };
 
+static struct cnss_ce_base_addr ce_base_addr_qca5424 = {
+	.src_base = QCA5424_CE_SRC_RING_REG_BASE,
+	.dst_base = QCA5424_CE_DST_RING_REG_BASE,
+	.common_base = QCA5424_CE_COMMON_REG_BASE,
+	.max_ce_count = DEFAULT_CE_COUNT,
+};
+
 static struct cnss_ce_base_addr ce_base_addr_qcn6122 = {
 	.src_base = QCN6122_CE_SRC_RING_REG_BASE,
 	.dst_base = QCN6122_CE_DST_RING_REG_BASE,
@@ -206,6 +213,9 @@ struct cnss_ce_base_addr *register_ce_object(struct cnss_plat_data *plat_priv)
 	case QCN6432_DEVICE_ID:
 		ce_object = &ce_base_addr_qcn6432;
 		break;
+	case QCA5424_DEVICE_ID:
+		ce_object = &ce_base_addr_qca5424;
+		break;
 	default:
 		cnss_pr_err("Unsupported device id 0x%lx\n",
 			    plat_priv->device_id);
@@ -233,6 +243,11 @@ static void cnss_get_ce_base(struct cnss_plat_data *plat_priv,
 		*dst_base -= QCA5332_CE_SRC_RING_REG_BASE;
 		*common_base -= QCA5332_CE_SRC_RING_REG_BASE;
 		break;
+	case QCA5424_DEVICE_ID:
+		*src_base -= QCA5424_CE_SRC_RING_REG_BASE;
+		*dst_base -= QCA5424_CE_SRC_RING_REG_BASE;
+		*common_base -= QCA5424_CE_SRC_RING_REG_BASE;
+		break;
 	default:
 		break;
 	}
@@ -247,6 +262,9 @@ static void cnss_get_ce_bar_from_ce_base(struct cnss_plat_data *plat_priv,
 		break;
 	case QCA5332_DEVICE_ID:
 		*reg_offset += QCA5332_CE_SRC_RING_REG_BASE;
+		break;
+	case QCA5424_DEVICE_ID:
+		*reg_offset += QCA5424_CE_SRC_RING_REG_BASE;
 		break;
 	default:
 		break;

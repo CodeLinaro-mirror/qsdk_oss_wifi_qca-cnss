@@ -441,7 +441,7 @@ void cnss_set_standby_mode(struct device *dev, u8 standby_mode)
 }
 EXPORT_SYMBOL(cnss_set_standby_mode);
 
-#if defined(CNSS_LOWMEM_PROFILE) && defined(QCA_CNSS_QCA5332) && \
+#if defined(CNSS_LOWMEM_PROFILE) && defined(CNSS_FW_MOUNT_SUPPORT) && \
 	defined(CONFIG_CNSS2_KERNEL_IPQ)
 /*
  * For FW_UMOUNT feature umount_firmware_delay is used as delay to trigger
@@ -597,6 +597,8 @@ const char *cnss_get_fw_path(struct cnss_plat_data *plat_priv)
 		return "qcn9224/";
 	case QCN6432_DEVICE_ID:
 		return "qcn6432/";
+	case QCA5424_DEVICE_ID:
+		return "IPQ5424/";
 	default:
 		cnss_pr_err("No such device id 0x%lx\n", plat_priv->device_id);
 	}
@@ -1218,6 +1220,7 @@ bool cnss_check_li_target(struct cnss_plat_data *plat_priv)
 	case QCN9160_DEVICE_ID:
 	case QCN9224_DEVICE_ID:
 	case QCN6432_DEVICE_ID:
+	case QCA5424_DEVICE_ID:
 		return true;
 	}
 
@@ -1234,6 +1237,7 @@ bool cnss_check_be_target(struct cnss_plat_data *plat_priv)
 	case QCN9224_DEVICE_ID:
 	case QCA5332_DEVICE_ID:
 	case QCN6432_DEVICE_ID:
+	case QCA5424_DEVICE_ID:
 		return true;
 	}
 
@@ -1256,6 +1260,7 @@ int cnss_check_multipd_target(struct cnss_plat_data *plat_priv)
 	case QCA9574_DEVICE_ID:
 	case QCN9160_DEVICE_ID:
 	case QCN6432_DEVICE_ID:
+	case QCA5424_DEVICE_ID:
 		return 0;
 	default:
 		break;
@@ -1283,6 +1288,7 @@ int cnss_check_device_id_valid(struct cnss_plat_data *plat_priv)
 	case QCN9160_DEVICE_ID:
 	case QCA5332_DEVICE_ID:
 	case QCN6432_DEVICE_ID:
+	case QCA5424_DEVICE_ID:
 		return 0;
 	default:
 		cnss_pr_err("Invalid device id 0x%lx\n", plat_priv->device_id);
@@ -1402,6 +1408,7 @@ void cnss_get_ramdump_device_name(struct device *dev,
 	case QCA9574_DEVICE_ID:
 	case QCN9160_DEVICE_ID:
 	case QCN6432_DEVICE_ID:
+	case QCA5424_DEVICE_ID:
 		multi_pd_arch = of_property_read_bool(dev->of_node,
 						      "qcom,multipd_arch");
 		if (multi_pd_arch) {
@@ -1435,6 +1442,7 @@ bool cnss_get_global_mlo_support(void)
 		case QCN9224_DEVICE_ID:
 		case QCA5332_DEVICE_ID:
 		case QCN6432_DEVICE_ID:
+		case QCA5424_DEVICE_ID:
 			return true;
 		}
 	}
@@ -1457,6 +1465,7 @@ static void cnss_set_global_mlo_support(bool enable)
 		case QCN9224_DEVICE_ID:
 		case QCA5332_DEVICE_ID:
 		case QCN6432_DEVICE_ID:
+		case QCA5424_DEVICE_ID:
 			plat_priv->mlo_support = enable;
 			break;
 		default:
@@ -3695,7 +3704,8 @@ static int cnss_qca8074_notifier_nb(struct notifier_block *nb,
 			 * state to get it started automatically after
 			 * SSR recovery.
 			 */
-			if (plat_priv->device_id == QCA5332_DEVICE_ID)
+			if (plat_priv->device_id == QCA5332_DEVICE_ID ||
+				plat_priv->device_id == QCA5424_DEVICE_ID)
 				clear_bit(CNSS_QDSS_STARTED,
 					  &plat_priv->driver_state);
 			cnss_bus_free_fw_mem(plat_priv);
@@ -6582,6 +6592,7 @@ static const struct platform_device_id cnss_platform_id_table[] = {
 	{ .name = "qca5332", .driver_data = QCA5332_DEVICE_ID, },
 	{ .name = "qcn9160", .driver_data = QCN9160_DEVICE_ID, },
 	{ .name = "qcn6432", .driver_data = QCN6432_DEVICE_ID, },
+	{ .name = "qca5424", .driver_data = QCA5424_DEVICE_ID, },
 };
 
 static const struct of_device_id cnss_of_match_table[] = {
@@ -6621,6 +6632,9 @@ static const struct of_device_id cnss_of_match_table[] = {
 	{
 		.compatible = "qcom,cnss-qcn6432",
 		.data = (void *)&cnss_platform_id_table[11]},
+	{
+		.compatible = "qcom,cnss-qca5424",
+		.data = (void *)&cnss_platform_id_table[12]},
 	{ },
 };
 MODULE_DEVICE_TABLE(of, cnss_of_match_table);
@@ -6674,6 +6688,7 @@ cnss_set_mod_param_feature_support(struct cnss_plat_data *plat_priv,
 	case QCA5018_DEVICE_ID:
 	case QCA5332_DEVICE_ID:
 	case QCA9574_DEVICE_ID:
+	case QCA5424_DEVICE_ID:
 		if (bmap & SKIP_INTEGRATED) {
 			cnss_pr_info("Disabling %s support for %s", fname,
 				     plat_priv->device_name);
@@ -6774,6 +6789,10 @@ static int cnss_set_device_name(struct cnss_plat_data *plat_priv)
 	case QCN6432_DEVICE_ID:
 	snprintf(plat_priv->device_name, sizeof(plat_priv->device_name),
 		"QCN6432_%d", plat_priv->userpd_id);
+		break;
+	case QCA5424_DEVICE_ID:
+		snprintf(plat_priv->device_name, sizeof(plat_priv->device_name),
+			 "QCA5424");
 		break;
 	default:
 		cnss_pr_err("No such device id 0x%lx\n", plat_priv->device_id);
@@ -6889,7 +6908,8 @@ cnss_check_skip_target_probe(const struct platform_device_id *device_id,
 		   device_id->driver_data == QCA5018_DEVICE_ID ||
 		   device_id->driver_data == QCA5332_DEVICE_ID ||
 		   device_id->driver_data == QCA9574_DEVICE_ID ||
-		   device_id->driver_data == QCN6432_DEVICE_ID)) {
+		   device_id->driver_data == QCN6432_DEVICE_ID ||
+		   device_id->driver_data == QCA5424_DEVICE_ID)) {
 		pr_err("Skipping cnss_probe for device 0x%lx\n",
 		       device_id->driver_data);
 		return true;
@@ -6906,7 +6926,8 @@ cnss_check_skip_target_probe(const struct platform_device_id *device_id,
 	    (device_id->driver_data == QCA8074V2_DEVICE_ID) ||
 	    (device_id->driver_data == QCA6018_DEVICE_ID) ||
 	    (device_id->driver_data == QCA5332_DEVICE_ID) ||
-	    (device_id->driver_data == QCA9574_DEVICE_ID))) {
+	    (device_id->driver_data == QCA9574_DEVICE_ID) ||
+	    (device_id->driver_data == QCA5424_DEVICE_ID))) {
 		pr_err("Skipping cnss_probe for device 0x%lx\n",
 		       device_id->driver_data);
 		return true;
@@ -7141,6 +7162,7 @@ static void cnss_set_board_id(struct cnss_plat_data *plat_priv)
 	case QCA6018_DEVICE_ID:
 	case QCA9574_DEVICE_ID:
 	case QCA5332_DEVICE_ID:
+	case QCA5424_DEVICE_ID:
 		board_id_str = "qcom,board_id";
 		board_info->num_bytes = 1;
 		board_info->board_id_override = (u32)bdf_integrated;
@@ -7382,6 +7404,7 @@ static int cnss_probe(struct platform_device *plat_dev)
 						node_id_base;
 		break;
 	case QCA5332_DEVICE_ID:
+	case QCA5424_DEVICE_ID:
 		plat_priv->mlo_support = !!enable_mlo_support;
 		/* Fall Through */
 	case QCA8074_DEVICE_ID:
@@ -7475,7 +7498,7 @@ static int cnss_probe(struct platform_device *plat_dev)
 	INIT_LIST_HEAD(&plat_priv->vreg_list);
 	INIT_LIST_HEAD(&plat_priv->clk_list);
 
-#if defined(CNSS_LOWMEM_PROFILE) && defined(QCA_CNSS_QCA5332) && \
+#if defined(CNSS_LOWMEM_PROFILE) && defined(CNSS_FW_MOUNT_SUPPORT) && \
 	defined(CONFIG_CNSS2_KERNEL_IPQ)
 	INIT_DELAYED_WORK(&umount_firmware_wq, cnss_schedule_umount_firmware);
 #endif

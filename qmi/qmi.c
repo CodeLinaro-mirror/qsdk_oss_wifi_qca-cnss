@@ -134,6 +134,7 @@ static struct device_name_string device_name_table[] = {
 	{ "QCN9160_2", USERPD_2+WLFW_SERVICE_INS_ID_V01_QCN9160 },
 	{ "QCN6432_0", USERPD_0+WLFW_SERVICE_INS_ID_V01_QCN6432 },
 	{ "QCN6432_1", USERPD_1+WLFW_SERVICE_INS_ID_V01_QCN6432 },
+	{ "QCA5424", QCA5424_DEVICE_ID },
 	{ "UNKNOWN", 0 },
 };
 
@@ -3668,6 +3669,7 @@ static void cnss_wlfw_qdss_trace_save_ind_cb(struct qmi_handle *qmi_wlfw,
 	case QCN9224_DEVICE_ID:
 	case QCA5332_DEVICE_ID:
 	case QCN6432_DEVICE_ID:
+	case QCA5424_DEVICE_ID:
 		break;
 	case QCA8074_DEVICE_ID:
 	case QCA8074V2_DEVICE_ID:
