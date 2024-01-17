@@ -6624,6 +6624,8 @@ static int platform_get_userpd_id(struct platform_device *plat_dev,
 		*userpd_id = USERPD_0;
 	} else if (strcmp(subsys_name, "q6v5_wcss_userpd3") == 0) {
 		*userpd_id = USERPD_1;
+	} else if (strcmp(subsys_name, "q6v5_wcss_userpd4") == 0) {
+		*userpd_id = USERPD_2;
 	} else {
 		pr_err("subsys name %s not found", subsys_name);
 		ret = -EINVAL;

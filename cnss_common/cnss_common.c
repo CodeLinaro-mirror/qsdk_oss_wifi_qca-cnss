@@ -168,8 +168,7 @@ cnss_get_msi_config(struct cnss_plat_data *plat_priv)
 			return &msi_config_qcn6122_pci1;
 
 	} else if (plat_priv->device_id == QCN9160_DEVICE_ID) {
-		if (plat_priv->userpd_id == USERPD_0)
-			return &msi_config_qcn9160_pci0;
+		return &msi_config_qcn9160_pci0;
 	} else if (plat_priv->device_id == QCN6432_DEVICE_ID) {
 		if (plat_priv->userpd_id == USERPD_0)
 			return &msi_config_qcn6432_pci0;
