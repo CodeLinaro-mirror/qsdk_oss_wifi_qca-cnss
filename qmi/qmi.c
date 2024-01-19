@@ -575,25 +575,64 @@ err:
 	return ret;
 }
 
+static void cnss_mlo_config_fill_req(
+				struct cnss_plat_data *plat_priv,
+				struct wlfw_host_mlo_chip_v2_info_s_v01 *v2,
+				int i)
+{
+	struct cnss_mlo_chip_info *mlo_chip_info;
+	struct cnss_plat_data *adj_plat_priv = NULL;
+	struct cnss_mlo_chip_info *adj_ch_info;
+	struct wlfw_host_mlo_chip_info_s_v01 *adj_ch;
+	int ch_idx = 0, local_links = 0;
+	int j, k;
+
+	mlo_chip_info = &plat_priv->mlo_group_info->chip_info[i];
+
+	v2->mlo_chip_info.chip_id = mlo_chip_info->chip_id;
+	v2->mlo_chip_info.num_local_links = mlo_chip_info->num_local_links;
+
+	for (j = 0; j < CNSS_MAX_LINKS_PER_CHIP; j++) {
+		v2->mlo_chip_info.hw_link_id[j] = mlo_chip_info->hw_link_ids[j];
+		v2->mlo_chip_info.valid_mlo_link_id[j] =
+					mlo_chip_info->valid_link_ids[j];
+	}
+	v2->adj_mlo_num_chips = mlo_chip_info->num_adj_chips;
+
+	for (j = 0; j < v2->adj_mlo_num_chips; j++) {
+		ch_idx = mlo_chip_info->adj_chip_ids[j];
+		adj_plat_priv = cnss_get_plat_priv_by_chip_id(ch_idx);
+		if (adj_plat_priv)
+			adj_ch_info = adj_plat_priv->mlo_chip_info;
+		else
+			continue;
+
+		adj_ch = &v2->adj_mlo_chip_info[j];
+		adj_ch->chip_id = adj_ch_info->chip_id;
+		adj_ch->num_local_links = adj_ch_info->num_local_links;
+
+		local_links = adj_ch->num_local_links;
+		for (k = 0; k < local_links; k++) {
+			adj_ch->hw_link_id[k] = adj_ch_info->hw_link_ids[k];
+			adj_ch->valid_mlo_link_id[k] =
+						adj_ch_info->valid_link_ids[k];
+		}
+	}
+}
+
 static int cnss_wlfw_host_cap_send_sync(struct cnss_plat_data *plat_priv)
 {
 	struct wlfw_host_cap_req_msg_v01 *req;
 	struct wlfw_host_cap_resp_msg_v01 *resp;
-	struct wlfw_host_mlo_chip_info_s_v01 *info;
 	struct wlfw_host_mlo_chip_v2_info_s_v01 *v2;
-	struct cnss_mlo_chip_info *mlo_chip_info;
-	struct wlfw_host_mlo_chip_info_s_v01 *adj_ch;
-	struct cnss_mlo_chip_info *adj_ch_info;
 	struct qmi_txn txn;
-	int ret = 0, i, j, k;
+	int ret = 0, i;
 	int resp_error_msg = 0;
 	const char *model = NULL;
 	struct device_node *root;
 	struct device *dev = &plat_priv->plat_dev->dev;
 	const struct firmware *fw;
 	char filename[FW_INI_FILE_NAME_LEN] = {0};
-	struct cnss_plat_data *adj_plat_priv = NULL;
-	int ch_idx = 0, local_links = 0;
 
 	cnss_pr_dbg("Sending host capability message, state: 0x%lx\n",
 		    plat_priv->driver_state);
@@ -705,71 +744,11 @@ static int cnss_wlfw_host_cap_send_sync(struct cnss_plat_data *plat_priv)
 		req->mlo_num_chips_valid = 1;
 		req->mlo_num_chips = plat_priv->mlo_group_info->num_chips;
 
-		if (plat_priv->mlo_default_cfg) {
-			req->mlo_chip_info_valid = 1;
-			req->mlo_chip_v2_info_valid = 0;
-			for (i = 0; i < req->mlo_num_chips; i++) {
-				info = &req->mlo_chip_info[i];
-				mlo_chip_info =
-				&plat_priv->mlo_group_info->chip_info[i];
-
-				info->chip_id = mlo_chip_info->chip_id;
-				info->num_local_links =
-					mlo_chip_info->num_local_links;
-
-				for (j = 0; j < CNSS_MAX_LINKS_PER_CHIP; j++) {
-					info->hw_link_id[j] =
-						mlo_chip_info->hw_link_ids[j];
-					info->valid_mlo_link_id[j] =
-					mlo_chip_info->valid_link_ids[j];
-				}
-			}
-		} else {
-			req->mlo_chip_info_valid = 0;
-			req->mlo_chip_v2_info_valid = 1;
-			for (i = 0; i < req->mlo_num_chips; i++) {
-				v2 = &req->mlo_chip_v2_info[i];
-				mlo_chip_info =
-				&plat_priv->mlo_group_info->chip_info[i];
-
-				v2->mlo_chip_info.chip_id =
-							mlo_chip_info->chip_id;
-				v2->mlo_chip_info.num_local_links =
-						mlo_chip_info->num_local_links;
-
-				for (j = 0; j < CNSS_MAX_LINKS_PER_CHIP; j++) {
-					v2->mlo_chip_info.hw_link_id[j] =
-						mlo_chip_info->hw_link_ids[j];
-					v2->mlo_chip_info.valid_mlo_link_id[j] =
-					mlo_chip_info->valid_link_ids[j];
-				}
-				v2->adj_mlo_num_chips =
-						mlo_chip_info->num_adj_chips;
-
-				for (j = 0; j < v2->adj_mlo_num_chips; j++) {
-					ch_idx = mlo_chip_info->adj_chip_ids[j];
-					adj_plat_priv =
-					cnss_get_plat_priv_by_chip_id(ch_idx);
-					if (adj_plat_priv)
-						adj_ch_info =
-						adj_plat_priv->mlo_chip_info;
-					else
-						continue;
-
-					adj_ch = &v2->adj_mlo_chip_info[j];
-					adj_ch->chip_id = adj_ch_info->chip_id;
-					adj_ch->num_local_links =
-						adj_ch_info->num_local_links;
-
-					local_links = adj_ch->num_local_links;
-					for (k = 0; k < local_links; k++) {
-						adj_ch->hw_link_id[k] =
-						adj_ch_info->hw_link_ids[k];
-						adj_ch->valid_mlo_link_id[k] =
-						adj_ch_info->valid_link_ids[k];
-					}
-				}
-			}
+		req->mlo_chip_info_valid = 0;
+		req->mlo_chip_v2_info_valid = 1;
+		for (i = 0; i < req->mlo_num_chips; i++) {
+			v2 = &req->mlo_chip_v2_info[i];
+			cnss_mlo_config_fill_req(plat_priv, v2, i);
 		}
 	}
 
