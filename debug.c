@@ -1,5 +1,5 @@
 /* Copyright (c) 2016-2018, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -135,8 +135,8 @@ static int cnss_stats_show_state(struct seq_file *s,
 		case CNSS_RECOVERY_WAIT_FOR_DRIVER:
 			seq_puts(s, "CNSS_RECOVERY_WAIT_FOR_DRIVER");
 			continue;
-		case CNSS_RDDM_IN_PROGRESS:
-			seq_puts(s, "RDDM_IN_PROGRESS");
+		case CNSS_RDDM_DUMP_IN_PROGRESS:
+			seq_puts(s, "RDDM_DUMP_IN_PROGRESS");
 			continue;
 		}
 
@@ -631,12 +631,14 @@ static ssize_t cnss_control_params_debug_write(struct file *fp,
 {
 	struct cnss_plat_data *plat_priv =
 		((struct seq_file *)fp->private_data)->private;
+	unsigned int prev_board_id;
 	char buf[64];
 	char *sptr, *token;
 	char *cmd;
 	u32 val;
 	unsigned int len = 0;
 	const char *delim = " ";
+	int ret;
 
 	if (!plat_priv)
 		return -ENODEV;
@@ -671,8 +673,23 @@ static ssize_t cnss_control_params_debug_write(struct file *fp,
 		plat_priv->ctrl_params.bdf_type = val;
 	else if (strcmp(cmd, "time_sync_period") == 0)
 		plat_priv->ctrl_params.time_sync_period = val;
-	else
+	else if (strcmp(cmd, "board_id") == 0 &&
+			(plat_priv->bus_type == CNSS_BUS_PCI)) {
+		prev_board_id = plat_priv->board_info.board_id_override;
+		plat_priv->board_info.board_id_override = val;
+		ret = cnss_set_fw_type_and_name(plat_priv);
+		if (ret) {
+			cnss_pr_err("%s: Failed to override firmware type for %s\n",
+				    __func__, plat_priv->device_name);
+			plat_priv->board_info.board_id_override = prev_board_id;
+			cnss_set_fw_type_and_name(plat_priv);
+			return ret;
+		}
+		cnss_pr_dbg("Updated firmware type %s for %s\n",
+			    plat_priv->firmware_name, plat_priv->device_name);
+	} else {
 		return -EINVAL;
+	}
 
 	return count;
 }
@@ -733,7 +750,7 @@ static int cnss_show_quirks_state(struct seq_file *s,
 
 static int cnss_control_params_debug_show(struct seq_file *s, void *data)
 {
-	struct cnss_plat_data *cnss_priv = s->private;
+	struct cnss_plat_data *plat_priv = s->private;
 
 	seq_puts(s, "\nUsage: echo <params_name> <value> > <debugfs_path>/cnss/control_params\n");
 	seq_puts(s, "<params_name> can be one of below:\n");
@@ -744,12 +761,15 @@ static int cnss_control_params_debug_show(struct seq_file *s, void *data)
 	seq_puts(s, "time_sync_period: Time period to do time sync with device in milliseconds\n");
 
 	seq_puts(s, "\nCurrent value:\n");
-	cnss_show_quirks_state(s, cnss_priv);
-	seq_printf(s, "mhi_timeout: %u\n", cnss_priv->ctrl_params.mhi_timeout);
-	seq_printf(s, "qmi_timeout: %u\n", cnss_priv->ctrl_params.qmi_timeout);
-	seq_printf(s, "bdf_type: %u\n", cnss_priv->ctrl_params.bdf_type);
+	cnss_show_quirks_state(s, plat_priv);
+	seq_printf(s, "mhi_timeout: %u\n", plat_priv->ctrl_params.mhi_timeout);
+	seq_printf(s, "qmi_timeout: %u\n", plat_priv->ctrl_params.qmi_timeout);
+	seq_printf(s, "bdf_type: %u\n", plat_priv->ctrl_params.bdf_type);
 	seq_printf(s, "time_sync_period: %u\n",
-		   cnss_priv->ctrl_params.time_sync_period);
+		   plat_priv->ctrl_params.time_sync_period);
+	if (plat_priv->bus_type == CNSS_BUS_PCI)
+		seq_printf(s, "board_id: 0x%x\n",
+			   plat_priv->board_info.board_id_override);
 
 	return 0;
 }
@@ -947,6 +967,70 @@ static const struct file_operations cnss_qmi_record_debug_fops = {
 	.llseek		= seq_lseek,
 };
 
+#if !defined(CONFIG_CNSS2_KERNEL_5_15)
+static ssize_t cnss_pci_write_switch_link(struct file *fp,
+					   const char __user *user_buf,
+					   size_t count, loff_t *off)
+{
+	struct cnss_plat_data *plat_priv = fp->private_data;
+	u16 link_speed = 0, link_width = 0, pci_set_val = 0;
+
+	if (kstrtou16_from_user(user_buf, count, 0, &pci_set_val))
+		return -EFAULT;
+
+	if (!plat_priv)
+		return -ENODEV;
+
+	/* The first nibble in a byte represents both pci link speed
+	 * width. The first 2[0,1] bits in a nibble represent link speed.
+	 * The next 2[2,3] bits represents link width.
+	 * e.g: echo 0xB > pci_switch_link will set the PCI Generation
+	 * to 3 and PCI lane width to 2. The possible values are,
+	 * 1 <= Link speed <= 3
+	 * 1 <= Link width <= 2
+	 */
+	link_speed = pci_set_val & CNSS_PCI_SWITCH_LINK_MASK;
+
+	link_width = (pci_set_val >> 2) & CNSS_PCI_SWITCH_LINK_MASK;
+
+	if (!link_speed || !link_width) {
+		cnss_pr_info("Invalid data\n");
+		return -EFAULT;
+	}
+
+	cnss_set_pci_link_speed_width(&plat_priv->plat_dev->dev, link_speed,
+				link_width);
+
+	return count;
+}
+
+static ssize_t cnss_pci_read_switch_link(struct file *file,
+					char __user *user_buf,
+					size_t count, loff_t *ppos)
+{
+	const char buf[] =
+	"PCI SWITCH LINk USAGE :\n"
+	"The first 2[0,1] bits in a nibble represent link speed.\n"
+	"The next 2[2,3] bits represents link width.\n"
+	"echo 0xB > pci_switch_link ,will set the PCI Generation\n"
+	"to 3 and PCI lane width to 2. The possible values are,\n"
+	"1 <= Link speed <= 3\n"
+	"1 <= Link width <= 2\n";
+
+	return simple_read_from_buffer(user_buf, count, ppos, buf, strlen(buf));
+}
+
+static const struct file_operations cnss_pci_switch_link_fops = {
+	.read		= cnss_pci_read_switch_link,
+	.write		= cnss_pci_write_switch_link,
+	.release	= single_release,
+	.open		= simple_open,
+	.owner		= THIS_MODULE,
+	.llseek		= seq_lseek,
+
+};
+#endif
+
 static int cnss_mlo_config_debug_show(struct seq_file *s, void *data)
 {
 	cnss_print_mlo_config();
@@ -986,7 +1070,10 @@ static int cnss_create_debug_only_node(struct cnss_plat_data *plat_priv)
 			    &cnss_hds_support_fops);
 	debugfs_create_file("ce_info", 0600, root_dentry, plat_priv,
 			    &cnss_ce_reg_debug_fops);
-
+#if !defined(CONFIG_CNSS2_KERNEL_5_15)
+	debugfs_create_file("pci_switch_link", 0600, root_dentry, plat_priv,
+			    &cnss_pci_switch_link_fops);
+#endif
 	return 0;
 }
 
@@ -1081,10 +1168,10 @@ bool cnss_wait_for_rddm_complete(struct cnss_plat_data *plat_priv)
 	if (!plat_priv)
 		return true;
 
-	if (test_bit(CNSS_RDDM_IN_PROGRESS, &plat_priv->driver_state)) {
+	if (test_bit(CNSS_RDDM_DUMP_IN_PROGRESS, &plat_priv->driver_state)) {
 		cnss_pr_dbg("Waiting for RDDM collection for device 0x%lx\n",
 			      plat_priv->device_id);
-		while (test_bit(CNSS_RDDM_IN_PROGRESS,
+		while (test_bit(CNSS_RDDM_DUMP_IN_PROGRESS,
 		       &plat_priv->driver_state)) {
 			msleep(RDDM_DONE_DELAY);
 			if (count++ > rddm_done_timeout * 10) {
