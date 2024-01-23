@@ -762,6 +762,10 @@ struct cnss_plat_data {
 #endif
 	struct completion soc_reset_request_complete;
 	struct cnss_bus_ops *ops;
+#if defined(CNSS_LOWMEM_PROFILE)
+	void *qdss_va;
+	phys_addr_t qdss_pa;
+#endif
 };
 
 #ifdef CONFIG_ARCH_QCOM
@@ -846,6 +850,9 @@ const char *cnss_get_fw_path(struct cnss_plat_data *plat_priv);
 int cnss_cal_file_download_to_mem(struct cnss_plat_data *plat_priv,
 				  u32 *cal_file_size);
 struct cnss_plat_data *cnss_get_plat_priv_by_chip_id(int chip_id);
+#if defined(CNSS_LOWMEM_PROFILE)
+int cnss_free_qdss_mem(struct cnss_plat_data *plat_priv);
+#endif
 int cnss_set_fw_type_and_name(struct cnss_plat_data *plat_priv);
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0))
 void cnss_modify_link_speed(struct cnss_plat_data *plat_priv);

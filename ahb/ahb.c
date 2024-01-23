@@ -327,13 +327,16 @@ static void cnss_ahb_free_fw_mem(struct cnss_plat_data *plat_priv)
 static int cnss_ahb_alloc_qdss_mem(struct cnss_plat_data *plat_priv)
 {
 	int i;
+#if !defined(CNSS_LOWMEM_PROFILE)
 	struct device_node *dev_node = NULL;
 	struct resource q6_etr;
 	int ret;
+#endif
 
 	if (!plat_priv)
 		return -ENODEV;
 
+#if !defined(CNSS_LOWMEM_PROFILE)
 	dev_node = cnss_get_etr_dev_node(plat_priv);
 	if (!dev_node) {
 		cnss_pr_err("No q6_etr_dump available in dts");
@@ -345,8 +348,19 @@ static int cnss_ahb_alloc_qdss_mem(struct cnss_plat_data *plat_priv)
 		cnss_pr_err("Failed to get resource for q6_etr_dump");
 		return -EINVAL;
 	}
+#endif
 
 	for (i = 0; i < plat_priv->qdss_mem_seg_len; i++) {
+#if defined(CNSS_LOWMEM_PROFILE)
+		if (!plat_priv->qdss_va) {
+			cnss_pr_err("QDSS memory is not allocated\n");
+			return -ENOMEM;
+		}
+		plat_priv->qdss_mem[i].va = plat_priv->qdss_va;
+		plat_priv->qdss_mem[i].pa = plat_priv->qdss_pa;
+		plat_priv->qdss_mem[i].size = SZ_1M;
+		plat_priv->qdss_mem[i].type = QMI_WLFW_MEM_QDSS_V01;
+#else
 		plat_priv->qdss_mem[i].va = NULL;
 		plat_priv->qdss_mem[i].pa = q6_etr.start;
 		plat_priv->qdss_mem[i].size = resource_size(&q6_etr);
@@ -364,7 +378,7 @@ static int cnss_ahb_alloc_qdss_mem(struct cnss_plat_data *plat_priv)
 				return -ENOMEM;
 			}
 		}
-
+#endif
 		cnss_pr_dbg("QDSS mem addr pa 0x%x va 0x%p, size 0x%x",
 			    (unsigned int)plat_priv->qdss_mem[i].pa,
 			    plat_priv->qdss_mem[i].va,
@@ -392,12 +406,26 @@ static void cnss_ahb_free_qdss_mem(struct cnss_plat_data *plat_priv)
 				plat_priv,
 				DIV_ROUND_UP(qdss_mem[i].size, PAGE_SIZE));
 		} else {
-			if (qdss_mem[i].va) {
-				cnss_pr_dbg("Freeing QDSS Memory\n");
-				iounmap(qdss_mem[i].va);
-				qdss_mem[i].va = NULL;
-				qdss_mem[i].size = 0;
-			}
+#if defined(CNSS_LOWMEM_PROFILE)
+			if (plat_priv->qdss_va) {
+				/* When QDSS is stopped for Low memory
+				 * profiles, only memset the memory to
+				 * retain the allocation for consective
+				 * qdss start from cli. QDSS memory will be
+				 * cleared only when the feature is disabled,
+				 * as consecutive memory may not be available
+				 * in runtime.
+				 */
+				cnss_pr_dbg("Clearing the QDSS data\n");
+				memset(plat_priv->qdss_va, 0, SZ_1M);
+			} else
+#endif
+				if (qdss_mem[i].va) {
+					cnss_pr_dbg("Freeing QDSS Memory\n");
+					iounmap(qdss_mem[i].va);
+					qdss_mem[i].va = NULL;
+					qdss_mem[i].size = 0;
+				}
 		}
 	}
 
