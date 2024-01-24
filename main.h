@@ -419,7 +419,7 @@ enum cnss_driver_state {
 	CNSS_DAEMON_CONNECTED,
 	CNSS_QDSS_STARTED,
 	CNSS_RECOVERY_WAIT_FOR_DRIVER,
-	CNSS_RDDM_DUMP_IN_PROGRESS,
+	CNSS_RDDM_IN_PROGRESS,
 };
 
 struct cnss_recovery_data {
@@ -709,7 +709,6 @@ struct cnss_plat_data {
 #else
 	u8 switch_link_enable;
 #endif
-	struct completion soc_reset_request_complete;
 };
 
 #ifdef CONFIG_ARCH_QCOM
