@@ -35,6 +35,7 @@
 /* userpd_id in multi pd arch */
 #define USERPD_0	1
 #define USERPD_1	2
+#define USERPD_2	3
 
 /* node_id for QCN9000 */
 #define QCN9000_0	0x20
