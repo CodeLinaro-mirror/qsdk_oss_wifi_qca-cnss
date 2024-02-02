@@ -1696,7 +1696,7 @@ int cnss_set_mlo_group_config(struct cnss_mlo_group_info *src_mlo_config,
 		chip_info = &mlo_group_info->chip_info[num_chip];
 		chip_info->group_id = group_id;
 		chip_info->soc_id = i;
-		chip_info->chip_id = num_chip;
+		chip_info->chip_id = mlo_config->chip_info[num_chip].chip_id;
 
 		if (plat_priv->firmware_type == CNSS_FW_DUAL_MAC) {
 			chip_info->num_local_links = 2;
@@ -1726,7 +1726,8 @@ int cnss_set_mlo_group_config(struct cnss_mlo_group_info *src_mlo_config,
 
 		cnss_pr_info("%s: Dynamic MLO Config updated for %s",
 			     __func__, plat_priv->device_name);
-		if (mlo_group_info->num_chips == num_chip)
+		if (mlo_group_info->num_chips == num_chip ||
+				num_chip >= CNSS_MAX_MLO_CHIPS)
 			break;
 	}
 
