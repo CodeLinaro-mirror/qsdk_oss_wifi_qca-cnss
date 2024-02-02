@@ -1535,19 +1535,33 @@ static int cnss_set_static_mlo_config(struct cnss_mlo_group_info *in_group_info,
 	return 0;
 }
 
-void cnss_reset_mlo_config(void)
+int cnss_reset_mlo_config(uint32_t group_id)
 {
 	struct cnss_plat_data *plat_priv = NULL;
+	struct cnss_mlo_chip_info *chip_info;
 	int i = 0;
 
 	if (!enable_mlo_support)
-		return;
+		return 0;
 
-	memset(&g_mlo_group_info, 0, sizeof(struct cnss_mlo_group_info) *
-	       CNSS_MAX_MLO_GROUPS);
+	if (group_id >= CNSS_MAX_MLO_GROUPS) {
+		cnss_pr_err("%s: Invalid MLO Group ID %d", __func__,
+			    group_id);
+		return -EINVAL;
+	}
 
-	for (i = 0; i < plat_env_index; i++) {
-		plat_priv = cnss_get_plat_priv_by_soc_id(i);
+	if (g_mlo_group_info[group_id].num_chips > CNSS_MAX_MLO_CHIPS) {
+		cnss_pr_err("%s: Invalid MLO num chips %d", __func__,
+			    g_mlo_group_info[group_id].num_chips);
+		return -EINVAL;
+	}
+
+	if (!g_mlo_group_info[group_id].num_chips)
+		return 0;
+
+	for (i = 0; i < g_mlo_group_info[group_id].num_chips; i++) {
+		chip_info = &g_mlo_group_info[group_id].chip_info[i];
+		plat_priv = cnss_get_plat_priv_by_soc_id(chip_info->soc_id);
 		if (!plat_priv) {
 			cnss_pr_err("%s: Failed to get plat_priv for soc_id: %d",
 				    __func__, i);
@@ -1562,6 +1576,12 @@ void cnss_reset_mlo_config(void)
 
 		plat_priv->mlo_capable = 0;
 	}
+
+	cnss_pr_dbg("%s: Reset MLO config for group %u", __func__, group_id);
+	memset(&g_mlo_group_info[group_id], 0,
+	       sizeof(struct cnss_mlo_group_info));
+
+	return 0;
 }
 EXPORT_SYMBOL(cnss_reset_mlo_config);
 
@@ -1619,17 +1639,108 @@ static void cnss_set_adj_mlo_chips(struct cnss_mlo_group_info *mlo_group_info)
 	}
 }
 
-int cnss_set_mlo_config(struct cnss_module_param *modparam,
-			struct cnss_mlo_group_info *in_mlo_config)
+int cnss_set_mlo_group_config(struct cnss_mlo_group_info *src_mlo_config,
+			      uint8_t group_id)
 {
 	struct cnss_mlo_group_info *mlo_group_info;
+	struct cnss_plat_data *plat_priv = NULL;
 	struct cnss_mlo_group_info *mlo_config;
 	struct cnss_mlo_chip_info *chip_info;
-	struct cnss_plat_data *plat_priv = NULL;
 	int num_chip = 0;
-	int i, j, k;
-	int prev_dual_count = 0;
 	int link_id = 0;
+	int i, j;
+
+	if (!enable_mlo_support) {
+		cnss_pr_info("%s: MLO is disabled\n", __func__);
+		return 0;
+	}
+
+	if (group_id >= CNSS_MAX_MLO_GROUPS) {
+		cnss_pr_err("%s: Invalid group ID %u", __func__, group_id);
+		return -EINVAL;
+	}
+
+	mlo_group_info = &g_mlo_group_info[group_id];
+	mlo_config = &src_mlo_config[group_id];
+
+	if (mlo_config->num_chips > CNSS_MAX_MLO_CHIPS) {
+		cnss_pr_err("%s: num_chips %d greater than max %d", __func__,
+			    mlo_config->num_chips, CNSS_MAX_MLO_CHIPS);
+		return -EINVAL;
+	}
+
+	memset(mlo_group_info, 0, sizeof(struct cnss_mlo_group_info));
+	mlo_group_info->group_id = group_id;
+	mlo_group_info->max_num_peers = mlo_config->max_num_peers;
+	mlo_group_info->num_chips = mlo_config->num_chips;
+	mlo_group_info->soc_chip_bitmap = mlo_config->soc_chip_bitmap;
+	num_chip = 0;
+
+	for (i = 0; i < plat_env_index; i++) {
+		plat_priv = cnss_get_plat_priv_by_soc_id(i);
+		if (!plat_priv) {
+			cnss_pr_err("%s: Failed to get plat_priv for soc_id: %d",
+				    __func__, i);
+			return -EINVAL;
+		}
+
+		if (!plat_priv->mlo_support ||
+		    ((plat_priv->bus_type == CNSS_BUS_PCI) &&
+		     !plat_priv->pci_dev)) {
+			continue;
+		}
+
+		if (!(mlo_config->soc_chip_bitmap & (1 << i)))
+			continue;
+
+		chip_info = &mlo_group_info->chip_info[num_chip];
+		chip_info->group_id = group_id;
+		chip_info->soc_id = i;
+		chip_info->chip_id = num_chip;
+
+		if (plat_priv->firmware_type == CNSS_FW_DUAL_MAC) {
+			chip_info->num_local_links = 2;
+			for (j = 0; j < CNSS_MAX_LINKS_PER_CHIP; j++) {
+				chip_info->hw_link_ids[j] = link_id++;
+				chip_info->valid_link_ids[j] = 1;
+			}
+		} else {
+			chip_info->num_local_links = 1;
+			chip_info->hw_link_ids[0] = link_id++;
+			chip_info->valid_link_ids[0] = 1;
+			chip_info->valid_link_ids[1] = 0;
+		}
+
+		chip_info->num_adj_chips =
+			mlo_config->chip_info[num_chip].num_adj_chips;
+		for (j = 0; j < chip_info->num_adj_chips; j++) {
+			chip_info->adj_chip_ids[j] =
+			mlo_config->chip_info[num_chip].adj_chip_ids[j];
+		}
+
+		plat_priv->mlo_group_info = mlo_group_info;
+		plat_priv->mlo_chip_info = chip_info;
+		plat_priv->mlo_capable = 1;
+		plat_priv->mlo_default_cfg = false;
+		num_chip++;
+
+		cnss_pr_info("%s: Dynamic MLO Config updated for %s",
+			     __func__, plat_priv->device_name);
+		if (mlo_group_info->num_chips == num_chip)
+			break;
+	}
+
+	cnss_set_adj_mlo_chips(mlo_group_info);
+
+	return 0;
+}
+EXPORT_SYMBOL(cnss_set_mlo_group_config);
+
+int cnss_set_mlo_config(struct cnss_module_param *modparam,
+			struct cnss_mlo_group_info *src_mlo_config)
+{
+	struct cnss_plat_data *plat_priv = NULL;
+	int group_id;
 
 	if (!enable_mlo_support) {
 		cnss_pr_info("%s: MLO is disabled\n", __func__);
@@ -1643,80 +1754,9 @@ int cnss_set_mlo_config(struct cnss_module_param *modparam,
 		return -EINVAL;
 	}
 
-	for (i = 0; i < modparam->mlo_max_groups; i++) {
-		mlo_group_info = &g_mlo_group_info[i];
-		mlo_config = &in_mlo_config[i];
-
-		if (mlo_config->num_chips > CNSS_MAX_MLO_CHIPS) {
-			cnss_pr_err("%s: num_chips %d greater than max %d",
-				    __func__, mlo_config->num_chips,
-				    CNSS_MAX_MLO_CHIPS);
+	for (group_id = 0; group_id < modparam->mlo_max_groups; group_id++)
+		if (cnss_set_mlo_group_config(src_mlo_config, group_id))
 			return -EINVAL;
-		}
-
-		memset(mlo_group_info, 0, sizeof(struct cnss_mlo_group_info));
-		mlo_group_info->group_id = i;
-		mlo_group_info->max_num_peers = mlo_config->max_num_peers;
-		mlo_group_info->num_chips = mlo_config->num_chips;
-		mlo_group_info->soc_chip_bitmap = mlo_config->soc_chip_bitmap;
-		num_chip = 0;
-
-		for (j = 0; j < plat_env_index; j++) {
-			plat_priv = cnss_get_plat_priv_by_soc_id(j);
-			if (!plat_priv) {
-				cnss_pr_err("%s: Failed to get plat_priv for soc_id: %d",
-					    __func__, j);
-				return -EINVAL;
-			}
-
-			if (!plat_priv->mlo_support ||
-			    ((plat_priv->bus_type == CNSS_BUS_PCI) &&
-			     !plat_priv->pci_dev)) {
-				continue;
-			}
-
-			if (!(mlo_config->soc_chip_bitmap & (1 << j)))
-				continue;
-
-			chip_info = &mlo_group_info->chip_info[num_chip];
-			chip_info->group_id = i;
-			chip_info->soc_id = j;
-			chip_info->chip_id = num_chip;
-
-			if (plat_priv->firmware_type == CNSS_FW_DUAL_MAC) {
-				chip_info->num_local_links = 2;
-				prev_dual_count++;
-				for (k = 0; k < CNSS_MAX_LINKS_PER_CHIP; k++) {
-					chip_info->hw_link_ids[k] = link_id++;
-					chip_info->valid_link_ids[k] = 1;
-				}
-			} else {
-				chip_info->num_local_links = 1;
-				chip_info->hw_link_ids[0] = link_id++;
-				chip_info->valid_link_ids[0] = 1;
-				chip_info->valid_link_ids[1] = 0;
-			}
-
-			chip_info->num_adj_chips =
-				mlo_config->chip_info[num_chip].num_adj_chips;
-			for (k = 0; k < chip_info->num_adj_chips; k++) {
-				chip_info->adj_chip_ids[k] =
-				mlo_config->chip_info[num_chip].adj_chip_ids[k];
-			}
-
-			plat_priv->mlo_group_info = mlo_group_info;
-			plat_priv->mlo_chip_info = chip_info;
-			plat_priv->mlo_capable = 1;
-			plat_priv->mlo_default_cfg = false;
-			num_chip++;
-
-			cnss_pr_info("%s: Dynamic MLO Config updated for %s",
-				     __func__, plat_priv->device_name);
-			if (mlo_group_info->num_chips == num_chip)
-				break;
-		}
-		cnss_set_adj_mlo_chips(mlo_group_info);
-	}
 
 	return 0;
 }
