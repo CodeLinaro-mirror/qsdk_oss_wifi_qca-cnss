@@ -1,5 +1,5 @@
 /* Copyright (c) 2016-2018, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -6667,19 +6667,6 @@ static void cnss_mhi_notify_status(struct mhi_controller *mhi_ctrl,
 
 		/* In-case of Target Assert */
 		cnss_pci_set_mhi_state_bit(pci_priv, CNSS_MHI_RDDM);
-
-		/* Target Assert happens in down path and call BUG_ON instead
-		 * of CNSS_ASSERT. This immediate BUG_ON will help to stop
-		 * concurrent execution of dirver shutdown flow in another
-		 * context. QMI history is not required in down path.
-		 */
-		if (test_bit(CNSS_DRIVER_UNLOADING, &plat_priv->driver_state) ||
-		    test_bit(CNSS_DRIVER_IDLE_SHUTDOWN,
-			     &plat_priv->driver_state)) {
-			cnss_pr_err("Driver unload or shutdown is in progress, called Host Assert\n");
-			BUG_ON(1);
-			return;
-		}
 	}
 
 	if (reason != MHI_CB_IDLE)
@@ -6695,6 +6682,19 @@ static void cnss_mhi_notify_status(struct mhi_controller *mhi_ctrl,
 			    cnss_get_plat_env_index_from_plat_priv(plat_priv));
 		plat_priv->target_asserted = 1;
 		plat_priv->target_assert_timestamp = ktime_to_ms(ktime_get());
+
+		/* Target Assert happens in down path and call BUG_ON instead
+		 * of CNSS_ASSERT. This immediate BUG_ON will help to stop
+		 * concurrent execution of dirver shutdown flow in another
+		 * context. QMI history is not required in down path.
+		 */
+		if (test_bit(CNSS_DRIVER_UNLOADING, &plat_priv->driver_state) ||
+		    test_bit(CNSS_DRIVER_IDLE_SHUTDOWN,
+			     &plat_priv->driver_state)) {
+			cnss_pr_err("Driver unload or shutdown is in progress, called Host Assert\n");
+			BUG_ON(1);
+			return;
+		}
 
 		/* If target recovery is enabled in the wifi driver, deliver
 		 * the fatal notification immediately here.
