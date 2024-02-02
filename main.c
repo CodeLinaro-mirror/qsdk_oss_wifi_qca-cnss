@@ -3140,7 +3140,8 @@ int cnss_handle_usrpd_in_rpd_crash(struct cnss_plat_data *plat_priv)
 	group_info = plat_priv->mlo_group_info;
 	if (of_property_read_bool(pdev->dev.of_node, "qcom,multipd_arch")) {
 		if (rproc) {
-			if (!plat_priv->recovery_enabled) {
+			if (!plat_priv->recovery_enabled &&
+			    plat_priv->mlo_support) {
 				group_info->rddm_dump_all++;
 			} else {
 				if (rproc->state != RPROC_OFFLINE) {
