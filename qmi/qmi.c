@@ -3271,11 +3271,15 @@ static void cnss_cal_report_download(struct cnss_plat_data *plat_priv)
 					0)) {
 		if (plat_priv->cold_boot_support &&
 		    plat_priv->cal_in_progress) {
-			cnss_cal_file_download_to_mem(plat_priv,
-						      &cal_file_size);
-			plat_priv->cal_file_size = cal_file_size;
-			cnss_pr_dbg("%s: Cold boot support enabled. CALDB downloaded, file size %u\n",
-				    __func__, plat_priv->cal_file_size);
+			if (plat_priv->cal_mem && plat_priv->cal_mem->va) {
+				cnss_cal_file_download_to_mem(plat_priv,
+							      &cal_file_size);
+				plat_priv->cal_file_size = cal_file_size;
+				cnss_pr_dbg("%s: Cold boot support enabled. CALDB downloaded, file size %u\n",
+					    __func__,
+					    plat_priv->cal_file_size);
+			} else
+				cnss_pr_err("FW CALDB memory invalid, Unable to copy cal data to mem.");
 		}
 	}
 }
