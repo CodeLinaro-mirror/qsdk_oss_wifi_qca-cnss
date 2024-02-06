@@ -6818,7 +6818,10 @@ static int cnss_panic_handler(struct notifier_block *this,
 
 	mutex_lock(&rproc_list_mutex);
 	for (i = 0; i < plat_env_index; i++) {
-		if (plat_env[i]->target_asserted == 1) {
+		if ((plat_env[i]->target_asserted == 1) &&
+		!(test_bit(CNSS_DRIVER_UNLOADING, &plat_env[i]->driver_state) ||
+		test_bit(CNSS_DRIVER_IDLE_SHUTDOWN,
+			     &plat_env[i]->driver_state))){
 			mutex_unlock(&rproc_list_mutex);
 			return 0;
 		}
