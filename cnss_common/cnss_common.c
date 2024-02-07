@@ -486,7 +486,7 @@ void cnss_override_msi_assignment(struct cnss_plat_data *plat_priv,
 			1U << get_count_order(msi_config->total_vectors);
 }
 
-#ifndef CONFIG_CNSS2_KERNEL_5_15
+#ifndef CONFIG_TARGET_SDX75
 static int cnss_mlo_mem_get(struct cnss_plat_data *plat_priv, int group_id,
 			    phys_addr_t paddr, int idx, u32 mem_size)
 {
@@ -536,27 +536,37 @@ static int cnss_mlo_mem_get(struct cnss_plat_data *plat_priv, int group_id,
 	}
 
 	mlo_global_mem[group_id] = page_to_virt(page);
+	mlo_global_mem_phys[group_id] = page_to_phys(page);
 	of_reserved_mem_device_release(dev);
 
 	return 0;
 }
 
-static int get_mlo_pa(struct cnss_plat_data *plat_priv, int group_id, int idx)
+static int get_mlo_pa(struct cnss_plat_data *plat_priv, int group_id, int idx,
+			unsigned int iova_base)
 {
 	struct cnss_fw_mem *fw_mem = plat_priv->fw_mem;
+	struct cnss_pci_data *pci_priv = plat_priv->bus_priv;
+	int ret;
 
-	/*remap alocated mlo shared mem to pcie device*/
-	mlo_global_mem_phys[group_id] =
-		dma_map_single(&((struct pci_dev *)plat_priv->pci_dev)->dev,
-				mlo_global_mem[group_id],
-				fw_mem[idx].size, DMA_BIDIRECTIONAL);
-	if (dma_mapping_error(&((struct pci_dev *)plat_priv->pci_dev)->dev,
-				mlo_global_mem_phys[group_id])) {
-		cnss_pr_err("Error: dma_map_single failed.\n");
-		return -ENOMEM;
+	if (iova_base == 0) {
+		cnss_pr_err("Error: invalid data: 0x%x\n", iova_base);
+		return -EINVAL;
 	}
 
-	fw_mem[idx].pa =  mlo_global_mem_phys[group_id];
+	/*remap alocated mlo shared mem to pcie device*/
+	if (mlo_global_mem_phys[group_id] != iova_base) {
+		ret = iommu_map(pci_priv->iommu_domain, iova_base,
+				mlo_global_mem_phys[group_id],
+				fw_mem[idx].size, IOMMU_READ | IOMMU_WRITE);
+		if (ret < 0) {
+			cnss_pr_err("Error: MLO memory map failed.\n");
+			return -ENOMEM;
+		}
+	}
+
+	fw_mem[idx].pa = iova_base;
+	mlo_global_mem_phys[group_id] = iova_base;
 
 	return 0;
 }
@@ -572,6 +582,9 @@ int cnss_mlo_mem_alloc(struct cnss_plat_data *plat_priv, int index)
 	unsigned int mlo_global_mem_size;
 	int i = index;
 	struct device *dev;
+#ifdef CONFIG_TARGET_SDX75
+	static unsigned int mlo_iova_base[CNSS_MAX_MLO_GROUPS];
+#endif
 
 	dev = &plat_priv->plat_dev->dev;
 	group_id = plat_priv->mlo_group_info->group_id;
@@ -594,6 +607,14 @@ int cnss_mlo_mem_alloc(struct cnss_plat_data *plat_priv, int index)
 			CNSS_ASSERT(0);
 			return -ENOMEM;
 		}
+
+#ifdef CONFIG_TARGET_SDX75
+		ret = of_property_read_u32(mlo_global_mem_node, "iova_base",
+					   &mlo_iova_base[group_id]);
+		if (ret)
+			cnss_pr_err("Error(%d): Unable to get MLO iova base\n",
+				    ret);
+#endif
 
 		of_node_put(mlo_global_mem_node);
 		mlo_global_mem_size = mlo_mem->size;
@@ -622,7 +643,11 @@ int cnss_mlo_mem_alloc(struct cnss_plat_data *plat_priv, int index)
 	} else
 		fw_mem[i].va = mlo_global_mem[group_id];
 
+#ifdef CONFIG_TARGET_SDX75
+	ret = get_mlo_pa(plat_priv, group_id, i, mlo_iova_base[group_id]);
+#else
 	ret = get_mlo_pa(plat_priv, group_id, i);
+#endif
 	if (ret != 0) {
 		cnss_pr_err("Error: get_mlo_pa failed.");
 		CNSS_ASSERT(0);
