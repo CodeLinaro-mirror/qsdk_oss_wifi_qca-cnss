@@ -4981,39 +4981,6 @@ static const struct file_operations m3_dump_fops = {
 	.release	= m3_dump_release,
 };
 
-#if defined(CNSS_LOWMEM_PROFILE)
-static int cnss_alloc_qdss_mem(struct cnss_plat_data *plat_priv)
-{
-	plat_priv->qdss_va = dma_alloc_coherent(&plat_priv->plat_dev->dev,
-				SZ_1M, &plat_priv->qdss_pa, GFP_KERNEL);
-
-	if (!plat_priv->qdss_va) {
-		cnss_pr_err("QDSS memory alloc failed\n");
-		return 0;
-	}
-
-	cnss_pr_info("QDSS va: 0x%pK, pa: %pa\n", plat_priv->qdss_va,
-					&plat_priv->qdss_pa);
-
-	return 0;
-}
-
-int cnss_free_qdss_mem(struct cnss_plat_data *plat_priv)
-{
-	cnss_pr_info("Freeing QDSS memory\n");
-
-	if (plat_priv->qdss_va) {
-		dma_free_coherent(&plat_priv->plat_dev->dev, SZ_1M,
-					plat_priv->qdss_va, plat_priv->qdss_pa);
-		plat_priv->qdss_va = NULL;
-		plat_priv->qdss_pa = 0;
-	} else
-		cnss_pr_info("QDSS memory is NULL\n");
-
-	return 0;
-}
-#endif
-
 static int cnss_init_m3_dump_class(struct cnss_plat_data *plat_priv)
 {
 	int ret = 0;
@@ -6077,21 +6044,6 @@ void cnss_config_param_update_cb(uint32_t instance_id,
 		plat_priv->qdss_support = value;
 		cnss_pr_info("Setting qdss_support=%llu for instance_id 0x%x\n",
 			     value, instance_id);
-#if defined(CNSS_LOWMEM_PROFILE)
-		/* For Low Memory Profiles, QDSS Memory will be allocated via
-		 * DMA alloc instead of dts and if the QDSS feature is
-		 * disabled in the firmware ini file, stop QDSS if already
-		 * started and clear the memory.
-		 */
-		if (!value) {
-			cnss_pr_info("Stopping QDSS for %s",
-					plat_priv->device_name);
-			cnss_wlfw_send_qdss_trace_mode_req(plat_priv,
-						   QMI_WLFW_QDSS_TRACE_OFF_V01,
-						   value);
-			cnss_free_qdss_mem(plat_priv);
-		}
-#endif
 		break;
 	case CNSS_PLAT_IPC_PARAM_TYPE_QDSS_START_V01:
 		plat_priv->qdss_etr_sg_mode = value;
@@ -7381,12 +7333,6 @@ static int cnss_probe(struct platform_device *plat_dev)
 	if (ret < 0)
 		cnss_pr_err("CNSS genl init failed %d\n", ret);
 
-#if defined(CNSS_LOWMEM_PROFILE)
-	ret = cnss_alloc_qdss_mem(plat_priv);
-	if (ret)
-		cnss_pr_err("QDSS memory alloc failed %d\n", ret);
-#endif
-
 	ret = cnss_init_m3_dump_class(plat_priv);
 	if (ret)
 		goto deinit_genl;
@@ -7483,9 +7429,6 @@ static int cnss_remove(struct platform_device *plat_dev)
 	cnss_event_work_deinit(plat_priv);
 	cnss_recovery_work_deinit(plat_priv);
 	cnss_remove_sysfs(plat_priv);
-#if defined(CNSS_LOWMEM_PROFILE)
-	cnss_free_qdss_mem(plat_priv);
-#endif
 #ifdef CONFIG_CNSS2_PM
 	cnss_unregister_bus_scale(plat_priv);
 	cnss_unregister_esoc(plat_priv);
