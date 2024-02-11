@@ -1735,7 +1735,7 @@ out:
 	return ret;
 }
 
-static void cnss_mhi_soc_reset(struct pci_dev *pci_dev)
+static int cnss_mhi_soc_reset(struct pci_dev *pci_dev)
 {
 	struct cnss_pci_data *pci_priv = cnss_get_pci_priv(pci_dev);
 	struct cnss_plat_data *plat_priv =
@@ -1744,7 +1744,7 @@ static void cnss_mhi_soc_reset(struct pci_dev *pci_dev)
 	if (test_bit(CNSS_MHI_RDDM, &pci_priv->mhi_state)) {
 		cnss_pr_info("MHI SOC_RESET is not required as MHI is already in RDDM state\n");
 		clear_bit(CNSS_MHI_RDDM, &pci_priv->mhi_state);
-		return;
+		return -EBUSY;
 	}
 
 	cnss_pci_set_mhi_state(pci_priv, CNSS_MHI_SOC_RESET);
@@ -1752,7 +1752,10 @@ static void cnss_mhi_soc_reset(struct pci_dev *pci_dev)
 				msecs_to_jiffies(MHI_SOC_RESET_DELAY))) {
 		cnss_pr_err("%s: Failed to switch RDDM state\n", __func__);
 		reinit_completion(&plat_priv->soc_reset_request_complete);
+		return -EBUSY;
 	}
+
+	return 0;
 }
 
 static int cnss_qcn9000_shutdown(struct cnss_pci_data *pci_priv)
@@ -1775,7 +1778,9 @@ static int cnss_qcn9000_shutdown(struct cnss_pci_data *pci_priv)
 		return ret;
 	}
 
-	cnss_mhi_soc_reset(plat_priv->pci_dev);
+	ret = cnss_mhi_soc_reset(plat_priv->pci_dev);
+	if (ret && !plat_priv->recovery_enabled)
+		return ret;
 
 	cnss_pr_info("Shutting down %s\n", plat_priv->device_name);
 	cnss_pci_pm_runtime_resume(pci_priv);
@@ -4845,7 +4850,7 @@ static void cnss_mhi_notify_status(struct mhi_controller *mhi_ctrl,
 	if (reason == MHI_CB_EE_RDDM) {
 		/* In-case of RDDM switched by MHI SoC Reset */
 		if (test_bit(CNSS_MHI_SOC_RESET, &pci_priv->mhi_state)) {
-			cnss_pr_dbg("Switched from MHI SOC_RESET to RDDM state\n");
+			cnss_pr_info("Switched from MHI SOC_RESET to RDDM state\n");
 			complete(&plat_priv->soc_reset_request_complete);
 			clear_bit(CNSS_MHI_SOC_RESET, &pci_priv->mhi_state);
 			return;
