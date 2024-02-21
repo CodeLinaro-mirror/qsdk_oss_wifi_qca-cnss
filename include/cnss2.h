@@ -203,13 +203,13 @@ enum cnss_crash_type {
 };
 
 struct cnss_mlo_chip_info {
+	u32 hw_link_ids[CNSS_MAX_LINKS_PER_CHIP];
 	u8 group_id;
 	u8 soc_id;
 	u8 chip_id;
 	u8 num_local_links;
 	u8 num_adj_chips;
 	u8 adj_chip_ids[CNSS_MAX_LINKS_PER_CHIP];
-	u8 hw_link_ids[CNSS_MAX_LINKS_PER_CHIP];
 	u8 valid_link_ids[CNSS_MAX_LINKS_PER_CHIP];
 };
 

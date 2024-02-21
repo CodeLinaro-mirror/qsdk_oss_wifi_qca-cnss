@@ -1466,6 +1466,83 @@ static void cnss_set_global_mlo_support(bool enable)
 	}
 }
 
+static int cnss_set_adj_chip_ids(struct cnss_mlo_group_info *mlo_group_info)
+{
+	struct cnss_plat_data *plat_priv = NULL;
+	struct cnss_mlo_chip_info *chip_info;
+	u8 num_adj_chips = 0;
+	int num_chips;
+	int i;
+
+	if (!mlo_group_info) {
+		cnss_pr_err("%s: failed to get MLO group info\n", __func__);
+		return -EINVAL;
+	}
+	num_chips = mlo_group_info->num_chips;
+	cnss_pr_dbg("Number of MLO chips %d\n", num_chips);
+
+	switch (num_chips) {
+	case 0:
+	case 1:
+		num_adj_chips = 0;
+		return 0;
+	case 2:
+		num_adj_chips = 1;
+		break;
+	default:
+		num_adj_chips = 2;
+		break;
+	}
+
+	for (i = 0; i < num_chips; i++) {
+		chip_info = &mlo_group_info->chip_info[i];
+		if (!chip_info) {
+			cnss_pr_err("%s: failed to get MLO chip info\n",
+				    __func__);
+			continue;
+		}
+
+		chip_info->num_adj_chips = num_adj_chips;
+		memset(chip_info->adj_chip_ids, 0,
+				sizeof(uint8_t) * CNSS_MAX_LINKS_PER_CHIP);
+		chip_info->adj_chip_ids[0] = (chip_info->chip_id + 1) %
+								num_chips;
+		if (num_adj_chips >= 2)
+			chip_info->adj_chip_ids[1] = ((chip_info->chip_id - 1) +
+							num_chips) % num_chips;
+		cnss_pr_dbg("Adjacent chip IDs (%u, %u) for chip %u\n",
+				chip_info->adj_chip_ids[0],
+				chip_info->adj_chip_ids[1], chip_info->chip_id);
+	}
+
+	return 0;
+}
+
+static void cnss_set_adj_mlo_chips(struct cnss_mlo_group_info *mlo_group_info)
+{
+	struct cnss_plat_data *plat_priv = NULL;
+	struct cnss_plat_data *adj_plat_priv = NULL;
+	struct cnss_mlo_chip_info *chip_info;
+	int mlo_chip_num = mlo_group_info->num_chips;
+	int i = 0, k = 0, chip_idx = 0;
+
+	for (i = 0; i < mlo_chip_num; i++) {
+		chip_info = &mlo_group_info->chip_info[i];
+		plat_priv = cnss_get_plat_priv_by_soc_id(chip_info->soc_id);
+
+		if (!plat_priv)
+			continue;
+
+		for (k = 0; k < chip_info->num_adj_chips; k++) {
+			chip_idx = chip_info->adj_chip_ids[k];
+			adj_plat_priv = cnss_get_plat_priv_by_chip_id(chip_idx);
+			if (adj_plat_priv)
+				plat_priv->adj_mlo_chip_info[k] =
+					adj_plat_priv->mlo_chip_info;
+		}
+	}
+}
+
 static int cnss_set_static_mlo_config(struct cnss_mlo_group_info *in_group_info,
 			int num_groups)
 {
@@ -1534,6 +1611,8 @@ static int cnss_set_static_mlo_config(struct cnss_mlo_group_info *in_group_info,
 			cnss_pr_info("%s: Default MLO Config updated for %s",
 				     __func__, plat_priv->device_name);
 		}
+		cnss_set_adj_chip_ids(mlo_group_info);
+		cnss_set_adj_mlo_chips(mlo_group_info);
 	}
 
 	return 0;
@@ -1618,31 +1697,6 @@ struct cnss_plat_data *cnss_get_plat_priv_by_chip_id(int chip_id)
 	return NULL;
 }
 
-static void cnss_set_adj_mlo_chips(struct cnss_mlo_group_info *mlo_group_info)
-{
-	struct cnss_plat_data *plat_priv = NULL;
-	struct cnss_plat_data *adj_plat_priv = NULL;
-	struct cnss_mlo_chip_info *chip_info;
-	int mlo_chip_num = mlo_group_info->num_chips;
-	int i = 0, k = 0, chip_idx = 0;
-
-	for (i = 0; i < mlo_chip_num; i++) {
-		chip_info = &mlo_group_info->chip_info[i];
-		plat_priv = cnss_get_plat_priv_by_soc_id(chip_info->soc_id);
-
-		if (!plat_priv)
-			continue;
-
-		for (k = 0; k < chip_info->num_adj_chips; k++) {
-			chip_idx = chip_info->adj_chip_ids[k];
-			adj_plat_priv = cnss_get_plat_priv_by_chip_id(chip_idx);
-			if (adj_plat_priv)
-				plat_priv->adj_mlo_chip_info[k] =
-					adj_plat_priv->mlo_chip_info;
-		}
-	}
-}
-
 int cnss_set_mlo_group_config(struct cnss_mlo_group_info *src_mlo_config,
 			      uint8_t group_id)
 {
@@ -1650,6 +1704,8 @@ int cnss_set_mlo_group_config(struct cnss_mlo_group_info *src_mlo_config,
 	struct cnss_plat_data *plat_priv = NULL;
 	struct cnss_mlo_group_info *mlo_config;
 	struct cnss_mlo_chip_info *chip_info;
+	bool hw_link_id_node = true;
+	struct device *dev = NULL;
 	int num_chip = 0;
 	int link_id = 0;
 	int i, j;
@@ -1702,15 +1758,25 @@ int cnss_set_mlo_group_config(struct cnss_mlo_group_info *src_mlo_config,
 		chip_info->soc_id = i;
 		chip_info->chip_id = mlo_config->chip_info[num_chip].chip_id;
 
+		dev = &plat_priv->plat_dev->dev;
+		memset(chip_info->hw_link_ids, 0,
+				sizeof(chip_info->hw_link_ids));
+		if (of_property_read_u32_array(dev->of_node,
+					"hw_link_id", chip_info->hw_link_ids,
+					ARRAY_SIZE(chip_info->hw_link_ids))) {
+			hw_link_id_node = false;
+		}
 		if (plat_priv->firmware_type == CNSS_FW_DUAL_MAC) {
 			chip_info->num_local_links = 2;
 			for (j = 0; j < CNSS_MAX_LINKS_PER_CHIP; j++) {
-				chip_info->hw_link_ids[j] = link_id++;
+				if (!hw_link_id_node)
+					chip_info->hw_link_ids[j] = link_id++;
 				chip_info->valid_link_ids[j] = 1;
 			}
 		} else {
 			chip_info->num_local_links = 1;
-			chip_info->hw_link_ids[0] = link_id++;
+			if (!hw_link_id_node)
+				chip_info->hw_link_ids[0] = link_id++;
 			chip_info->valid_link_ids[0] = 1;
 			chip_info->valid_link_ids[1] = 0;
 		}
@@ -2060,6 +2126,8 @@ void cnss_set_default_mlo_config(void)
 	int num_chip = 0, i = 0, link_id = 0, group_id = 0;
 	int grp_chip_id[CNSS_MAX_MLO_GROUPS] = {0};
 	int grp_link_id[CNSS_MAX_MLO_GROUPS] = {0};
+	bool hw_link_id_node = true;
+	struct device *dev = NULL;
 	int k = 0;
 
 	if (!enable_mlo_support)
@@ -2097,36 +2165,42 @@ void cnss_set_default_mlo_config(void)
 			/*Temporarily Hard coding group id as 0 */
 			num_chip = grp_chip_id[group_id];
 			link_id = grp_link_id[group_id];
-
 			ch_info = &mlo_group_info[group_id].chip_info[num_chip];
-
 			ch_info->group_id = group_id;
 			ch_info->soc_id = i;
 			ch_info->chip_id = num_chip;
 
+			dev = &plat_priv->plat_dev->dev;
+			memset(ch_info->hw_link_ids, 0,
+					sizeof(ch_info->hw_link_ids));
+			if (of_property_read_u32_array(dev->of_node,
+			    "hw_link_id", ch_info->hw_link_ids,
+			    ARRAY_SIZE(ch_info->hw_link_ids))) {
+				hw_link_id_node = false;
+			}
 			if (plat_priv->firmware_type == CNSS_FW_DUAL_MAC) {
 				ch_info->num_local_links = 2;
 				for (k = 0; k < CNSS_MAX_LINKS_PER_CHIP; k++) {
-					ch_info->hw_link_ids[k] = link_id + k;
+					if (!hw_link_id_node)
+						ch_info->hw_link_ids[k] =
+							link_id + k;
 					ch_info->valid_link_ids[k] = 1;
 				}
 				grp_link_id[group_id] = grp_link_id[group_id] +
 							CNSS_MAX_LINKS_PER_CHIP;
 			} else {
 				ch_info->num_local_links = 1;
-				ch_info->hw_link_ids[0] = link_id;
+				if (!hw_link_id_node)
+					ch_info->hw_link_ids[0] = link_id;
 				ch_info->valid_link_ids[0] = 1;
 				ch_info->valid_link_ids[1] = 0;
 				grp_link_id[group_id] = grp_link_id[group_id] +
 									1;
 			}
-
 			grp_chip_id[group_id] = grp_chip_id[group_id] + 1;
 		}
-
 		mlo_group_info[group_id].num_chips = grp_chip_id[group_id];
 	}
-
 
 	cnss_set_static_mlo_config(&mlo_group_info[0], group_id + 1);
 	cnss_pr_info("Default MLO configuration is set!");
