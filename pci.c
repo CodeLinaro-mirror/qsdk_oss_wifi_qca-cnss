@@ -7086,6 +7086,8 @@ int cnss_pci_probe(struct pci_dev *pci_dev,
 {
 	int ret = 0;
 	u32 val = 0;
+	u8 lcr = 0;
+	bool disable_l1 = false;
 	struct cnss_pci_data *pci_priv;
 	if (!pci_dev) {
 		pr_err("%s: ERROR: PCI device is NULL\n", __func__);
@@ -7096,6 +7098,20 @@ int cnss_pci_probe(struct pci_dev *pci_dev,
 		pr_err("%s +%d plat_priv is NULL\n", __func__, __LINE__);
 		return -EINVAL;
 	}
+
+	disable_l1 = of_property_read_bool(pci_dev->dev.of_node,
+					   "no-l1-supported");
+	if (disable_l1) {
+		/* Disable ASPM bits of Link Control Register(offset 0x10)
+		 * to prevent L1
+		 */
+		pci_read_config_byte(pci_dev, pci_dev->pcie_cap +
+				     PCI_EXP_LNKCTL, &lcr);
+		lcr &= ~PCI_EXP_LNKCTL_ASPMC;
+		pci_write_config_byte(pci_dev, pci_dev->pcie_cap +
+				      PCI_EXP_LNKCTL, lcr);
+	}
+
 
 	cnss_pr_dbg("PCI is probing, vendor ID: 0x%x, device ID: 0x%x\n",
 		    id->vendor, pci_dev->device);
