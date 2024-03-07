@@ -1469,6 +1469,12 @@ static int cnss_pci_set_mhi_state(struct cnss_pci_data *pci_priv,
 	cnss_pr_dbg("Setting MHI state: %s(%d)\n",
 		    cnss_mhi_state_to_str(mhi_state), mhi_state);
 
+	if (mhi_state == CNSS_MHI_SOC_RESET) {
+		cnss_pci_set_mhi_state_bit(pci_priv, mhi_state);
+		mhi_soc_reset(pci_priv->mhi_ctrl);
+		return 0;
+	}
+
 	switch (mhi_state) {
 	case CNSS_MHI_INIT:
 		ret = mhi_prepare_for_power_up(pci_priv->mhi_ctrl);
@@ -1508,9 +1514,6 @@ static int cnss_pci_set_mhi_state(struct cnss_pci_data *pci_priv,
 		ret = mhi_force_rddm_mode(pci_priv->mhi_ctrl);
 		break;
 	case CNSS_MHI_RDDM_DONE:
-		break;
-	case CNSS_MHI_SOC_RESET:
-		mhi_soc_reset(pci_priv->mhi_ctrl);
 		break;
 	default:
 		cnss_pr_err("Unhandled MHI state (%d)\n", mhi_state);
