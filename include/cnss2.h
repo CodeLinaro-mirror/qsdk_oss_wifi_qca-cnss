@@ -539,6 +539,10 @@ static inline int cnss_get_mlo_group_id(struct device *dev)
 {
 	return -EINVAL;
 }
+static inline int cnss_set_wsi_remap(struct device *dev)
+{
+	return -EINVAL;
+}
 static inline void cnss_set_recovery_mode(struct device *dev, u8 recovery_mode)
 {
 	return -EINVAL;
@@ -679,6 +683,7 @@ bool cnss_get_mlo_group_info(uint8_t grp_id,
 int cnss_get_mlo_group_id(struct device *dev);
 void cnss_set_recovery_mode(struct device *dev, u8 recovery_mode);
 void cnss_set_standby_mode(struct device *dev, u8 standby_mode);
+int cnss_set_wsi_remap(struct device *dev);
 void cnss_set_pci_link_speed_width(struct device *dev, u16 link_speed,
 					u16 link_width);
 #endif

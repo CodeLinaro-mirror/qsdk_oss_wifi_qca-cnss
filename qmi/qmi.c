@@ -581,13 +581,12 @@ err:
 
 static void cnss_mlo_config_fill_req(
 				struct cnss_plat_data *plat_priv,
-				struct wlfw_host_mlo_chip_v2_info_s_v01 *v2,
-				int i)
+				struct mlo_chip_v2_info_s_v01 *v2, int i)
 {
 	struct cnss_mlo_chip_info *mlo_chip_info;
 	struct cnss_plat_data *adj_plat_priv = NULL;
 	struct cnss_mlo_chip_info *adj_ch_info;
-	struct wlfw_host_mlo_chip_info_s_v01 *adj_ch;
+	struct mlo_chip_info_s_v01 *adj_ch;
 	int ch_idx = 0, local_links = 0;
 	int j, k;
 
@@ -624,11 +623,114 @@ static void cnss_mlo_config_fill_req(
 	}
 }
 
+int cnss_wlfw_mlo_wsi_remap_send_sync(struct cnss_plat_data *plat_priv)
+{
+	struct wlfw_mlo_reconfig_info_req_msg_v01 *req;
+	struct wlfw_mlo_reconfig_info_resp_msg_v01 *resp;
+	struct mlo_chip_v2_info_s_v01 *v2;
+	struct qmi_txn txn;
+	int ret = 0, i;
+	int resp_error_msg = 0;
+
+	cnss_pr_dbg("Sending MLO Reconfig message, state: 0x%lx\n",
+		    plat_priv->driver_state);
+
+	if (!plat_priv)
+		return -ENODEV;
+
+	req = kzalloc(sizeof(*req), GFP_KERNEL);
+	if (!req)
+		return -ENOMEM;
+
+	resp = kzalloc(sizeof(*resp), GFP_KERNEL);
+	if (!resp) {
+		kfree(req);
+		return -ENOMEM;
+	}
+
+	req->mlo_capable_valid = 1;
+	req->mlo_capable = 1;
+
+	req->mlo_chip_id = plat_priv->mlo_chip_info->chip_id;
+	req->mlo_chip_id_valid = 1;
+
+	req->mlo_group_id = plat_priv->mlo_group_info->group_id;
+	req->mlo_group_id_valid = 1;
+
+	req->max_mlo_peer_valid = 1;
+	req->max_mlo_peer = plat_priv->mlo_group_info->max_num_peers;
+
+	req->mlo_num_chips_valid = 1;
+	req->mlo_num_chips = plat_priv->mlo_group_info->num_chips;
+
+	req->mlo_chip_info_valid = 0;
+	req->mlo_chip_v2_info_valid = 1;
+	for (i = 0; i < req->mlo_num_chips; i++) {
+		v2 = &req->mlo_chip_v2_info[i];
+		cnss_mlo_config_fill_req(plat_priv, v2, i);
+	}
+
+	qmi_record(plat_priv->wlfw_service_instance_id,
+		  (QMI_TYPE_REQ | QMI_WLFW_MLO_RECONFIG_INFO_REQ_V01), ret,
+		  resp_error_msg);
+
+	ret = qmi_txn_init(&plat_priv->qmi_wlfw, &txn,
+			   wlfw_mlo_reconfig_info_resp_msg_v01_ei, resp);
+	if (ret < 0) {
+		cnss_pr_err("Failed to initialize txn for MLO Reconfig request, err: %d\n",
+			    ret);
+		goto out;
+	}
+
+	ret = qmi_send_request(&plat_priv->qmi_wlfw, NULL, &txn,
+			       QMI_WLFW_MLO_RECONFIG_INFO_REQ_V01,
+			       WLFW_MLO_RECONFIG_INFO_REQ_MSG_V01_MAX_MSG_LEN,
+			       wlfw_mlo_reconfig_info_req_msg_v01_ei, req);
+	if (ret < 0) {
+		qmi_txn_cancel(&txn);
+		cnss_pr_err("Failed to send MLO Reconfig request, err: %d\n",
+			    ret);
+		goto out;
+	}
+
+	ret = qmi_txn_wait(&txn, QMI_WLFW_TIMEOUT_JF);
+	if (ret < 0) {
+		resp_error_msg = -QMI_RESULT_FAILURE_V01;
+		cnss_pr_err("Failed to wait for response of MLO Reconfig request, err: %d\n",
+			    ret);
+		goto out;
+	}
+
+	if (resp->resp.result != QMI_RESULT_SUCCESS_V01) {
+		cnss_pr_err("MLO Reconfig request failed, result: %d, err: %d\n",
+			    resp->resp.result, resp->resp.error);
+		ret = -resp->resp.result;
+		resp_error_msg = resp->resp.error;
+		goto out;
+	}
+	qmi_record(plat_priv->wlfw_service_instance_id,
+		  (QMI_TYPE_RESP | QMI_WLFW_MLO_RECONFIG_INFO_RESP_V01), ret,
+		  resp_error_msg);
+
+	kfree(req);
+	kfree(resp);
+	return 0;
+
+out:
+	qmi_record(plat_priv->wlfw_service_instance_id,
+		  (QMI_WLFW_MLO_RECONFIG_INFO_REQ_V01), ret,
+		  resp_error_msg);
+	CNSS_ASSERT(0);
+	kfree(req);
+	kfree(resp);
+	return ret;
+}
+
 static int cnss_wlfw_host_cap_send_sync(struct cnss_plat_data *plat_priv)
 {
 	struct wlfw_host_cap_req_msg_v01 *req;
 	struct wlfw_host_cap_resp_msg_v01 *resp;
-	struct wlfw_host_mlo_chip_v2_info_s_v01 *v2;
+	struct mlo_chip_v2_info_s_v01 *v2;
 	struct qmi_txn txn;
 	int ret = 0, i;
 	int resp_error_msg = 0;
