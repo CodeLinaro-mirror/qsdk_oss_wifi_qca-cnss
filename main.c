@@ -2236,6 +2236,84 @@ void cnss_set_default_mlo_config(void)
 }
 EXPORT_SYMBOL(cnss_set_default_mlo_config);
 
+static int cnss_send_mlo_wsi_remap(struct cnss_plat_data *plat_priv)
+{
+	int ret = 0;
+
+	if (!plat_priv) {
+		cnss_pr_err("%s: plat_priv is NULL!\n", __func__);
+		return -ENODEV;
+	}
+
+	if (!test_bit(CNSS_QMI_WLFW_CONNECTED, &plat_priv->driver_state)) {
+		cnss_pr_err("Invalid state to send QMI message: 0x%lx\n",
+			    plat_priv->driver_state);
+		return -EINVAL;
+	}
+
+	ret = cnss_wlfw_mlo_wsi_remap_send_sync(plat_priv);
+	if (ret) {
+		cnss_pr_err("Dynamic WSI QMI message failed: 0x%lx, ret = %d\n",
+			    plat_priv->driver_state, ret);
+		CNSS_ASSERT(0);
+		return ret;
+	}
+	cnss_pr_dbg("Dynamic WSI remap applied for %s\n",
+		    plat_priv->device_name);
+
+	return 0;
+}
+
+int cnss_set_wsi_remap(struct device *dev)
+{
+	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
+	struct cnss_mlo_chip_info *chip_info;
+	struct cnss_mlo_group_info *group_info;
+	int chip_idx;
+	int ret = 0;
+
+	if (!enable_mlo_support) {
+		cnss_pr_info("%s: MLO is disabled\n", __func__);
+		return -EINVAL;
+	}
+
+	if (!plat_priv) {
+		cnss_pr_err("%s: plat_priv is NULL!\n", __func__);
+		return -ENODEV;
+	}
+
+	if (cnss_is_mlo_default_cfg_enabled(dev))
+		cnss_pr_info("%s: Booted with default MLO config!\n", __func__);
+
+	group_info = plat_priv->mlo_group_info;
+	for (chip_idx = 0; chip_idx < group_info->num_chips; chip_idx++) {
+		chip_info = &group_info->chip_info[chip_idx];
+		plat_priv = cnss_get_plat_priv_by_soc_id(chip_info->soc_id);
+		if (!plat_priv) {
+			cnss_pr_err("%s: Failed to get plat_priv for soc_id: %d\n",
+				    __func__, chip_idx);
+			return -ENODEV;
+		}
+
+		if (!plat_priv->mlo_support || !plat_priv->mlo_capable ||
+		    ((plat_priv->bus_type == CNSS_BUS_PCI) &&
+		    !plat_priv->pci_dev)) {
+			cnss_pr_info("%s: MLO is disabled\n", __func__);
+			continue;
+		}
+
+		ret = cnss_send_mlo_wsi_remap(plat_priv);
+		if (ret) {
+			cnss_pr_err("%s: MLO WSI remap failed, ret = %d\n",
+				    __func__, ret);
+			return ret;
+		}
+	}
+
+	return ret;
+}
+EXPORT_SYMBOL(cnss_set_wsi_remap);
+
 void __cnss_wait_for_fw_ready(struct cnss_plat_data *plat_priv)
 {
 	int count = 0;

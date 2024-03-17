@@ -564,7 +564,7 @@ static u64 cnss_ahb_get_q6_time(struct device *dev)
 		return 0;
 	}
 
-		return cnss_get_host_timestamp(plat_priv);
+	return cnss_get_host_timestamp(plat_priv);
 }
 
 static
