@@ -470,6 +470,10 @@ static inline int cnss_get_num_mlo_capable_devices(unsigned int *device_id,
 {
 	return -EINVAL;
 }
+static inline int cnss_get_max_mlo_chips(struct device *dev)
+{
+	return -EINVAL;
+}
 static inline int cnss_get_dev_link_ids(struct device *dev, u8 *link_ids,
 					int max_elements)
 {
@@ -657,6 +661,7 @@ int cnss_get_mlo_chip_info(struct device *dev,
 			   struct cnss_mlo_chip_info **chip_info);
 int cnss_get_num_mlo_capable_devices(unsigned int *device_id,
 				     int num_elements);
+int cnss_get_max_mlo_chips(struct device *dev);
 int cnss_get_dev_link_ids(struct device *dev, u8 *link_ids, int max_elements);
 int cnss_bus_reg_read(struct device *dev, u32 addr, u32 *val,
 					void __iomem *base);

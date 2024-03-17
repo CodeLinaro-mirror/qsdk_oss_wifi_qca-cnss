@@ -1,5 +1,5 @@
 /* Copyright (c) 2016-2018, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -2010,6 +2010,35 @@ int cnss_get_num_mlo_capable_devices(unsigned int *device_id, int num_elements)
 	return num_capable;
 }
 EXPORT_SYMBOL(cnss_get_num_mlo_capable_devices);
+
+int cnss_get_max_mlo_chips(struct device *dev)
+{
+	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
+	int group_id, max_mlo_chips = 0;
+	struct device_node *mlo;
+
+	if (!enable_mlo_support)
+		return -EINVAL;
+
+	mlo = of_parse_phandle(dev->of_node, "qcom,wsi", 0);
+	if (!mlo) {
+		cnss_pr_err("%s: WSI node is not present\n", __func__);
+		return -EINVAL;
+	}
+
+	if (of_property_read_u32(mlo, "id", &group_id)) {
+		cnss_pr_err("Group ID property is not present\n");
+		return -EINVAL;
+	}
+
+	if (of_property_read_u32(mlo, "num_chip", &max_mlo_chips)) {
+		cnss_pr_err("Max num chip property is not present\n");
+		return -EINVAL;
+	}
+
+	return max_mlo_chips;
+}
+EXPORT_SYMBOL(cnss_get_max_mlo_chips);
 
 int cnss_get_num_mlo_groups(void)
 {
