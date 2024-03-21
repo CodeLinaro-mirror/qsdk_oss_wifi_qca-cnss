@@ -3820,7 +3820,7 @@ static int cnss_mlo_mem_get(struct cnss_plat_data *plat_priv, int group_id,
 }
 
 static int get_mlo_pa(struct cnss_plat_data *plat_priv, int group_id, int idx,
-			unsigned int iova_base)
+			unsigned int iova_base, int flag)
 {
 	struct cnss_fw_mem *fw_mem = plat_priv->fw_mem;
 	struct cnss_pci_data *pci_priv = plat_priv->bus_priv;
@@ -3835,7 +3835,7 @@ static int get_mlo_pa(struct cnss_plat_data *plat_priv, int group_id, int idx,
 	if (mlo_global_mem_phys[group_id] != iova_base) {
 		ret = iommu_map(pci_priv->iommu_domain, iova_base,
 				mlo_global_mem_phys[group_id],
-				fw_mem[idx].size, IOMMU_READ | IOMMU_WRITE);
+				fw_mem[idx].size, flag);
 		if (ret < 0) {
 			cnss_pr_err("Error: MLO memory map failed.\n");
 			return -ENOMEM;
@@ -3860,6 +3860,8 @@ static int cnss_mlo_mem_alloc(struct cnss_plat_data *plat_priv, int index)
 	unsigned int mlo_global_mem_size;
 	int i = index;
 #ifdef CONFIG_TARGET_SDX75
+	int flag = IOMMU_READ | IOMMU_WRITE;
+	bool dma_coherent = false;
 	static unsigned int mlo_iova_base[CNSS_MAX_MLO_GROUPS];
 #endif
 	struct device *dev;
@@ -3892,6 +3894,13 @@ static int cnss_mlo_mem_alloc(struct cnss_plat_data *plat_priv, int index)
 		if (ret)
 			cnss_pr_err("Error(%d): Unable to get MLO iova base\n",
 				    ret);
+		dma_coherent =
+			of_property_read_bool(mlo_global_mem_node,
+						"dma-coherent");
+		cnss_pr_dbg("MLO memory dma-coherent is %s\n",
+				dma_coherent ? "enabled" : "disabled");
+		if (dma_coherent)
+			flag |= IOMMU_CACHE;
 #endif
 
 		of_node_put(mlo_global_mem_node);
@@ -3921,7 +3930,7 @@ static int cnss_mlo_mem_alloc(struct cnss_plat_data *plat_priv, int index)
 		fw_mem[i].va = mlo_global_mem[group_id];
 
 #ifdef CONFIG_TARGET_SDX75
-	ret = get_mlo_pa(plat_priv, group_id, i, mlo_iova_base[group_id]);
+	ret = get_mlo_pa(plat_priv, group_id, i, mlo_iova_base[group_id], flag);
 #else
 	ret = get_mlo_pa(plat_priv, group_id, i);
 #endif
@@ -4174,35 +4183,37 @@ int cnss_pci_alloc_fw_mem(struct cnss_plat_data *plat_priv)
 
 	if (plat_priv->dma_alloc_supported) {
 		for (i = 0; i < plat_priv->fw_mem_seg_len; i++) {
+			if (fw_mem[i].type ==
+					QMI_WLFW_MLO_GLOBAL_MEM_V01 &&
+					fw_mem[i].size) {
+				ret = cnss_mlo_mem_alloc(plat_priv, i);
+				if (ret != 0) {
+					cnss_pr_err("Error(%d): mlo memory alloc failed.\n",
+							ret);
+					return ret;
+				}
+			}
+
 			if (!fw_mem[i].va && fw_mem[i].size) {
-				if ((fw_mem[i].type ==
+				if (((fw_mem[i].type ==
 					CALDB_MEM_REGION_TYPE) &&
-					(!plat_priv->cold_boot_support)) {
+					(!plat_priv->cold_boot_support)) ||
+					(fw_mem[i].type ==
+						QMI_WLFW_MLO_GLOBAL_MEM_V01)) {
 					continue;
 				}
+				fw_mem[i].va =
+					dma_alloc_attrs(&pci_dev->dev,
+							fw_mem[i].size,
+							&fw_mem[i].pa,
+							GFP_KERNEL,
+					    DMA_ATTR_FORCE_CONTIGUOUS);
 
-				if (fw_mem[i].type ==
-					QMI_WLFW_MLO_GLOBAL_MEM_V01) {
-					ret = cnss_mlo_mem_alloc(plat_priv, i);
-					if (ret != 0) {
-						cnss_pr_err("Error(%d): mlo memory alloc failed.\n",
-								ret);
-						return ret;
-					}
-				} else {
-					fw_mem[i].va =
-						dma_alloc_attrs(&pci_dev->dev,
-								fw_mem[i].size,
-								&fw_mem[i].pa,
-								GFP_KERNEL,
-						    DMA_ATTR_FORCE_CONTIGUOUS);
-
-					if (!fw_mem[i].va) {
-						cnss_pr_err("Failed to allocate memory for FW, size: 0x%zx, type: %u\n",
-								fw_mem[i].size,
-								fw_mem[i].type);
-						return -ENOMEM;
-					}
+				if (!fw_mem[i].va) {
+					cnss_pr_err("Failed to allocate memory for FW, size: 0x%zx, type: %u\n",
+							fw_mem[i].size,
+							fw_mem[i].type);
+					return -ENOMEM;
 				}
 			}
 		}
@@ -4965,7 +4976,7 @@ int cnss_smmu_map(struct device *dev,
 {
 #ifdef CONFIG_CNSS2_SMMU
 	struct cnss_pci_data *pci_priv = cnss_get_pci_priv(to_pci_dev(dev));
-	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
+	struct cnss_plat_data *plat_priv;
 	unsigned long iova;
 	int flag = IOMMU_READ | IOMMU_WRITE;
 	struct pci_dev *root_port;
@@ -4977,6 +4988,7 @@ int cnss_smmu_map(struct device *dev,
 	if (!pci_priv)
 		return -ENODEV;
 
+	plat_priv = pci_priv->plat_priv;
 	if (!iova_addr) {
 		cnss_pr_err("iova_addr is NULL, paddr %pa, size %zu\n",
 			    &paddr, size);
@@ -5033,7 +5045,7 @@ int cnss_smmu_unmap(struct device *dev, uint32_t iova_addr, size_t size)
 {
 #ifdef CONFIG_CNSS2_SMMU
 	struct cnss_pci_data *pci_priv = cnss_get_pci_priv(to_pci_dev(dev));
-	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
+	struct cnss_plat_data *plat_priv;
 	unsigned long iova;
 	size_t unmapped;
 	size_t len;
@@ -5041,6 +5053,7 @@ int cnss_smmu_unmap(struct device *dev, uint32_t iova_addr, size_t size)
 	if (!pci_priv)
 		return -ENODEV;
 
+	plat_priv = pci_priv->plat_priv;
 	iova = rounddown(iova_addr, PAGE_SIZE);
 	len = roundup(size + iova_addr - iova, PAGE_SIZE);
 
@@ -5657,11 +5670,6 @@ int cnss_get_user_msi_assignment(struct device *dev, char *user_name,
 	    plat_priv->device_id == QCN9160_DEVICE_ID) {
 #ifdef CONFIG_CNSS2_QGIC2M
 		msi_config = cnss_get_msi_config(plat_priv);
-		if (!msi_config) {
-			cnss_pr_err("msi_config NULL");
-			return -EINVAL;
-		}
-
 		qgic2_msi = plat_priv->tgt_data.qgic2_msi;
 
 		if (!qgic2_msi) {
@@ -5679,11 +5687,12 @@ int cnss_get_user_msi_assignment(struct device *dev, char *user_name,
 		}
 
 		msi_config = pci_priv->msi_config;
-		if (!msi_config) {
-			cnss_pr_err("MSI is not supported.\n");
-			return -EINVAL;
-		}
 		msi_ep_base_data = pci_priv->msi_ep_base_data;
+	}
+
+	if (!msi_config) {
+		cnss_pr_err("msi_config NULL");
+		return -EINVAL;
 	}
 
 	for (idx = 0; idx < msi_config->total_users; idx++) {
