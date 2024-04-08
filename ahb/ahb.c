@@ -523,8 +523,14 @@ static int cnss_ahb_reg_read(struct device *dev, u32 addr, u32 *val,
 		return -ENODEV;
 	}
 
-	if (plat_priv->device_id == QCN6432_DEVICE_ID)
+	if (plat_priv->device_id == QCN6432_DEVICE_ID) {
+		if (base) {
+			*val = readl_relaxed(base);
+			return 0;
+		}
 		return cnss_pci_remote_reg_read(plat_priv, addr, val);
+	}
+
 	if (base)
 		*val = readl_relaxed(addr + base);
 	else
@@ -543,8 +549,14 @@ static int cnss_ahb_reg_write(struct device *dev, u32 addr, u32 val,
 		return -ENODEV;
 	}
 
-	if (plat_priv->device_id == QCN6432_DEVICE_ID)
+	if (plat_priv->device_id == QCN6432_DEVICE_ID) {
+		if (base) {
+			writel_relaxed(val, base);
+			return 0;
+		}
 		return cnss_pci_remote_reg_write(plat_priv, addr, val);
+	}
+
 	writel_relaxed(val, addr + base);
 	return 0;
 }
