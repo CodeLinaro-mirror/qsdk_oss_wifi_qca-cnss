@@ -355,7 +355,8 @@ static int cnss_ahb_alloc_qdss_mem(struct cnss_plat_data *plat_priv)
 		if (plat_priv->device_id == QCN6122_DEVICE_ID ||
 		    plat_priv->device_id == QCN9160_DEVICE_ID ||
 		    plat_priv->device_id == QCA5332_DEVICE_ID ||
-		    plat_priv->device_id == QCN6432_DEVICE_ID) {
+		    plat_priv->device_id == QCN6432_DEVICE_ID ||
+		    plat_priv->device_id == QCA5424_DEVICE_ID) {
 			plat_priv->qdss_mem[i].va =
 				ioremap(plat_priv->qdss_mem[i].pa,
 					plat_priv->qdss_mem[i].size);
