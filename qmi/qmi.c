@@ -1198,8 +1198,8 @@ static int cnss_wlfw_load_bdf(struct wlfw_bdf_download_req_msg_v01 *req,
 	char filename[30];
 	const struct firmware *fw;
 	char *bdf_addr;
-	unsigned int bdf_addr_pa, location[MAX_TGT_MEM_MODES];
-	int size;
+	unsigned int bdf_addr_pa, *location = NULL;
+	int size, bdf_arr_size;
 	struct device *dev;
 
 	dev = &plat_priv->plat_dev->dev;
@@ -1263,14 +1263,25 @@ static int cnss_wlfw_load_bdf(struct wlfw_bdf_download_req_msg_v01 *req,
 		return ret;
 	}
 	size = fw->size;
+
+	bdf_arr_size = of_property_count_elems_of_size(dev->of_node,
+						"qcom,bdf-addr",
+						sizeof(u32));
+	location = kcalloc(bdf_arr_size, sizeof(unsigned int), GFP_KERNEL);
+	if (!location) {
+		cnss_pr_err("Error: Cannot allocate location arr memory\n");
+		return -ENOMEM;
+	}
+
 	if (of_property_read_u32_array(dev->of_node, "qcom,bdf-addr", location,
-				       ARRAY_SIZE(location))) {
+				       bdf_arr_size)) {
 		pr_err("Error: No bdf_addr in device_tree\n");
+		kfree(location);
 		CNSS_ASSERT(0);
 		goto out;
 	}
-	CNSS_ASSERT(plat_priv->tgt_mem_cfg_mode < ARRAY_SIZE(location));
-	bdf_addr_pa = location[plat_priv->tgt_mem_cfg_mode];
+	CNSS_ASSERT(plat_priv->tgt_mem_cfg_mode < bdf_arr_size);
+	bdf_addr_pa = *(location + plat_priv->tgt_mem_cfg_mode);
 	bdf_addr = ioremap(bdf_addr_pa, BDF_MAX_SIZE);
 	if (!bdf_addr) {
 		cnss_pr_err("ERROR. not able to ioremap BDF location\n");
@@ -1311,6 +1322,8 @@ static int cnss_wlfw_load_bdf(struct wlfw_bdf_download_req_msg_v01 *req,
 out:
 	if (fw)
 		release_firmware(fw);
+	if (location)
+		kfree(location);
 	return ret;
 }
 
