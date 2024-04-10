@@ -4108,35 +4108,6 @@ static void cnss_pci_disable_msi(struct cnss_pci_data *pci_priv)
 	pci_free_irq_vectors(pci_priv->pci_dev);
 }
 
-int cnss_get_pci_slot(struct device *dev)
-{
-	struct cnss_plat_data *plat_priv =
-		cnss_bus_dev_to_plat_priv(dev);
-	uint32_t pci_slot_id = 0;
-
-	if (!plat_priv)
-		return -ENODEV;
-
-	switch (plat_priv->device_id) {
-	case QCN9000_DEVICE_ID:
-		return plat_priv->qrtr_node_id - QCN9000_0;
-	case QCN9224_DEVICE_ID:
-		return plat_priv->qrtr_node_id - QCN9224_0;
-	case QCN6122_DEVICE_ID:
-	case QCN9160_DEVICE_ID:
-		return plat_priv->userpd_id - USERPD_0;
-	case QCN6432_DEVICE_ID:
-		of_property_read_u32(dev->of_node, "qcom,pci_slot_id",
-					&pci_slot_id);
-		return pci_slot_id;
-default:
-		cnss_pr_info("PCI slot is 0 for target 0x%lx",
-			     plat_priv->device_id);
-		return 0;
-	}
-}
-EXPORT_SYMBOL(cnss_get_pci_slot);
-
 static unsigned int cnss_pci_get_wake_msi(struct cnss_pci_data *pci_priv)
 {
 	int ret, num_vectors;

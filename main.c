@@ -6847,11 +6847,11 @@ static int cnss_set_device_name(struct cnss_plat_data *plat_priv)
 		break;
 	case QCN6122_DEVICE_ID:
 		snprintf(plat_priv->device_name, sizeof(plat_priv->device_name),
-			 "QCN6122_%d", plat_priv->userpd_id);
+			 "QCN6122_PCI%d", plat_priv->pci_slot_id);
 		break;
 	case QCN9160_DEVICE_ID:
 		snprintf(plat_priv->device_name, sizeof(plat_priv->device_name),
-			 "QCN9160_%d", plat_priv->userpd_id);
+			 "QCN9160_PCI%d", plat_priv->pci_slot_id);
 		break;
 	case QCA9574_DEVICE_ID:
 		snprintf(plat_priv->device_name, sizeof(plat_priv->device_name),
@@ -6863,7 +6863,7 @@ static int cnss_set_device_name(struct cnss_plat_data *plat_priv)
 		break;
 	case QCN6432_DEVICE_ID:
 	snprintf(plat_priv->device_name, sizeof(plat_priv->device_name),
-		"QCN6432_%d", plat_priv->userpd_id);
+		"QCN6432_PCI%d", plat_priv->pci_slot_id);
 		break;
 	case QCA5424_DEVICE_ID:
 		snprintf(plat_priv->device_name, sizeof(plat_priv->device_name),
@@ -6961,90 +6961,53 @@ static int platform_get_userpd_id(struct platform_device *plat_dev,
 
 static bool
 cnss_check_skip_target_probe(const struct platform_device_id *device_id,
-			     u32 userpd_id, u32 node_id)
+			     s32 pci_slot_id)
 {
+	int bus_type;
+	bool skip_radio = false;
+
+	bus_type = cnss_get_bus_type(device_id->driver_data);
 	/* skip_cnss based skip target checks */
-	if (skip_cnss == CNSS_SKIP_ALL) {
-		pr_err("Skipping cnss_probe for device 0x%lx\n",
-		       device_id->driver_data);
-		return true;
-	} else if (skip_cnss == CNSS_SKIP_PCI &&
-		   (device_id->driver_data == QCN9000_DEVICE_ID ||
-		    device_id->driver_data == QCN9224_DEVICE_ID)) {
-		pr_err("Skipping cnss_probe for device 0x%lx\n",
-		       device_id->driver_data);
-		return true;
-	} else if (skip_cnss == CNSS_SKIP_AHB &&
-		   (device_id->driver_data == QCA8074_DEVICE_ID ||
-		   device_id->driver_data == QCA8074V2_DEVICE_ID ||
-		   device_id->driver_data == QCA6018_DEVICE_ID ||
-		   device_id->driver_data == QCN6122_DEVICE_ID ||
-		   device_id->driver_data == QCN9160_DEVICE_ID ||
-		   device_id->driver_data == QCA5018_DEVICE_ID ||
-		   device_id->driver_data == QCA5332_DEVICE_ID ||
-		   device_id->driver_data == QCA9574_DEVICE_ID ||
-		   device_id->driver_data == QCN6432_DEVICE_ID ||
-		   device_id->driver_data == QCA5424_DEVICE_ID)) {
-		pr_err("Skipping cnss_probe for device 0x%lx\n",
-		       device_id->driver_data);
-		return true;
+	if (!skip_radio_bmap) {
+		if ((skip_cnss == CNSS_SKIP_ALL) ||
+		    (skip_cnss == CNSS_SKIP_PCI && bus_type == CNSS_BUS_PCI) ||
+		    (skip_cnss == CNSS_SKIP_AHB && bus_type == CNSS_BUS_AHB)) {
+			pr_err("Skipping cnss_probe for device 0x%lx\n",
+			       device_id->driver_data);
+			return true;
+		}
 	}
 
 	/* skip_radio_bmap based skip target checks
 	 * SKIP_INTEGRATED - skip integrated radios ie. 5018,8074,8074v2,6018
 	 * SKIP_PCI_0 - skip PCI_0 radios ie. first qcn9000/qcn6122 radios
-	 * SKIP_PCI_1 - skip PCI_1 radios ie. second qcn9000/qcn6122 radios
+	 * SKIP_PCI_1 - skip PCI_1 radios ie. second qcn9000/qcn6122 radios.
+	 * pci_slot_id for AHB integrated radio is -1 since its not connected
+	 * in PCI slot. So adding 1 to the pci_slot_id gives the actual bit
+	 * position in skip_radio_bmap.
 	 */
-	if ((skip_radio_bmap & SKIP_INTEGRATED) &&
-	    ((device_id->driver_data == QCA5018_DEVICE_ID) ||
-	    (device_id->driver_data == QCA8074_DEVICE_ID) ||
-	    (device_id->driver_data == QCA8074V2_DEVICE_ID) ||
-	    (device_id->driver_data == QCA6018_DEVICE_ID) ||
-	    (device_id->driver_data == QCA5332_DEVICE_ID) ||
-	    (device_id->driver_data == QCA9574_DEVICE_ID) ||
-	    (device_id->driver_data == QCA5424_DEVICE_ID))) {
-		pr_err("Skipping cnss_probe for device 0x%lx\n",
-		       device_id->driver_data);
-		return true;
-	} else if ((skip_radio_bmap & SKIP_PCI_0) &&
-		   (((userpd_id == USERPD_0) &&
-		   ((device_id->driver_data == QCN6122_DEVICE_ID) ||
-  		   (device_id->driver_data == QCN9160_DEVICE_ID) ||
-		   (device_id->driver_data == QCN6432_DEVICE_ID))) ||
-		   ((node_id == QCN9000_0 || node_id == QCN9224_0) &&
-		   (device_id->driver_data == QCN9000_DEVICE_ID ||
-		    device_id->driver_data == QCN9224_DEVICE_ID)))) {
-		pr_err("Skipping cnss_probe for PCI_0 device 0x%lx\n",
-		       device_id->driver_data);
-		return true;
-	} else if ((skip_radio_bmap & SKIP_PCI_1) &&
-		   (((userpd_id == USERPD_1) &&
-		   ((device_id->driver_data == QCN6122_DEVICE_ID) ||
-		   (device_id->driver_data == QCN9160_DEVICE_ID) ||
-                   (device_id->driver_data == QCN6432_DEVICE_ID))) ||
-		   ((node_id == QCN9000_1 || node_id == QCN9224_1) &&
-		   (device_id->driver_data == QCN9000_DEVICE_ID ||
-		    device_id->driver_data == QCN9224_DEVICE_ID)))) {
-		pr_err("Skipping cnss_probe for PCI_1 device 0x%lx\n",
-		       device_id->driver_data);
-		return true;
-	} else if ((skip_radio_bmap & SKIP_PCI_2) &&
-		   ((node_id == QCN9000_2 || node_id == QCN9224_2) &&
-		   (device_id->driver_data == QCN9000_DEVICE_ID ||
-		    device_id->driver_data == QCN9224_DEVICE_ID))) {
-		pr_err("Skipping cnss_probe for PCI_2 device 0x%lx\n",
-		       device_id->driver_data);
-		return true;
-	} else if ((skip_radio_bmap & SKIP_PCI_3) &&
-		   ((node_id == QCN9000_3 || node_id == QCN9224_3) &&
-		   (device_id->driver_data == QCN9000_DEVICE_ID ||
-		    device_id->driver_data == QCN9224_DEVICE_ID))) {
-		pr_err("Skipping cnss_probe for PCI_3 device 0x%lx\n",
-		       device_id->driver_data);
-		return true;
-	}
+	if (skip_radio_bmap & (1 << (pci_slot_id + 1)))
+		skip_radio = true;
+	if (skip_radio == true) {
+		if (!skip_cnss) {
+			pr_err("Skipping cnss_probe for device 0x%lx\n",
+			       device_id->driver_data);
+			skip_radio = true;
+		} else {
+			if ((skip_cnss == CNSS_SKIP_AHB &&
+			    bus_type == CNSS_BUS_AHB) ||
+			    (skip_cnss == CNSS_SKIP_PCI &&
+			    bus_type == CNSS_BUS_PCI)) {
+				pr_err("Skipping cnss_probe for device 0x%lx\n",
+				       device_id->driver_data);
+				skip_radio = true;
+			} else
+				skip_radio = false;
+		}
+	} else
+		skip_radio = false;
 
-	return false;
+	return skip_radio;
 }
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
@@ -7247,13 +7210,13 @@ static void cnss_set_board_id(struct cnss_plat_data *plat_priv)
 		board_info->num_bytes = 1;
 		board_id_str = "qcom,board_id";
 		board_info->board_id_override =
-			cnss_get_bdf_mod_param(plat_priv->userpd_id - 1);
+			cnss_get_bdf_mod_param(plat_priv->pci_slot_id);
 		break;
 	case QCN6432_DEVICE_ID:
 		board_info->num_bytes = 2;
 		board_id_str = "qcom,board_id";
 		board_info->board_id_override =
-			cnss_get_bdf_mod_param(plat_priv->userpd_id - 1);
+			cnss_get_bdf_mod_param(plat_priv->pci_slot_id);
 		break;
 	case QCN9000_DEVICE_ID:
 		board_id_str = "board_id";
@@ -7338,6 +7301,42 @@ int cnss_set_fw_type_and_name(struct cnss_plat_data *plat_priv)
 	return 0;
 }
 
+static int cnss_update_pci_slot(const struct platform_device_id *device_id,
+				struct platform_device *plat_dev,
+				s32 userpd_id, u32 node_id)
+{
+	int pci_slot_id = -1;
+
+	switch (device_id->driver_data) {
+	case QCN9000_DEVICE_ID:
+		pci_slot_id = node_id - QCN9000_0;
+		break;
+	case QCN9224_DEVICE_ID:
+		pci_slot_id = node_id - QCN9224_0;
+		break;
+	case QCN6122_DEVICE_ID:
+		pci_slot_id = userpd_id - USERPD_0;
+		break;
+	case QCN9160_DEVICE_ID:
+		if (of_property_read_u32(plat_dev->dev.of_node,
+					"qcom,pci_slot_id",
+					&pci_slot_id))
+			pci_slot_id = userpd_id - USERPD_0;
+		break;
+	case QCN6432_DEVICE_ID:
+		if (of_property_read_u32(plat_dev->dev.of_node,
+					"qcom,pci_slot_id",
+					&pci_slot_id)) {
+			pr_err("pci_slot_id not available in the DTS for %lx\n",
+				device_id->driver_data);
+		}
+		break;
+	default:
+		break;
+	}
+	return pci_slot_id;
+}
+
 static int cnss_probe(struct platform_device *plat_dev)
 {
 	int ret = 0;
@@ -7345,6 +7344,7 @@ static int cnss_probe(struct platform_device *plat_dev)
 	const struct of_device_id *of_id;
 	const struct platform_device_id *device_id;
 	u32 node_id = 0, userpd_id = 0, node_id_base;
+	int pci_slot_id = -1;
 	unsigned long flags;
 #ifdef CONFIG_CNSS2_KERNEL_IPQ
 	const int *soc_version;
@@ -7379,6 +7379,11 @@ static int cnss_probe(struct platform_device *plat_dev)
 				     &node_id))
 			goto out;
 
+	pci_slot_id = cnss_update_pci_slot(device_id, plat_dev,
+					   userpd_id, node_id);
+
+	cnss_pr_dbg("Target 0x%lx PCI slot id is %d\n", device_id->driver_data,
+							pci_slot_id);
 #ifdef CONFIG_QCOM_SOCINFO
 #ifdef CONFIG_CNSS2_KERNEL_IPQ
 	/* Check for QCA9574 here and skip probe accordingly */
@@ -7391,7 +7396,7 @@ static int cnss_probe(struct platform_device *plat_dev)
 	}
 #endif
 #endif
-	if (cnss_check_skip_target_probe(device_id, userpd_id, node_id))
+	if (cnss_check_skip_target_probe(device_id, pci_slot_id))
 		goto out;
 
 #ifdef CONFIG_CNSS_QCN9000
@@ -7456,6 +7461,7 @@ static int cnss_probe(struct platform_device *plat_dev)
 	plat_priv->plat_dev_id = (struct platform_device_id *)device_id;
 	plat_priv->service_id = WLFW_SERVICE_ID_V01;
 	plat_priv->wsi_remap_state = false;
+	plat_priv->pci_slot_id = pci_slot_id;
 
 #ifdef CONFIG_CNSS2_DMA_ALLOC
 	plat_priv->dma_alloc_supported = true;

@@ -1157,4 +1157,14 @@ void cnss_debugfs_destroy(struct cnss_plat_data *plat_priv)
 	plat_priv->root_dentry = NULL;
 }
 
+int cnss_get_pci_slot(struct device *dev)
+{
+	struct cnss_plat_data *plat_priv =
+		cnss_bus_dev_to_plat_priv(dev);
 
+	if (!plat_priv)
+		return -ENODEV;
+
+	return plat_priv->pci_slot_id;
+}
+EXPORT_SYMBOL(cnss_get_pci_slot);
