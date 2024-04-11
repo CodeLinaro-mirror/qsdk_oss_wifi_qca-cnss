@@ -4835,9 +4835,6 @@ int cnss_pci_force_fw_assert_hdlr(struct cnss_pci_data *pci_priv)
 	if (!plat_priv)
 		return -ENODEV;
 
-	cnss_fatal_err("Triggering CNSS_ASSERT\n");
-	CNSS_ASSERT(0);
-
 	cnss_auto_resume(&pci_priv->pci_dev->dev);
 	cnss_pci_dump_shadow_reg(pci_priv);
 
@@ -4877,9 +4874,16 @@ static int cnss_pci_smmu_fault_handler(struct iommu_domain *domain,
 				       int flags, void *handler_token)
 {
 	struct cnss_pci_data *pci_priv = handler_token;
-	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
+	struct cnss_plat_data *plat_priv;
+
+	if (!pci_priv)
+		return -ENODEV;
+
+	plat_priv = pci_priv->plat_priv;
 
 	cnss_pr_err("SMMU fault happened with IOVA 0x%lx\n", iova);
+
+	cnss_force_fw_assert(&pci_priv->pci_dev->dev);
 
 	/* IOMMU driver requires non-zero return value to print debug info. */
 	return -EINVAL;
@@ -7076,12 +7080,42 @@ int cnss_pci_of_reserved_mem_device_init(struct cnss_plat_data *plat_priv)
 }
 #endif
 
+void cnss_pci_bw_scaling(struct pci_dev *pci_dev, u16 link_speed,
+			 struct cnss_plat_data *plat_priv)
+{
+	u8 reg = 0;
+	struct pci_dev *p_dev = pci_upstream_bridge(pci_dev);
+
+	if (!p_dev) {
+		cnss_pr_err("upstream dev is unavailable");
+		return;
+	}
+
+	cnss_pr_info("pci dev: %04x:%02x:%02x.%d\n",
+		pci_domain_nr(p_dev->bus), p_dev->bus->number,
+		PCI_SLOT(p_dev->devfn),
+		PCI_FUNC(p_dev->devfn));
+
+	pci_read_config_byte(p_dev, p_dev->pcie_cap + PCI_EXP_LNKCTL2, &reg);
+	reg &= ~PCI_EXP_LNKCTL2_TLS;
+	reg |= link_speed;
+	pci_write_config_byte(p_dev, p_dev->pcie_cap + PCI_EXP_LNKCTL2, reg);
+
+	/* link retrain */
+	pci_read_config_byte(p_dev, p_dev->pcie_cap + PCI_EXP_LNKCTL, &reg);
+	reg |= PCI_EXP_LNKCTL_RL;
+	pci_write_config_byte(p_dev, p_dev->pcie_cap + PCI_EXP_LNKCTL, reg);
+}
+
 int cnss_pci_probe(struct pci_dev *pci_dev,
 		   const struct pci_device_id *id,
 		   struct cnss_plat_data *plat_priv)
 {
 	int ret = 0;
 	u32 val = 0;
+	u8 lcr = 0;
+	bool disable_l1 = false;
+	bool is_gen2 = false;
 	struct cnss_pci_data *pci_priv;
 	if (!pci_dev) {
 		pr_err("%s: ERROR: PCI device is NULL\n", __func__);
@@ -7093,8 +7127,30 @@ int cnss_pci_probe(struct pci_dev *pci_dev,
 		return -EINVAL;
 	}
 
+	disable_l1 = of_property_read_bool(pci_dev->dev.of_node,
+					   "no-l1-supported");
+	if (disable_l1) {
+		/* Disable ASPM bits of Link Control Register(offset 0x10)
+		 * to prevent L1
+		 */
+		pci_read_config_byte(pci_dev, pci_dev->pcie_cap +
+				     PCI_EXP_LNKCTL, &lcr);
+		lcr &= ~PCI_EXP_LNKCTL_ASPMC;
+		pci_write_config_byte(pci_dev, pci_dev->pcie_cap +
+				      PCI_EXP_LNKCTL, lcr);
+	}
+
+
 	cnss_pr_dbg("PCI is probing, vendor ID: 0x%x, device ID: 0x%x\n",
 		    id->vendor, pci_dev->device);
+
+	is_gen2 = of_property_read_bool(pci_dev->dev.of_node, "link-dg-gen2");
+	if (is_gen2)
+		/* There is AER crash issue with some specific platform, need to
+		 * downgrade to Gen2 to avoid it
+		 */
+		cnss_pci_bw_scaling(pci_dev, PCI_EXP_LNKCTL2_TLS_5_0GT,
+				    plat_priv);
 
 	if (!plat_priv->bus_priv) {
 		pci_priv = devm_kzalloc(&pci_dev->dev, sizeof(*pci_priv),
