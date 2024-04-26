@@ -544,7 +544,7 @@ static int cnss_mlo_mem_get(struct cnss_plat_data *plat_priv, int group_id,
 }
 
 static int get_mlo_pa(struct cnss_plat_data *plat_priv, int group_id, int idx,
-			unsigned int iova_base)
+			unsigned int iova_base, int flag)
 {
 	struct cnss_fw_mem *fw_mem = plat_priv->fw_mem;
 	struct cnss_pci_data *pci_priv = plat_priv->bus_priv;
@@ -559,7 +559,7 @@ static int get_mlo_pa(struct cnss_plat_data *plat_priv, int group_id, int idx,
 	if (mlo_global_mem_phys[group_id] != iova_base) {
 		ret = iommu_map(pci_priv->iommu_domain, iova_base,
 				mlo_global_mem_phys[group_id],
-				fw_mem[idx].size, IOMMU_READ | IOMMU_WRITE);
+				fw_mem[idx].size, flag);
 		if (ret < 0) {
 			cnss_pr_err("Error: MLO memory map failed.\n");
 			return -ENOMEM;
@@ -584,6 +584,8 @@ int cnss_mlo_mem_alloc(struct cnss_plat_data *plat_priv, int index)
 	int i = index;
 	struct device *dev;
 #ifdef CONFIG_TARGET_SDX75
+	int flag = IOMMU_READ | IOMMU_WRITE;
+	bool dma_coherent = false;
 	static unsigned int mlo_iova_base[CNSS_MAX_MLO_GROUPS];
 #endif
 
@@ -615,6 +617,13 @@ int cnss_mlo_mem_alloc(struct cnss_plat_data *plat_priv, int index)
 		if (ret)
 			cnss_pr_err("Error(%d): Unable to get MLO iova base\n",
 				    ret);
+		dma_coherent =
+			of_property_read_bool(mlo_global_mem_node,
+						"dma-coherent");
+		cnss_pr_dbg("MLO memory dma-coherent is %s\n",
+				dma_coherent ? "enabled" : "disabled");
+		if (dma_coherent)
+			flag |= IOMMU_CACHE;
 #endif
 
 		of_node_put(mlo_global_mem_node);
@@ -645,7 +654,7 @@ int cnss_mlo_mem_alloc(struct cnss_plat_data *plat_priv, int index)
 		fw_mem[i].va = mlo_global_mem[group_id];
 
 #ifdef CONFIG_TARGET_SDX75
-	ret = get_mlo_pa(plat_priv, group_id, i, mlo_iova_base[group_id]);
+	ret = get_mlo_pa(plat_priv, group_id, i, mlo_iova_base[group_id], flag);
 #else
 	ret = get_mlo_pa(plat_priv, group_id, i);
 #endif
