@@ -629,7 +629,9 @@ static void cnss_pci_select_window(struct cnss_pci_data *pci_priv, u32 addr)
 					 QCN9000_PCIE_REMAP_BAR_CTRL_OFFSET);
 		retry++;
 	}
-	cnss_pr_dbg("%s: retry count: %d", __func__, retry);
+
+	if ((retry >= 10) && (read_val != write_val))
+		cnss_pr_dbg("%s: retry count: %d", __func__, retry);
 }
 
 static int cnss_get_mhi_region_len(struct cnss_plat_data *plat_priv,
