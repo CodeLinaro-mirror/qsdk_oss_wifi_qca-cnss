@@ -3797,7 +3797,7 @@ int cnss_smmu_map(struct device *dev,
 {
 #ifdef CONFIG_CNSS2_SMMU
 	struct cnss_pci_data *pci_priv = cnss_get_pci_priv(to_pci_dev(dev));
-	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
+	struct cnss_plat_data *plat_priv;
 	unsigned long iova;
 	int flag = IOMMU_READ | IOMMU_WRITE;
 	struct pci_dev *root_port;
@@ -3809,6 +3809,7 @@ int cnss_smmu_map(struct device *dev,
 	if (!pci_priv)
 		return -ENODEV;
 
+	plat_priv = pci_priv->plat_priv;
 	if (!iova_addr) {
 		cnss_pr_err("iova_addr is NULL, paddr %pa, size %zu\n",
 			    &paddr, size);
@@ -3865,7 +3866,7 @@ int cnss_smmu_unmap(struct device *dev, uint32_t iova_addr, size_t size)
 {
 #ifdef CONFIG_CNSS2_SMMU
 	struct cnss_pci_data *pci_priv = cnss_get_pci_priv(to_pci_dev(dev));
-	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
+	struct cnss_plat_data *plat_priv;
 	unsigned long iova;
 	size_t unmapped;
 	size_t len;
@@ -3873,6 +3874,7 @@ int cnss_smmu_unmap(struct device *dev, uint32_t iova_addr, size_t size)
 	if (!pci_priv)
 		return -ENODEV;
 
+	plat_priv = pci_priv->plat_priv;
 	iova = rounddown(iova_addr, PAGE_SIZE);
 	len = roundup(size + iova_addr - iova, PAGE_SIZE);
 
