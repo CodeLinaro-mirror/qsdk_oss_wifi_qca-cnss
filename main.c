@@ -97,10 +97,11 @@
 #define CNSS_INTX_SUPPORT_MASK          0xF
 #define CNSS_INTX_SUPPORT_SHIFT         4
 
-#define MAX_NUMBER_OF_SOCS 5
-#define CNSS_PROBE_ORDER_MASK 0xF
-#define CNSS_PROBE_ORDER_DEFAULT 0xFF
-#define CNSS_PROBE_ORDER_SHIFT 4
+#define MAX_NUMBER_OF_SOCS		5
+#define CNSS_PROBE_ORDER_MASK		0xF
+#define CNSS_PROBE_ORDER_DEFAULT	0xFF
+#define CNSS_DEFAULT_MLO_CHIP_BITMASK	0xFF
+#define CNSS_PROBE_ORDER_SHIFT		4
 #ifdef CONFIG_CNSS2_KERNEL_5_15
 #define POWER_ON_RETRY_MAX_TIMES        4
 #define POWER_ON_RETRY_DELAY_MS         500
@@ -223,8 +224,7 @@ static unsigned int enable_mlo_support = 1;
 module_param(enable_mlo_support, uint, 0600);
 MODULE_PARM_DESC(enable_mlo_support, "enable_mlo_support");
 
-/* Temporary bootarg till driver ini changes are ready */
-static unsigned int mlo_chip_bitmask = 0xFF;
+static unsigned int mlo_chip_bitmask = CNSS_DEFAULT_MLO_CHIP_BITMASK;
 module_param(mlo_chip_bitmask, uint, 0600);
 MODULE_PARM_DESC(mlo_chip_bitmask, "mlo_chip_bitmask");
 
@@ -1837,6 +1837,13 @@ int cnss_set_mlo_config(struct cnss_module_param *modparam,
 
 	if (!enable_mlo_support) {
 		cnss_pr_info("%s: MLO is disabled\n", __func__);
+		return 0;
+	}
+
+	if (skip_radio_bmap || skip_cnss ||
+	    (mlo_chip_bitmask != CNSS_DEFAULT_MLO_CHIP_BITMASK)) {
+		cnss_pr_info("Skip radio is set, proceeding default MLO config.\n");
+		cnss_set_default_mlo_config();
 		return 0;
 	}
 
