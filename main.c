@@ -428,6 +428,19 @@ void cnss_set_recovery_mode(struct device *dev, u8 recovery_mode)
 }
 EXPORT_SYMBOL(cnss_set_recovery_mode);
 
+void cnss_set_wsi_remap_state(struct device *dev, bool state)
+{
+	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
+
+	if (!plat_priv)
+		return;
+
+	cnss_pr_dbg("WSI remap state: %d\n", state);
+	plat_priv->wsi_remap_state = state;
+
+}
+EXPORT_SYMBOL(cnss_set_wsi_remap_state);
+
 void cnss_set_standby_mode(struct device *dev, u8 standby_mode)
 {
 	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);

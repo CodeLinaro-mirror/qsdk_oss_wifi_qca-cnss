@@ -198,6 +198,7 @@ static struct qmi_msg_string qmi_str_table[] = {
 	{ "INI_DNLD_", QMI_WLFW_INI_FILE_DOWNLOAD_REQ_V01 },
 	{ "QDSS_FREE_", QMI_WLFW_QDSS_TRACE_FREE_IND_V01 },
 	{ "QDSS_MEM_RDY_", QMI_WLFW_QDSS_MEM_READY_IND_V01 },
+	{ "MLO_WSI_REMAP_", QMI_WLFW_MLO_RECONFIG_INFO_REQ_V01 },
 	{ "UNKNOWN_", 0 },
 };
 

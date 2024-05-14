@@ -696,7 +696,7 @@ static bool cnss_get_mlo_group_master_chip(struct cnss_plat_data *plat_priv)
 void cnss_do_mlo_global_memset(struct cnss_plat_data *plat_priv, u64 mem_size)
 {
 	if ((plat_priv->recovery_mode == MODE_1_RECOVERY_MODE) ||
-	    (plat_priv->standby_mode) ||
+	    (plat_priv->standby_mode) || (plat_priv->wsi_remap_state) ||
 	    (test_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state)))
 		return;
 

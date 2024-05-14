@@ -555,6 +555,9 @@ static inline void cnss_set_standby_mode(struct device *dev, u8 standby_mode)
 {
 	return -EINVAL;
 }
+static inline void cnss_set_wsi_remap_state(struct device *dev, bool state)
+{
+}
 static inline void cnss_set_pci_link_speed_width(struct device *dev,
 						u16 link_speed, u16 link_width);
 {
@@ -689,6 +692,7 @@ int cnss_get_mlo_group_id(struct device *dev);
 void cnss_set_recovery_mode(struct device *dev, u8 recovery_mode);
 void cnss_set_standby_mode(struct device *dev, u8 standby_mode);
 int cnss_set_wsi_remap(struct device *dev);
+void cnss_set_wsi_remap_state(struct device *dev, bool state);
 void cnss_set_pci_link_speed_width(struct device *dev, u16 link_speed,
 					u16 link_width);
 #endif

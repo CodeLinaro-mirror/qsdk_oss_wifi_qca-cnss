@@ -762,6 +762,7 @@ struct cnss_plat_data {
 #endif
 	struct completion soc_reset_request_complete;
 	struct cnss_bus_ops *ops;
+	bool wsi_remap_state;
 };
 
 #ifdef CONFIG_ARCH_QCOM
