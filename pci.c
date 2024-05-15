@@ -7107,6 +7107,68 @@ void cnss_pci_bw_scaling(struct pci_dev *pci_dev, u16 link_speed,
 	pci_write_config_byte(p_dev, p_dev->pcie_cap + PCI_EXP_LNKCTL, reg);
 }
 
+#ifdef CONFIG_CNSS2_KERNEL_5_15
+void cnss_set_pci_link_speed_width(struct device *dev, u16 link_speed,
+					u16 link_width)
+{
+}
+EXPORT_SYMBOL(cnss_set_pci_link_speed_width);
+#else
+void cnss_set_pci_link_speed_width(struct device *dev, u16 link_speed,
+					u16 link_width)
+{
+	struct cnss_plat_data *plat_priv;
+	struct pci_dev *root_port, *pci_dev;
+	struct cnss_pci_data *pci_priv;
+#if defined(CONFIG_CNSS2_QCOM_KERNEL_DEPENDENCY) && IS_ENABLED(CONFIG_PCIE_QCOM)
+	int ret = 0;
+#endif
+
+	plat_priv = cnss_bus_dev_to_plat_priv(dev);
+	if (!plat_priv) {
+		cnss_pr_err("The plat_priv is NULL\n");
+		return;
+	}
+
+	pci_dev = plat_priv->pci_dev;
+	if (!pci_dev) {
+		cnss_pr_err("Pci dev is NULL\n");
+		return;
+	}
+
+	pci_priv = cnss_get_pci_priv(pci_dev);
+	if (!pci_priv) {
+		cnss_pr_err("Pci priv is NULL\n");
+		return;
+	}
+
+	root_port = pcie_find_root_port(pci_priv->pci_dev);
+	if (!root_port) {
+		cnss_pr_info("The root port is NULL\n");
+		return;
+	}
+
+#if defined(CONFIG_CNSS2_QCOM_KERNEL_DEPENDENCY) && IS_ENABLED(CONFIG_PCIE_QCOM)
+	cnss_pr_dbg("Selected link speed is %d, link_width is %d\n",
+			link_speed, link_width);
+	ret = pcie_set_link_speed(root_port, link_speed);
+	if (ret)
+		cnss_pr_err("%s Failed to set link speed %d\n", __func__, ret);
+	else
+		cnss_pr_info("%s The PCI Generation is %d\n", __func__,
+				link_speed);
+
+	ret = pcie_set_link_width(root_port, link_width);
+	if (ret)
+		cnss_pr_err("%s Failed to set link width %d\n", __func__, ret);
+	else
+		cnss_pr_info("%s The PCI link width is %d\n", __func__,
+				link_width);
+#endif
+}
+EXPORT_SYMBOL(cnss_set_pci_link_speed_width);
+#endif
+
 int cnss_pci_probe(struct pci_dev *pci_dev,
 		   const struct pci_device_id *id,
 		   struct cnss_plat_data *plat_priv)
