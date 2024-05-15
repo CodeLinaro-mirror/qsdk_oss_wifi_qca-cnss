@@ -530,6 +530,9 @@ static inline void cnss_set_recovery_mode(struct device *dev, u8 recovery_mode)
 {
 	return -EINVAL;
 }
+static inline void cnss_set_standby_mode(struct device *dev, u8 standby_mode)
+{
+}
 #else
 #define cnss_wlan_register_driver_ops qca_cnss_wlan_register_driver_ops
 #define cnss_wlan_probe_driver qca_cnss_wlan_probe_driver
@@ -618,6 +621,7 @@ static inline void cnss_set_recovery_mode(struct device *dev, u8 recovery_mode)
 #define cnss_get_mlo_group_info qca_cnss_get_mlo_group_info
 #define cnss_get_mlo_group_id qca_cnss_get_mlo_group_id
 #define cnss_set_recovery_mode qca_cnss_set_recovery_mode
+#define cnss_set_standby_mode qca_cnss_set_standby_mode
 
 extern int cnss_wlan_register_driver_ops(struct cnss_wlan_driver *driver);
 extern int cnss_wlan_probe_driver(void);
@@ -735,5 +739,6 @@ bool cnss_get_mlo_group_info(uint8_t grp_id,
 			struct cnss_mlo_group_info *grp_info);
 int cnss_get_mlo_group_id(struct device *dev);
 void cnss_set_recovery_mode(struct device *dev, u8 recovery_mode);
+void cnss_set_standby_mode(struct device *dev, u8 standby_mode);
 #endif
 #endif /* _NET_CNSS2_H */
