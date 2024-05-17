@@ -82,6 +82,22 @@ MODULE_PARM_DESC(log_level, "CNSS2 Module Log Level");
 static void *mlo_global_mem[CNSS_MAX_MLO_GROUPS];
 phys_addr_t mlo_global_mem_phys[CNSS_MAX_MLO_GROUPS];
 
+void pci_update_msi_vectors(struct cnss_msi_config *msi_config,
+				   char *user_name, int num_vectors,
+				   int *vector_idx)
+{
+	int idx;
+
+	for (idx = 0; idx < msi_config->total_users; idx++) {
+		if (strcmp(user_name, msi_config->users[idx].name) == 0) {
+			msi_config->users[idx].num_vectors = num_vectors;
+			msi_config->users[idx].base_vector = *vector_idx;
+			*vector_idx += num_vectors;
+			return;
+		}
+	}
+}
+
 #ifdef CONFIG_CNSS2_QGIC2M
 static struct cnss_msi_config msi_config_qcn6122_pci0 = {
 	.total_vectors = 13,
@@ -129,22 +145,6 @@ static struct cnss_msi_config msi_config_qcn6432_pci1 = {
 		{ .name = "DP", .num_vectors = 8, .base_vector = 6 },
 	},
 };
-
-void pci_update_msi_vectors(struct cnss_msi_config *msi_config,
-				   char *user_name, int num_vectors,
-				   int *vector_idx)
-{
-	int idx;
-
-	for (idx = 0; idx < msi_config->total_users; idx++) {
-		if (strcmp(user_name, msi_config->users[idx].name) == 0) {
-			msi_config->users[idx].num_vectors = num_vectors;
-			msi_config->users[idx].base_vector = *vector_idx;
-			*vector_idx += num_vectors;
-			return;
-		}
-	}
-}
 
 void cnss_qgic2_disable_msi(struct cnss_plat_data *plat_priv)
 {
@@ -582,14 +582,12 @@ int cnss_mlo_mem_alloc(struct cnss_plat_data *plat_priv, int index)
 	struct reserved_mem *mlo_mem = NULL;
 	unsigned int mlo_global_mem_size;
 	int i = index;
-	struct device *dev;
 #ifdef CONFIG_TARGET_SDX75
 	int flag = IOMMU_READ | IOMMU_WRITE;
 	bool dma_coherent = false;
 	static unsigned int mlo_iova_base[CNSS_MAX_MLO_GROUPS];
 #endif
 
-	dev = &plat_priv->plat_dev->dev;
 	group_id = plat_priv->mlo_group_info->group_id;
 	if (!mlo_global_mem[group_id]) {
 		snprintf(mlo_node_name, sizeof(mlo_node_name),
@@ -711,8 +709,7 @@ void cnss_do_mlo_global_memset(struct cnss_plat_data *plat_priv, u64 mem_size)
 }
 
 
-#if defined(CONFIG_CNSS2_KERNEL_IPQ) && \
-	(LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0)
 void cnss_etr_sg_tbl_free(uint32_t *vaddr,
 			  struct cnss_plat_data *plat_priv, uint32_t ents)
 {
