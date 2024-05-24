@@ -200,7 +200,7 @@ static int soc_version_major;
 module_param(soc_version_major, int, 0444);
 MODULE_PARM_DESC(soc_version_major, "SOC Major Version");
 
-static unsigned int enable_mlo_support = 1;
+static unsigned int enable_mlo_support = 0;
 module_param(enable_mlo_support, uint, 0600);
 MODULE_PARM_DESC(enable_mlo_support, "enable_mlo_support");
 
@@ -366,6 +366,19 @@ void cnss_set_recovery_mode(struct device *dev, u8 recovery_mode)
 
 }
 EXPORT_SYMBOL(cnss_set_recovery_mode);
+
+void cnss_set_standby_mode(struct device *dev, u8 standby_mode)
+{
+	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
+
+	if (!plat_priv)
+		return;
+
+	cnss_pr_info("The standby mode is %d\n", standby_mode);
+	plat_priv->standby_mode = standby_mode;
+
+}
+EXPORT_SYMBOL(cnss_set_standby_mode);
 
 struct cnss_plat_data *cnss_get_plat_priv_by_device_id(int id)
 {
@@ -1268,6 +1281,25 @@ void cnss_get_ramdump_device_name(struct device *dev,
 		    ramdump_dev_name, plat_priv->device_id);
 }
 EXPORT_SYMBOL(cnss_get_ramdump_device_name);
+
+bool cnss_get_global_mlo_support(void)
+{
+	struct cnss_plat_data *plat_priv = NULL;
+	int i;
+
+	for (i = 0; i < plat_env_index; i++) {
+		plat_priv = plat_env[i];
+		switch (plat_priv->device_id) {
+		case QCN9224_DEVICE_ID:
+		case QCA5332_DEVICE_ID:
+		case QCN6432_DEVICE_ID:
+			return true;
+		}
+	}
+
+	return false;
+}
+EXPORT_SYMBOL(cnss_get_global_mlo_support);
 
 static void cnss_set_global_mlo_support(bool enable)
 {
@@ -3734,7 +3766,8 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 		if (ramdump_enabled)
 			cnss_bus_dev_ramdump(plat_priv);
 		if (plat_priv->mlo_support && group_info != NULL &&
-		    plat_priv->recovery_mode != MODE_1_RECOVERY_MODE) {
+		    plat_priv->recovery_mode != MODE_1_RECOVERY_MODE &&
+		    !plat_priv->standby_mode) {
 			if (group_info->num_chips != group_info->rddm_dump_all)
 				return 0;
 		}
