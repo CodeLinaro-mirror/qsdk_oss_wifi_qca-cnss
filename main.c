@@ -2206,6 +2206,19 @@ void cnss_set_default_mlo_config(void)
 		     !plat_priv->pci_dev))
 			continue;
 
+		if (mlo_chip_bitmask == 0xFF) {
+			dev = &plat_priv->plat_dev->dev;
+			if (of_property_read_bool(dev->of_node, "mlo_skip")) {
+				cnss_pr_info("%s: Device %s skipped from mlo config.\n",
+					      __func__,
+					      plat_priv->device_name);
+				plat_priv->mlo_capable = 0;
+				mlo_chip_bitmask =
+						mlo_chip_bitmask & ~(1 << i);
+				continue;
+			}
+		}
+
 		group_id = cnss_get_group_id(plat_priv);
 		if (group_id < 0 && group_id >= CNSS_MAX_MLO_GROUPS) {
 			cnss_pr_err("%s: Invalid group id: %d", __func__,
