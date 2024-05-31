@@ -4973,6 +4973,33 @@ void cnss_unregister_ramdump(struct cnss_plat_data *plat_priv)
 	info_v2->dump_data_vaddr = NULL;
 	info_v2->dump_data_valid = false;
 }
+
+static int cnss_get_node_id(struct platform_device *plat_dev,
+			    unsigned long device_id, u32 *node_id)
+{
+	struct cnss_plat_data *plat_priv = NULL;
+
+	if (of_property_read_u32(plat_dev->dev.of_node,
+				 "node_id", node_id)) {
+		cnss_pr_err("Error: No node_id in device_tree\n");
+		CNSS_ASSERT(0);
+		return -ENODEV;
+	}
+
+	switch (device_id) {
+	case QCN9000_DEVICE_ID:
+		*node_id = *node_id + QCN9000_0;
+		break;
+	case QCN9224_DEVICE_ID:
+		*node_id = *node_id + QCN9224_0;
+		break;
+	default:
+		cnss_pr_dbg("Invalid device id 0x%lx", device_id);
+		break;
+	}
+
+	return 0;
+}
 #else /* !CONFIG_CNSS2_KERNEL_5_15 */
 static int cnss_init_dump_entry(struct cnss_plat_data *plat_priv)
 {
@@ -5245,6 +5272,21 @@ void cnss_unregister_ramdump(struct cnss_plat_data *plat_priv)
 		cnss_pr_err("Unknown device ID: 0x%lx\n", plat_priv->device_id);
 		break;
 	}
+}
+
+static int cnss_get_node_id(struct platform_device *plat_dev,
+			    unsigned long device_id, u32 *node_id)
+{
+	struct cnss_plat_data *plat_priv = NULL;
+
+	if (of_property_read_u32(plat_dev->dev.of_node,
+				 "qrtr_node_id", node_id)) {
+		cnss_pr_err("Error: No qrtr_node_id in device_tree\n");
+		CNSS_ASSERT(0);
+		return -ENODEV;
+	}
+
+	return 0;
 }
 #endif /* !CONFIG_CNSS2_KERNEL_5_15 */
 
@@ -6318,15 +6360,11 @@ static int cnss_probe(struct platform_device *plat_dev)
 		goto out;
 	}
 
-	if ((device_id->driver_data == QCN9000_DEVICE_ID ||
-	     device_id->driver_data == QCN9224_DEVICE_ID) &&
-	    (of_property_read_u32(plat_dev->dev.of_node,
-				  "qrtr_node_id", &node_id))) {
-		pr_err("Error: No qrtr_node_id in device_tree\n");
-		CNSS_ASSERT(0);
-		ret = -ENODEV;
-		goto out;
-	}
+	if (device_id->driver_data == QCN9000_DEVICE_ID ||
+	     device_id->driver_data == QCN9224_DEVICE_ID)
+		if (cnss_get_node_id(plat_dev, device_id->driver_data,
+				     &node_id))
+			goto out;
 
 #ifdef CONFIG_CNSS2_KERNEL_IPQ
 	/* Check for QCA9574 here and skip probe accordingly */
