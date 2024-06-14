@@ -55,6 +55,8 @@
 #define CNSS_FW_TYPE_MASK		0xF000
 #define CNSS_FW_TYPE_SHIFT		12
 
+#define CNSS_PCI_SWITCH_LINK_MASK      GENMASK(1, 0)
+
 #ifdef CONFIG_CNSS2_KERNEL_5_15
 typedef void ramdump_device_t;
 #else
@@ -615,6 +617,7 @@ struct cnss_plat_data {
 	enum cnss_driver_status driver_status;
 	u32 recovery_count;
 	u8 recovery_mode;
+	u8 standby_mode;
 	unsigned long driver_state;
 	struct list_head event_list;
 	spinlock_t event_lock; /* spinlock for driver work event handling */

@@ -7080,12 +7080,104 @@ int cnss_pci_of_reserved_mem_device_init(struct cnss_plat_data *plat_priv)
 }
 #endif
 
+void cnss_pci_bw_scaling(struct pci_dev *pci_dev, u16 link_speed,
+			 struct cnss_plat_data *plat_priv)
+{
+	u8 reg = 0;
+	struct pci_dev *p_dev = pci_upstream_bridge(pci_dev);
+
+	if (!p_dev) {
+		cnss_pr_err("upstream dev is unavailable");
+		return;
+	}
+
+	cnss_pr_info("pci dev: %04x:%02x:%02x.%d\n",
+		pci_domain_nr(p_dev->bus), p_dev->bus->number,
+		PCI_SLOT(p_dev->devfn),
+		PCI_FUNC(p_dev->devfn));
+
+	pci_read_config_byte(p_dev, p_dev->pcie_cap + PCI_EXP_LNKCTL2, &reg);
+	reg &= ~PCI_EXP_LNKCTL2_TLS;
+	reg |= link_speed;
+	pci_write_config_byte(p_dev, p_dev->pcie_cap + PCI_EXP_LNKCTL2, reg);
+
+	/* link retrain */
+	pci_read_config_byte(p_dev, p_dev->pcie_cap + PCI_EXP_LNKCTL, &reg);
+	reg |= PCI_EXP_LNKCTL_RL;
+	pci_write_config_byte(p_dev, p_dev->pcie_cap + PCI_EXP_LNKCTL, reg);
+}
+
+#ifdef CONFIG_CNSS2_KERNEL_5_15
+void cnss_set_pci_link_speed_width(struct device *dev, u16 link_speed,
+					u16 link_width)
+{
+}
+EXPORT_SYMBOL(cnss_set_pci_link_speed_width);
+#else
+void cnss_set_pci_link_speed_width(struct device *dev, u16 link_speed,
+					u16 link_width)
+{
+	struct cnss_plat_data *plat_priv;
+	struct pci_dev *root_port, *pci_dev;
+	struct cnss_pci_data *pci_priv;
+#if defined(CONFIG_CNSS2_QCOM_KERNEL_DEPENDENCY) && IS_ENABLED(CONFIG_PCIE_QCOM)
+	int ret = 0;
+#endif
+
+	plat_priv = cnss_bus_dev_to_plat_priv(dev);
+	if (!plat_priv) {
+		cnss_pr_err("The plat_priv is NULL\n");
+		return;
+	}
+
+	pci_dev = plat_priv->pci_dev;
+	if (!pci_dev) {
+		cnss_pr_err("Pci dev is NULL\n");
+		return;
+	}
+
+	pci_priv = cnss_get_pci_priv(pci_dev);
+	if (!pci_priv) {
+		cnss_pr_err("Pci priv is NULL\n");
+		return;
+	}
+
+	root_port = pcie_find_root_port(pci_priv->pci_dev);
+	if (!root_port) {
+		cnss_pr_info("The root port is NULL\n");
+		return;
+	}
+
+#if defined(CONFIG_CNSS2_QCOM_KERNEL_DEPENDENCY) && IS_ENABLED(CONFIG_PCIE_QCOM)
+	cnss_pr_dbg("Selected link speed is %d, link_width is %d\n",
+			link_speed, link_width);
+	ret = pcie_set_link_speed(root_port, link_speed);
+	if (ret)
+		cnss_pr_err("%s Failed to set link speed %d\n", __func__, ret);
+	else
+		cnss_pr_info("%s The PCI Generation is %d\n", __func__,
+				link_speed);
+
+	ret = pcie_set_link_width(root_port, link_width);
+	if (ret)
+		cnss_pr_err("%s Failed to set link width %d\n", __func__, ret);
+	else
+		cnss_pr_info("%s The PCI link width is %d\n", __func__,
+				link_width);
+#endif
+}
+EXPORT_SYMBOL(cnss_set_pci_link_speed_width);
+#endif
+
 int cnss_pci_probe(struct pci_dev *pci_dev,
 		   const struct pci_device_id *id,
 		   struct cnss_plat_data *plat_priv)
 {
 	int ret = 0;
 	u32 val = 0;
+	u8 lcr = 0;
+	bool disable_l1 = false;
+	bool is_gen2 = false;
 	struct cnss_pci_data *pci_priv;
 	if (!pci_dev) {
 		pr_err("%s: ERROR: PCI device is NULL\n", __func__);
@@ -7097,8 +7189,30 @@ int cnss_pci_probe(struct pci_dev *pci_dev,
 		return -EINVAL;
 	}
 
+	disable_l1 = of_property_read_bool(pci_dev->dev.of_node,
+					   "no-l1-supported");
+	if (disable_l1) {
+		/* Disable ASPM bits of Link Control Register(offset 0x10)
+		 * to prevent L1
+		 */
+		pci_read_config_byte(pci_dev, pci_dev->pcie_cap +
+				     PCI_EXP_LNKCTL, &lcr);
+		lcr &= ~PCI_EXP_LNKCTL_ASPMC;
+		pci_write_config_byte(pci_dev, pci_dev->pcie_cap +
+				      PCI_EXP_LNKCTL, lcr);
+	}
+
+
 	cnss_pr_dbg("PCI is probing, vendor ID: 0x%x, device ID: 0x%x\n",
 		    id->vendor, pci_dev->device);
+
+	is_gen2 = of_property_read_bool(pci_dev->dev.of_node, "link-dg-gen2");
+	if (is_gen2)
+		/* There is AER crash issue with some specific platform, need to
+		 * downgrade to Gen2 to avoid it
+		 */
+		cnss_pci_bw_scaling(pci_dev, PCI_EXP_LNKCTL2_TLS_5_0GT,
+				    plat_priv);
 
 	if (!plat_priv->bus_priv) {
 		pci_priv = devm_kzalloc(&pci_dev->dev, sizeof(*pci_priv),
