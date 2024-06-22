@@ -522,6 +522,16 @@ static int cnss_debug_read_misc_data(struct cnss_pci_data *pci_priv,
 	pci_read_config_word(pci_priv->pci_dev, PCI_COMMAND,
 			     &pbl_sbl_err->type0_status_cmd_reg);
 
+	pci_read_config_word(pci_priv->pci_dev,
+			     PCIE_PCI_MSI_CAP_ID_NEXT_CTRL_REG,
+			     &pbl_sbl_err->pci_msi_cap_id_next_ctrl_reg);
+	pci_read_config_word(pci_priv->pci_dev, PCIE_MSI_CAP_OFF_04H_REG,
+			     &pbl_sbl_err->pci_msi_cap_off_04h_reg);
+	pci_read_config_word(pci_priv->pci_dev, PCIE_MSI_CAP_OFF_08H_REG,
+			     &pbl_sbl_err->pci_msi_cap_off_08h_reg);
+	pci_read_config_word(pci_priv->pci_dev, PCIE_MSI_CAP_OFF_0CH_REG,
+			     &pbl_sbl_err->pci_msi_cap_off_0ch_reg);
+
 	if (plat_priv->device_id == QCN9224_DEVICE_ID) {
 		cnss_pci_reg_read(plat_priv,
 				  QCN9224_PCIE_PCIE_LOCAL_REG_REMAP_BAR_CTRL,
@@ -668,6 +678,13 @@ static void cnss_debug_print_bl_data(struct cnss_pci_data *pci_priv,
 	cnss_pr_err("%s: PARF_PM_STTS: 0x%08x, PCIE_TYPE0_STATUS_COMMAND_REG: 0x%08x\n",
 		    __func__, pbl_sbl_err->parf_pm_stts,
 		    pbl_sbl_err->type0_status_cmd_reg);
+
+	cnss_pr_err("%s: PCIE_PCI_MSI_CAP_ID_NEXT_CTRL_REG: 0x%08x, PCIE_MSI_CAP_OFF_04H_REG: 0x%08x\n",
+		    __func__, pbl_sbl_err->pci_msi_cap_id_next_ctrl_reg,
+		    pbl_sbl_err->pci_msi_cap_off_04h_reg);
+	cnss_pr_err("%s: PCIE_MSI_CAP_OFF_08H_REG: 0x%08x, PCIE_MSI_CAP_OFF_0CH_REG: 0x%08x\n",
+		    __func__, pbl_sbl_err->pci_msi_cap_off_08h_reg,
+		    pbl_sbl_err->pci_msi_cap_off_0ch_reg);
 
 	cnss_debug_print_pbl_data(pci_priv, &pbl_sbl_err->pbl_data[0]);
 
