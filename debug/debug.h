@@ -166,6 +166,11 @@
 #define QCN9224_PBL_BOOTSTRAP_STATUS		0x1A006D4
 #define MAX_PBL_DATA_SNAPSHOT			2
 
+#define PCIE_PCI_MSI_CAP_ID_NEXT_CTRL_REG	0x50
+#define PCIE_MSI_CAP_OFF_04H_REG		0x54
+#define PCIE_MSI_CAP_OFF_08H_REG		0x58
+#define PCIE_MSI_CAP_OFF_0CH_REG		0x5C
+
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
 #define QMI_WLANFW_QDSS_STOP_ALL_TRACE_LI 0x3F
 #define QMI_WLANFW_QDSS_STOP_ALL_TRACE_BE 0x01
@@ -232,6 +237,10 @@ struct dump_pbl_sbl_data {
 	u32 sbl_len;
 	u32 *noc_vals;
 	u16 type0_status_cmd_reg;
+	u16 pci_msi_cap_id_next_ctrl_reg;
+	u16 pci_msi_cap_off_04h_reg;
+	u16 pci_msi_cap_off_08h_reg;
+	u16 pci_msi_cap_off_0ch_reg;
 	struct pbl_err_data pbl_data[MAX_PBL_DATA_SNAPSHOT];
 };
 
