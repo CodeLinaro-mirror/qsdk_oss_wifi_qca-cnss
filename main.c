@@ -3902,12 +3902,36 @@ int cnss_unregister_qca8074_cb(struct cnss_plat_data *plat_priv)
 	return 0;
 }
 #else
+static int cnss_check_ahb_rpd_register(struct cnss_plat_data *plat_priv)
+{
+	int userpd = 0, rpd_registered = 0;
+	struct platform_device *pdev;
+
+	if (!plat_priv)
+		return -EINVAL;
+
+	for (userpd = 0; userpd < plat_env_index; userpd++) {
+		if (plat_env[userpd]->bus_type == CNSS_BUS_AHB) {
+			pdev = plat_env[userpd]->plat_dev;
+			if (of_property_read_bool(pdev->dev.of_node,
+			   "qcom,multipd_arch")) {
+				if(plat_env[userpd]->rpd_nb.notifier_call) {
+					rpd_registered = 1;
+					break;
+				}
+			} else {
+				rpd_registered = -1;
+			}
+		}
+	}
+	return rpd_registered;
+}
+
 void *cnss_register_qca8074_cb(struct cnss_plat_data *plat_priv)
 {
 	struct cnss_subsys_info *subsys_info;
-	static struct rproc *rproc_rpd;
 	void *ss_handle = NULL;
-	int ret = 0;
+	int register_rpd_notifier = 0, ret = 0;
 
 	subsys_info = &plat_priv->subsys_info;
 	plat_priv->modem_nb.notifier_call = cnss_qca8074_notifier_nb;
@@ -3921,9 +3945,13 @@ void *cnss_register_qca8074_cb(struct cnss_plat_data *plat_priv)
 		return NULL;
 	}
 
-	if ((rproc_rootpd) && (!rproc_rpd) &&
+	/* Register Rootpd notifiers only if its not registered and we
+	 * need to register only for one AHB SOC.
+	 */
+	register_rpd_notifier = cnss_check_ahb_rpd_register(plat_priv);
+
+	if ((rproc_rootpd) && (!register_rpd_notifier) &&
 	    (plat_priv->recovery_type == CNSS_SYNC_RECOVERY)) {
-		rproc_rpd = rproc_rootpd;
 		plat_priv->rpd_nb.notifier_call = cnss_qca8074_rpd_notifier_nb;
 		plat_priv->rpd_atomic_nb.notifier_call =
 			cnss_qca8074_rpd_notifier_atomic_nb;
