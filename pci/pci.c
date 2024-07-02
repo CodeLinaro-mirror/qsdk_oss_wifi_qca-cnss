@@ -1740,6 +1740,7 @@ out:
 	return ret;
 }
 
+#ifndef CONFIG_TARGET_SDX75
 static void cnss_mhi_soc_reset(struct pci_dev *pci_dev)
 {
 	struct cnss_pci_data *pci_priv = cnss_get_pci_priv(pci_dev);
@@ -1759,6 +1760,7 @@ static void cnss_mhi_soc_reset(struct pci_dev *pci_dev)
 		reinit_completion(&plat_priv->soc_reset_request_complete);
 	}
 }
+#endif
 
 static int cnss_qcn9000_shutdown(struct cnss_pci_data *pci_priv)
 {
@@ -1779,8 +1781,9 @@ static int cnss_qcn9000_shutdown(struct cnss_pci_data *pci_priv)
 		cnss_pr_info("Skipping shutdown to wait for dump collection\n");
 		return ret;
 	}
-
+#ifndef CONFIG_TARGET_SDX75
 	cnss_mhi_soc_reset(plat_priv->pci_dev);
+#endif
 
 	cnss_pr_info("Shutting down %s\n", plat_priv->device_name);
 	cnss_pci_pm_runtime_resume(pci_priv);
