@@ -5231,7 +5231,7 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 		goto free_qdss_irq;
 	}
 
-#if (KERNEL_VERSION(5, 15, 0) <= LINUX_VERSION_CODE)
+#if (KERNEL_VERSION(6, 1, 0) <= LINUX_VERSION_CODE)
 	mhi_ctrl->rddm_prealloc = false;
 	mhi_ctrl->rddm_seg_len = SZ_4K;
 #endif
@@ -5662,7 +5662,7 @@ int cnss_pci_get_bar_info(struct cnss_pci_data *pci_priv, void __iomem **va,
 	return 0;
 }
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
 static int cnss_get_qrtr_instance_id(struct pci_dev *pci_dev, u32 *node_id)
 {
 	struct cnss_plat_data *plat_priv = NULL;

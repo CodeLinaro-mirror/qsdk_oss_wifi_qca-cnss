@@ -90,7 +90,7 @@
 
 #define QCN9224_PCIE_PCIE_MHI_TIME_LOW          0x1E0EB28
 #define QCN9224_PCIE_PCIE_MHI_TIME_HIGH         0x1E0EB2C
-#define QCN9224_PCIE_TYPE0_STATUS_COMMAND_REG		0x1E1E004
+#define QCN9224_PCIE_TYPE0_STATUS_COMMAND_REG	0x1E1E004
 
 #define SHADOW_REG_INTER_COUNT			43
 #define QCA6390_PCIE_SHADOW_REG_INTER_0		0x1E05000
@@ -333,11 +333,9 @@ enum cnss_dev_bus_type cnss_get_bus_type(unsigned long device_id);
 void *cnss_bus_dev_to_bus_priv(struct device *dev);
 struct cnss_plat_data *cnss_bus_dev_to_plat_priv(struct device *dev);
 struct cnss_bus_ops *cnss_ahb_get_ops(void);
-#ifdef CONFIG_CNSS2_KERNEL_IPQ
 void cnss_etr_sg_tbl_free(uint32_t *vaddr,
 				 struct cnss_plat_data *plat_priv,
 				 uint32_t ents);
-#endif
 bool cnss_wait_for_rddm_complete(struct cnss_plat_data *plat_priv);
 int cnss_debugfs_create(struct cnss_plat_data *plat_priv);
 void cnss_debugfs_destroy(struct cnss_plat_data *plat_priv);

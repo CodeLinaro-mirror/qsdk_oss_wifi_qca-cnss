@@ -480,7 +480,7 @@ static int qcom_qcn9224_probe(struct platform_device *pdev)
 	lvirq->pdev = pdev;
 	lvirq_list[lvirq_index++] = lvirq;
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
 	of_property_read_u32(pdev->dev.of_node, "node_id", &node_id);
 	node_id = node_id + QCN9224_0;
 #else
