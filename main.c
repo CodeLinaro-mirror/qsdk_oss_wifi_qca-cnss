@@ -2985,7 +2985,6 @@ int cnss_wlan_probe_driver(void)
 		if (ret)
 			goto reset_ctx;
 
-
 		if (plat_priv->cal_in_progress) {
 			if (driver_mode == CNSS_FTM)
 				cal_mode = CNSS_FTM_CALIBRATION;
@@ -7184,9 +7183,13 @@ static void cnss_set_board_id(struct cnss_plat_data *plat_priv)
 	case QCA6018_DEVICE_ID:
 	case QCA9574_DEVICE_ID:
 	case QCA5332_DEVICE_ID:
-	case QCA5424_DEVICE_ID:
 		board_id_str = "qcom,board_id";
 		board_info->num_bytes = 1;
+		board_info->board_id_override = (u32)bdf_integrated;
+		break;
+	case QCA5424_DEVICE_ID:
+		board_id_str = "qcom,board_id";
+		board_info->num_bytes = 2;
 		board_info->board_id_override = (u32)bdf_integrated;
 		break;
 	case QCN9160_DEVICE_ID:
