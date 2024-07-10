@@ -343,6 +343,11 @@ static inline void cnss_wait_for_fw_ready(struct device *dev)
 {
 }
 
+static inline bool cnss_check_is_shmem_capable(uint8_t group_id,
+					       uint8_t chip_id)
+{
+}
+
 static inline void cnss_set_ramdump_enabled(struct device *dev, bool enabled)
 {
 }
@@ -629,6 +634,7 @@ extern int cnss_wlan_enable(struct device *dev,
 extern int cnss_wlan_disable(struct device *dev, enum cnss_driver_mode mode);
 extern unsigned int cnss_get_boot_timeout(struct device *dev);
 void cnss_wait_for_fw_ready(struct device *dev);
+bool cnss_check_is_shmem_capable(uint8_t group_id, uint8_t chip_id);
 void cnss_set_ramdump_enabled(struct device *dev, bool enabled);
 void cnss_set_recovery_enabled(struct device *dev, bool enabled);
 void *cnss_subsystem_get(struct device *dev, int device_id);
