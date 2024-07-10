@@ -2351,6 +2351,42 @@ int cnss_set_wsi_remap(struct device *dev)
 }
 EXPORT_SYMBOL(cnss_set_wsi_remap);
 
+/*
+ * cnss_check_is_shmem_capable() - Check if the chip is shmem capable.
+ * @group_id: MLO group Id
+ * @chip_id: MLO chip Id
+ *
+ * SHMEM arena is required only if any one of the below condition is
+ * satisfied.
+ *
+ * 1) Number of MLO chips in board should be greater than one.
+ * 2) If only one MLO chip is present, it should have split-phy.
+ *
+ * return: True if SHMEM is capable.
+ */
+bool cnss_check_is_shmem_capable(uint8_t group_id, uint8_t chip_id)
+{
+	bool is_shmem_capable = false;
+	struct cnss_mlo_group_info *mlo_group_info = NULL;
+	struct cnss_mlo_chip_info *ch_info = NULL;
+
+	if (!enable_mlo_support)
+		return false;
+
+	mlo_group_info = &g_mlo_group_info[group_id];
+	ch_info = &mlo_group_info[group_id].chip_info[chip_id];
+
+	if (!ch_info)
+		return false;
+
+	if (mlo_group_info->num_chips > 1 ||
+	   (mlo_group_info->num_chips == 1 && ch_info->num_local_links == 2))
+		is_shmem_capable = true;
+
+	return is_shmem_capable;
+}
+EXPORT_SYMBOL(cnss_check_is_shmem_capable);
+
 void __cnss_wait_for_fw_ready(struct cnss_plat_data *plat_priv)
 {
 	int count = 0;
