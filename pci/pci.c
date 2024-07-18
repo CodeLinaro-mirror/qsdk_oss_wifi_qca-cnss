@@ -1740,6 +1740,7 @@ out:
 	return ret;
 }
 
+#ifndef CONFIG_TARGET_SDX75
 static void cnss_mhi_soc_reset(struct pci_dev *pci_dev)
 {
 	struct cnss_pci_data *pci_priv = cnss_get_pci_priv(pci_dev);
@@ -1759,6 +1760,7 @@ static void cnss_mhi_soc_reset(struct pci_dev *pci_dev)
 		reinit_completion(&plat_priv->soc_reset_request_complete);
 	}
 }
+#endif
 
 static int cnss_qcn9000_shutdown(struct cnss_pci_data *pci_priv)
 {
@@ -1779,8 +1781,9 @@ static int cnss_qcn9000_shutdown(struct cnss_pci_data *pci_priv)
 		cnss_pr_info("Skipping shutdown to wait for dump collection\n");
 		return ret;
 	}
-
+#ifndef CONFIG_TARGET_SDX75
 	cnss_mhi_soc_reset(plat_priv->pci_dev);
+#endif
 
 	cnss_pr_info("Shutting down %s\n", plat_priv->device_name);
 	cnss_pci_pm_runtime_resume(pci_priv);
@@ -5422,8 +5425,10 @@ int cnss_pci_probe(struct pci_dev *pci_dev,
 	cnss_pr_dbg("PCI is probing, vendor ID: 0x%x, device ID: 0x%x\n",
 		    id->vendor, pci_dev->device);
 
-	pci_priv = devm_kzalloc(&pci_dev->dev, sizeof(*pci_priv),
-				GFP_KERNEL);
+	pci_priv = cnss_get_pci_priv(pci_dev);
+	if (!pci_priv)
+		pci_priv = devm_kzalloc(&pci_dev->dev, sizeof(*pci_priv),
+					GFP_KERNEL);
 	if (!pci_priv) {
 		ret = -ENOMEM;
 		goto out;
