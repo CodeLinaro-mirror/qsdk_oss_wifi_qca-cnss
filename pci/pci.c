@@ -5396,8 +5396,10 @@ int cnss_pci_probe(struct pci_dev *pci_dev,
 	cnss_pr_dbg("PCI is probing, vendor ID: 0x%x, device ID: 0x%x\n",
 		    id->vendor, pci_dev->device);
 
-	pci_priv = devm_kzalloc(&pci_dev->dev, sizeof(*pci_priv),
-				GFP_KERNEL);
+	pci_priv = cnss_get_pci_priv(pci_dev);
+	if (!pci_priv)
+		pci_priv = devm_kzalloc(&pci_dev->dev, sizeof(*pci_priv),
+					GFP_KERNEL);
 	if (!pci_priv) {
 		ret = -ENOMEM;
 		goto out;
