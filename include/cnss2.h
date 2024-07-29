@@ -203,13 +203,13 @@ enum cnss_crash_type {
 };
 
 struct cnss_mlo_chip_info {
+	u32 hw_link_ids[CNSS_MAX_LINKS_PER_CHIP];
 	u8 group_id;
 	u8 soc_id;
 	u8 chip_id;
 	u8 num_local_links;
 	u8 num_adj_chips;
 	u8 adj_chip_ids[CNSS_MAX_LINKS_PER_CHIP];
-	u8 hw_link_ids[CNSS_MAX_LINKS_PER_CHIP];
 	u8 valid_link_ids[CNSS_MAX_LINKS_PER_CHIP];
 };
 
@@ -470,6 +470,10 @@ static inline int cnss_get_num_mlo_capable_devices(unsigned int *device_id,
 {
 	return -EINVAL;
 }
+static inline int cnss_get_max_mlo_chips(struct device *dev)
+{
+	return -EINVAL;
+}
 static inline int cnss_get_dev_link_ids(struct device *dev, u8 *link_ids,
 					int max_elements)
 {
@@ -539,6 +543,10 @@ static inline int cnss_get_mlo_group_id(struct device *dev)
 {
 	return -EINVAL;
 }
+static inline int cnss_set_wsi_remap(struct device *dev)
+{
+	return -EINVAL;
+}
 static inline void cnss_set_recovery_mode(struct device *dev, u8 recovery_mode)
 {
 	return -EINVAL;
@@ -546,6 +554,9 @@ static inline void cnss_set_recovery_mode(struct device *dev, u8 recovery_mode)
 static inline void cnss_set_standby_mode(struct device *dev, u8 standby_mode)
 {
 	return -EINVAL;
+}
+static inline void cnss_set_wsi_remap_state(struct device *dev, bool state)
+{
 }
 static inline void cnss_set_pci_link_speed_width(struct device *dev,
 						u16 link_speed, u16 link_width);
@@ -657,6 +668,7 @@ int cnss_get_mlo_chip_info(struct device *dev,
 			   struct cnss_mlo_chip_info **chip_info);
 int cnss_get_num_mlo_capable_devices(unsigned int *device_id,
 				     int num_elements);
+int cnss_get_max_mlo_chips(struct device *dev);
 int cnss_get_dev_link_ids(struct device *dev, u8 *link_ids, int max_elements);
 int cnss_bus_reg_read(struct device *dev, u32 addr, u32 *val,
 					void __iomem *base);
@@ -679,6 +691,8 @@ bool cnss_get_mlo_group_info(uint8_t grp_id,
 int cnss_get_mlo_group_id(struct device *dev);
 void cnss_set_recovery_mode(struct device *dev, u8 recovery_mode);
 void cnss_set_standby_mode(struct device *dev, u8 standby_mode);
+int cnss_set_wsi_remap(struct device *dev);
+void cnss_set_wsi_remap_state(struct device *dev, bool state);
 void cnss_set_pci_link_speed_width(struct device *dev, u16 link_speed,
 					u16 link_width);
 #endif

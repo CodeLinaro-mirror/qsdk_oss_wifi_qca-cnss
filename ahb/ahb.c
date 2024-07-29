@@ -65,15 +65,26 @@ struct device_node *cnss_get_m3dump_dev_node(struct cnss_plat_data *plat_priv)
 	return dev_node;
 }
 
+static int cnss_read_node_array_size(struct device *dev, char *property_name)
+{
+	return of_property_count_elems_of_size(dev->of_node, property_name,
+						sizeof(u32));
+}
+
+static void cnss_free_arr_addr_mem(unsigned int *arr_addr)
+{
+	if (arr_addr)
+		kfree(arr_addr);
+}
+
 static int cnss_ahb_alloc_fw_mem(struct cnss_plat_data *plat_priv)
 {
 	struct cnss_fw_mem *fw_mem = plat_priv->fw_mem;
-	unsigned int bdf_location[MAX_TGT_MEM_MODES];
-	unsigned int caldb_location[MAX_TGT_MEM_MODES];
+	unsigned int *bdf_location = NULL, *caldb_location = NULL;
 	unsigned int reg[4], mem_region_reserved_size;
 	u32 caldb_size = 0;
 	struct device *dev;
-	int i, idx, mode;
+	int i, idx, mode, ret = 0, bdf_arr_size, caldb_arr_size;
 	struct device_node *dev_node = NULL;
 	struct device_node *mem_region_node = NULL;
 	phandle mem_region_phandle;
@@ -95,15 +106,28 @@ static int cnss_ahb_alloc_fw_mem(struct cnss_plat_data *plat_priv)
 		memset(reg, 0, sizeof(reg));
 		switch (fw_mem[i].type) {
 		case QMI_WLFW_MEM_BDF_V01:
+			bdf_arr_size = cnss_read_node_array_size(dev,
+							"qcom,bdf-addr");
+			if (!bdf_location) {
+				bdf_location = kcalloc(bdf_arr_size,
+							sizeof(unsigned int),
+							GFP_KERNEL);
+				if (!bdf_location) {
+					cnss_pr_err("Error: Cannot allocate"
+						" bdf arr memory\n");
+					ret = -ENOMEM;
+					goto err_ahb_fw_mem_alloc;
+				}
+			}
 			if (of_property_read_u32_array(dev->of_node,
 						"qcom,bdf-addr", bdf_location,
-						ARRAY_SIZE(bdf_location))) {
+						bdf_arr_size)) {
 				cnss_pr_err("Error: No bdf_addr"
 						"in device_tree\n");
-				CNSS_ASSERT(0);
-				return -ENOMEM;
+				ret = -ENOMEM;
+				goto err_ahb_fw_mem_alloc;
 			}
-			fw_mem[idx].pa = bdf_location[mode];
+			fw_mem[idx].pa = *(bdf_location + mode);
 			fw_mem[idx].va = NULL;
 			fw_mem[idx].size = fw_mem[i].size;
 			fw_mem[idx].type = fw_mem[i].type;
@@ -116,22 +140,35 @@ static int cnss_ahb_alloc_fw_mem(struct cnss_plat_data *plat_priv)
 			if (!plat_priv->cold_boot_support) {
 				fw_mem[idx].pa = 0;
 			} else {
+				caldb_arr_size = cnss_read_node_array_size(dev,
+							"qcom,caldb-addr");
+				if (!caldb_location) {
+					caldb_location = kcalloc(caldb_arr_size,
+							sizeof(unsigned int),
+							GFP_KERNEL);
+					if (!caldb_location) {
+						cnss_pr_err("Error: Cannot"
+						" allocate caldb arr memory\n");
+						ret = -ENOMEM;
+						goto err_ahb_fw_mem_alloc;
+					}
+				}
 				if (of_property_read_u32_array(dev->of_node,
 						"qcom,caldb-addr",
 						caldb_location,
-						ARRAY_SIZE(caldb_location))) {
+						caldb_arr_size)) {
 					cnss_pr_err("Error: Couldn't read"
 						"caldb_addr from device_tree\n");
-					CNSS_ASSERT(0);
-					return -EINVAL;
+					ret = -EINVAL;
+					goto err_ahb_fw_mem_alloc;
 				}
 				if (of_property_read_u32(dev->of_node,
 							 "qcom,caldb-size",
 							 &caldb_size)) {
 					cnss_pr_err("Error: No caldb-size"
 								"in dts\n");
-					CNSS_ASSERT(0);
-					return -ENOMEM;
+					ret = -EINVAL;
+					goto err_ahb_fw_mem_alloc;
 				}
 				if (fw_mem[i].size > caldb_size) {
 					cnss_pr_err("Error: Need more memory"
@@ -139,10 +176,10 @@ static int cnss_ahb_alloc_fw_mem(struct cnss_plat_data *plat_priv)
 						"max:0x%x\n",
 						(unsigned int)fw_mem[i].size,
 						caldb_size);
-					CNSS_ASSERT(0);
-					return -ENOMEM;
+					ret = -EINVAL;
+					goto err_ahb_fw_mem_alloc;
 				}
-				fw_mem[idx].pa = caldb_location[mode];
+				fw_mem[idx].pa = *(caldb_location + mode);
 			}
 			fw_mem[idx].va = ioremap(fw_mem[idx].pa,
 						 fw_mem[idx].size);
@@ -156,31 +193,31 @@ static int cnss_ahb_alloc_fw_mem(struct cnss_plat_data *plat_priv)
 						 &mem_region_phandle)) {
 				cnss_pr_err("could not get"
 						"mem_region_phandle\n");
-				CNSS_ASSERT(0);
-				return -EINVAL;
+				ret = -EINVAL;
+				goto err_ahb_fw_mem_alloc;
 			}
 
 			mem_region_node =
 				of_find_node_by_phandle(mem_region_phandle);
 			if (!mem_region_node) {
 				cnss_pr_err("could not get mem_region_np\n");
-				CNSS_ASSERT(0);
-				return -EINVAL;
+				ret = -EINVAL;
+				goto err_ahb_fw_mem_alloc;
 			}
 
 			if (of_property_read_u32_array(mem_region_node, "reg",
 						       reg, ARRAY_SIZE(reg))) {
 				cnss_pr_err("Error: %s node is not assigned\n",
 					    mem_phandle_node_name);
-				CNSS_ASSERT(0);
-				return -ENOMEM;
+				ret = -ENOMEM;
+				goto err_ahb_fw_mem_alloc;
 			}
 			of_node_put(mem_region_node);
 			mem_region_reserved_size  = reg[3];
 			if (fw_mem[i].size > mem_region_reserved_size) {
 				cnss_pr_err("Error: Need more memory %x\n",
 					    (unsigned int)fw_mem[i].size);
-				CNSS_ASSERT(0);
+				goto err_ahb_fw_mem_alloc;
 			}
 			if (fw_mem[i].size < mem_region_reserved_size) {
 				cnss_pr_err("WARNING: More memory is reserved."
@@ -216,7 +253,7 @@ static int cnss_ahb_alloc_fw_mem(struct cnss_plat_data *plat_priv)
 			if (fw_mem[i].size > resource_size(&m3_dump)) {
 				cnss_pr_err("Error: Need more memory %x\n",
 					    (unsigned int)fw_mem[idx].size);
-				CNSS_ASSERT(0);
+				goto err_ahb_fw_mem_alloc;
 			}
 			fw_mem[idx].size = fw_mem[i].size;
 			fw_mem[idx].type = fw_mem[i].type;
@@ -239,15 +276,15 @@ static int cnss_ahb_alloc_fw_mem(struct cnss_plat_data *plat_priv)
 				    plat_priv->device_id != QCN6432_DEVICE_ID) {
 					cnss_pr_err("Invalid AFC mem request"
 							"from target");
-					CNSS_ASSERT(0);
-					return -EINVAL;
+					ret = -EINVAL;
+					goto err_ahb_fw_mem_alloc;
 				}
 
 				if (fw_mem[i].size != AFC_MEM_SIZE) {
 					cnss_pr_err("Error: less AFC mem req:"
 						   "0x%x\n",
 						   (unsigned int)fw_mem[i].size);
-					CNSS_ASSERT(0);
+					goto err_ahb_fw_mem_alloc;
 				}
 				if (fw_mem[i].va) {
 					afc_memset(plat_priv, fw_mem[i].va, 0,
@@ -268,8 +305,8 @@ static int cnss_ahb_alloc_fw_mem(struct cnss_plat_data *plat_priv)
 					cnss_pr_err("AFC mem allocation"
 							"failed\n");
 					fw_mem[i].pa = 0;
-					CNSS_ASSERT(0);
-					return -ENOMEM;
+					ret = -ENOMEM;
+					goto err_ahb_fw_mem_alloc;
 				}
 			}
 			idx++;
@@ -288,7 +325,13 @@ static int cnss_ahb_alloc_fw_mem(struct cnss_plat_data *plat_priv)
 		}
 	}
 	plat_priv->fw_mem_seg_len = idx;
-	return 0;
+
+err_ahb_fw_mem_alloc:
+	cnss_free_arr_addr_mem(bdf_location);
+	cnss_free_arr_addr_mem(caldb_location);
+	if (ret)
+		CNSS_ASSERT(0);
+	return ret;
 }
 
 static void cnss_ahb_free_fw_mem(struct cnss_plat_data *plat_priv)
@@ -355,7 +398,8 @@ static int cnss_ahb_alloc_qdss_mem(struct cnss_plat_data *plat_priv)
 		if (plat_priv->device_id == QCN6122_DEVICE_ID ||
 		    plat_priv->device_id == QCN9160_DEVICE_ID ||
 		    plat_priv->device_id == QCA5332_DEVICE_ID ||
-		    plat_priv->device_id == QCN6432_DEVICE_ID) {
+		    plat_priv->device_id == QCN6432_DEVICE_ID ||
+		    plat_priv->device_id == QCA5424_DEVICE_ID) {
 			plat_priv->qdss_mem[i].va =
 				ioremap(plat_priv->qdss_mem[i].pa,
 					plat_priv->qdss_mem[i].size);
@@ -523,8 +567,14 @@ static int cnss_ahb_reg_read(struct device *dev, u32 addr, u32 *val,
 		return -ENODEV;
 	}
 
-	if (plat_priv->device_id == QCN6432_DEVICE_ID)
+	if (plat_priv->device_id == QCN6432_DEVICE_ID) {
+		if (base) {
+			*val = readl_relaxed(base);
+			return 0;
+		}
 		return cnss_pci_remote_reg_read(plat_priv, addr, val);
+	}
+
 	if (base)
 		*val = readl_relaxed(addr + base);
 	else
@@ -543,8 +593,14 @@ static int cnss_ahb_reg_write(struct device *dev, u32 addr, u32 val,
 		return -ENODEV;
 	}
 
-	if (plat_priv->device_id == QCN6432_DEVICE_ID)
+	if (plat_priv->device_id == QCN6432_DEVICE_ID) {
+		if (base) {
+			writel_relaxed(val, base);
+			return 0;
+		}
 		return cnss_pci_remote_reg_write(plat_priv, addr, val);
+	}
+
 	writel_relaxed(val, addr + base);
 	return 0;
 }
@@ -564,7 +620,7 @@ static u64 cnss_ahb_get_q6_time(struct device *dev)
 		return 0;
 	}
 
-		return cnss_get_host_timestamp(plat_priv);
+	return cnss_get_host_timestamp(plat_priv);
 }
 
 static

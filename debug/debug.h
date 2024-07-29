@@ -48,6 +48,10 @@
 #define QCA5332_CE_DST_RING_REG_BASE            0x741000
 #define QCA5332_CE_COMMON_REG_BASE              0x758000
 
+#define QCA5424_CE_SRC_RING_REG_BASE            0x200000
+#define QCA5424_CE_DST_RING_REG_BASE            0x201000
+#define QCA5424_CE_COMMON_REG_BASE              0x218000
+
 #define QCN9160_CE_SRC_RING_REG_BASE            0x3B80000
 #define QCN9160_CE_DST_RING_REG_BASE            0x3B81000
 #define QCN9160_CE_COMMON_REG_BASE              0x3B98000
@@ -106,8 +110,8 @@
 #define QCN9224_PCIE_PCIE_LOCAL_REG_REMAP_BAR_CTRL	0x310C
 #define QCN9224_WLAON_SOC_RESET_CAUSE_SHADOW_REG	0x1F80718
 #define QCN9224_PCIE_PCIE_PARF_LTSSM			0x1E081B0
-#define QCN9224_PCIE_PCIE_PARF_PM_STTS			0x1E08024
 #define QCN9224_GCC_RAMSS_CBCR				0x1E38200
+#define PCIE_PCIE_PARF_PM_STTS				0x1E08024
 #define PCIE_CFG_PCIE_STATUS			0x230
 
 #define QCN9224_SNOC_ERL_ErrVld_Low		0x1E80010
@@ -141,6 +145,8 @@
 
 #define QCN9000_PBL_LOG_SRAM_START		0x1403d90
 #define QCN9000_PBL_LOG_SRAM_MAX_SIZE		40
+#define QCN9000_PBL_LOG_SRAM_START_V1		0x14061b8
+#define QCN9000_PBL_LOG_SRAM_MAX_SIZE_V1	60
 #define QCN9000_TCSR_PBL_LOGGING_REG		0x01B000F8
 #define QCN9000_PBL_WLAN_BOOT_CFG		0x1E22B34
 #define QCN9000_PBL_BOOTSTRAP_STATUS		0x01910008
@@ -159,6 +165,11 @@
 #define QCN9224_PBL_WLAN_BOOT_CFG		0x1E22B34
 #define QCN9224_PBL_BOOTSTRAP_STATUS		0x1A006D4
 #define MAX_PBL_DATA_SNAPSHOT			2
+
+#define PCIE_PCI_MSI_CAP_ID_NEXT_CTRL_REG	0x50
+#define PCIE_MSI_CAP_OFF_04H_REG		0x54
+#define PCIE_MSI_CAP_OFF_08H_REG		0x58
+#define PCIE_MSI_CAP_OFF_0CH_REG		0x5C
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
 #define QMI_WLANFW_QDSS_STOP_ALL_TRACE_LI 0x3F
@@ -183,6 +194,8 @@ struct cnss_ce_base_addr {
 struct pbl_reg_addr {
 	u32 pbl_log_sram_start;
 	u32 pbl_log_sram_max_size;
+	u32 pbl_log_sram_start_v1;
+	u32 pbl_log_sram_max_size_v1;
 	u32 tcsr_pbl_logging_reg;
 	u32 pbl_wlan_boot_cfg;
 	u32 pbl_bootstrap_status;
@@ -224,6 +237,10 @@ struct dump_pbl_sbl_data {
 	u32 sbl_len;
 	u32 *noc_vals;
 	u16 type0_status_cmd_reg;
+	u16 pci_msi_cap_id_next_ctrl_reg;
+	u16 pci_msi_cap_off_04h_reg;
+	u16 pci_msi_cap_off_08h_reg;
+	u16 pci_msi_cap_off_0ch_reg;
 	struct pbl_err_data pbl_data[MAX_PBL_DATA_SNAPSHOT];
 };
 

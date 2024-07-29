@@ -134,6 +134,7 @@ static struct device_name_string device_name_table[] = {
 	{ "QCN9160_2", USERPD_2+WLFW_SERVICE_INS_ID_V01_QCN9160 },
 	{ "QCN6432_0", USERPD_0+WLFW_SERVICE_INS_ID_V01_QCN6432 },
 	{ "QCN6432_1", USERPD_1+WLFW_SERVICE_INS_ID_V01_QCN6432 },
+	{ "QCA5424", QCA5424_DEVICE_ID },
 	{ "UNKNOWN", 0 },
 };
 
@@ -197,6 +198,7 @@ static struct qmi_msg_string qmi_str_table[] = {
 	{ "INI_DNLD_", QMI_WLFW_INI_FILE_DOWNLOAD_REQ_V01 },
 	{ "QDSS_FREE_", QMI_WLFW_QDSS_TRACE_FREE_IND_V01 },
 	{ "QDSS_MEM_RDY_", QMI_WLFW_QDSS_MEM_READY_IND_V01 },
+	{ "MLO_WSI_REMAP_", QMI_WLFW_MLO_RECONFIG_INFO_REQ_V01 },
 	{ "UNKNOWN_", 0 },
 };
 
@@ -579,25 +581,166 @@ err:
 	return ret;
 }
 
+static void cnss_mlo_config_fill_req(
+				struct cnss_plat_data *plat_priv,
+				struct mlo_chip_v2_info_s_v01 *v2, int i)
+{
+	struct cnss_mlo_chip_info *mlo_chip_info;
+	struct cnss_plat_data *adj_plat_priv = NULL;
+	struct cnss_mlo_chip_info *adj_ch_info;
+	struct mlo_chip_info_s_v01 *adj_ch;
+	int ch_idx = 0, local_links = 0;
+	int j, k;
+
+	mlo_chip_info = &plat_priv->mlo_group_info->chip_info[i];
+
+	v2->mlo_chip_info.chip_id = mlo_chip_info->chip_id;
+	v2->mlo_chip_info.num_local_links = mlo_chip_info->num_local_links;
+
+	for (j = 0; j < CNSS_MAX_LINKS_PER_CHIP; j++) {
+		v2->mlo_chip_info.hw_link_id[j] = mlo_chip_info->hw_link_ids[j];
+		v2->mlo_chip_info.valid_mlo_link_id[j] =
+					mlo_chip_info->valid_link_ids[j];
+	}
+	v2->adj_mlo_num_chips = mlo_chip_info->num_adj_chips;
+
+	for (j = 0; j < v2->adj_mlo_num_chips; j++) {
+		ch_idx = mlo_chip_info->adj_chip_ids[j];
+		adj_plat_priv = cnss_get_plat_priv_by_chip_id(ch_idx);
+		if (adj_plat_priv)
+			adj_ch_info = adj_plat_priv->mlo_chip_info;
+		else
+			continue;
+
+		adj_ch = &v2->adj_mlo_chip_info[j];
+		adj_ch->chip_id = adj_ch_info->chip_id;
+		adj_ch->num_local_links = adj_ch_info->num_local_links;
+
+		local_links = adj_ch->num_local_links;
+		for (k = 0; k < local_links; k++) {
+			adj_ch->hw_link_id[k] = adj_ch_info->hw_link_ids[k];
+			adj_ch->valid_mlo_link_id[k] =
+						adj_ch_info->valid_link_ids[k];
+		}
+	}
+}
+
+int cnss_wlfw_mlo_wsi_remap_send_sync(struct cnss_plat_data *plat_priv)
+{
+	struct wlfw_mlo_reconfig_info_req_msg_v01 *req;
+	struct wlfw_mlo_reconfig_info_resp_msg_v01 *resp;
+	struct mlo_chip_v2_info_s_v01 *v2;
+	struct qmi_txn txn;
+	int ret = 0, i;
+	int resp_error_msg = 0;
+
+	cnss_pr_dbg("Sending MLO Reconfig message, state: 0x%lx\n",
+		    plat_priv->driver_state);
+
+	if (!plat_priv)
+		return -ENODEV;
+
+	req = kzalloc(sizeof(*req), GFP_KERNEL);
+	if (!req)
+		return -ENOMEM;
+
+	resp = kzalloc(sizeof(*resp), GFP_KERNEL);
+	if (!resp) {
+		kfree(req);
+		return -ENOMEM;
+	}
+
+	req->mlo_capable_valid = 1;
+	req->mlo_capable = 1;
+
+	req->mlo_chip_id = plat_priv->mlo_chip_info->chip_id;
+	req->mlo_chip_id_valid = 1;
+
+	req->mlo_group_id = plat_priv->mlo_group_info->group_id;
+	req->mlo_group_id_valid = 1;
+
+	req->max_mlo_peer_valid = 1;
+	req->max_mlo_peer = plat_priv->mlo_group_info->max_num_peers;
+
+	req->mlo_num_chips_valid = 1;
+	req->mlo_num_chips = plat_priv->mlo_group_info->num_chips;
+
+	req->mlo_chip_info_valid = 0;
+	req->mlo_chip_v2_info_valid = 1;
+	for (i = 0; i < req->mlo_num_chips; i++) {
+		v2 = &req->mlo_chip_v2_info[i];
+		cnss_mlo_config_fill_req(plat_priv, v2, i);
+	}
+
+	qmi_record(plat_priv->wlfw_service_instance_id,
+		  (QMI_TYPE_REQ | QMI_WLFW_MLO_RECONFIG_INFO_REQ_V01), ret,
+		  resp_error_msg);
+
+	ret = qmi_txn_init(&plat_priv->qmi_wlfw, &txn,
+			   wlfw_mlo_reconfig_info_resp_msg_v01_ei, resp);
+	if (ret < 0) {
+		cnss_pr_err("Failed to initialize txn for MLO Reconfig request, err: %d\n",
+			    ret);
+		goto out;
+	}
+
+	ret = qmi_send_request(&plat_priv->qmi_wlfw, NULL, &txn,
+			       QMI_WLFW_MLO_RECONFIG_INFO_REQ_V01,
+			       WLFW_MLO_RECONFIG_INFO_REQ_MSG_V01_MAX_MSG_LEN,
+			       wlfw_mlo_reconfig_info_req_msg_v01_ei, req);
+	if (ret < 0) {
+		qmi_txn_cancel(&txn);
+		cnss_pr_err("Failed to send MLO Reconfig request, err: %d\n",
+			    ret);
+		goto out;
+	}
+
+	ret = qmi_txn_wait(&txn, QMI_WLFW_TIMEOUT_JF);
+	if (ret < 0) {
+		resp_error_msg = -QMI_RESULT_FAILURE_V01;
+		cnss_pr_err("Failed to wait for response of MLO Reconfig request, err: %d\n",
+			    ret);
+		goto out;
+	}
+
+	if (resp->resp.result != QMI_RESULT_SUCCESS_V01) {
+		cnss_pr_err("MLO Reconfig request failed, result: %d, err: %d\n",
+			    resp->resp.result, resp->resp.error);
+		ret = -resp->resp.result;
+		resp_error_msg = resp->resp.error;
+		goto out;
+	}
+	qmi_record(plat_priv->wlfw_service_instance_id,
+		  (QMI_TYPE_RESP | QMI_WLFW_MLO_RECONFIG_INFO_RESP_V01), ret,
+		  resp_error_msg);
+
+	kfree(req);
+	kfree(resp);
+	return 0;
+
+out:
+	qmi_record(plat_priv->wlfw_service_instance_id,
+		  (QMI_WLFW_MLO_RECONFIG_INFO_REQ_V01), ret,
+		  resp_error_msg);
+	CNSS_ASSERT(0);
+	kfree(req);
+	kfree(resp);
+	return ret;
+}
+
 static int cnss_wlfw_host_cap_send_sync(struct cnss_plat_data *plat_priv)
 {
 	struct wlfw_host_cap_req_msg_v01 *req;
 	struct wlfw_host_cap_resp_msg_v01 *resp;
-	struct wlfw_host_mlo_chip_info_s_v01 *info;
-	struct wlfw_host_mlo_chip_v2_info_s_v01 *v2;
-	struct cnss_mlo_chip_info *mlo_chip_info;
-	struct wlfw_host_mlo_chip_info_s_v01 *adj_ch;
-	struct cnss_mlo_chip_info *adj_ch_info;
+	struct mlo_chip_v2_info_s_v01 *v2;
 	struct qmi_txn txn;
-	int ret = 0, i, j, k;
+	int ret = 0, i;
 	int resp_error_msg = 0;
 	const char *model = NULL;
 	struct device_node *root;
 	struct device *dev = &plat_priv->plat_dev->dev;
 	const struct firmware *fw;
 	char filename[FW_INI_FILE_NAME_LEN] = {0};
-	struct cnss_plat_data *adj_plat_priv = NULL;
-	int ch_idx = 0, local_links = 0;
 
 	cnss_pr_dbg("Sending host capability message, state: 0x%lx\n",
 		    plat_priv->driver_state);
@@ -709,71 +852,11 @@ static int cnss_wlfw_host_cap_send_sync(struct cnss_plat_data *plat_priv)
 		req->mlo_num_chips_valid = 1;
 		req->mlo_num_chips = plat_priv->mlo_group_info->num_chips;
 
-		if (plat_priv->mlo_default_cfg) {
-			req->mlo_chip_info_valid = 1;
-			req->mlo_chip_v2_info_valid = 0;
-			for (i = 0; i < req->mlo_num_chips; i++) {
-				info = &req->mlo_chip_info[i];
-				mlo_chip_info =
-				&plat_priv->mlo_group_info->chip_info[i];
-
-				info->chip_id = mlo_chip_info->chip_id;
-				info->num_local_links =
-					mlo_chip_info->num_local_links;
-
-				for (j = 0; j < CNSS_MAX_LINKS_PER_CHIP; j++) {
-					info->hw_link_id[j] =
-						mlo_chip_info->hw_link_ids[j];
-					info->valid_mlo_link_id[j] =
-					mlo_chip_info->valid_link_ids[j];
-				}
-			}
-		} else {
-			req->mlo_chip_info_valid = 0;
-			req->mlo_chip_v2_info_valid = 1;
-			for (i = 0; i < req->mlo_num_chips; i++) {
-				v2 = &req->mlo_chip_v2_info[i];
-				mlo_chip_info =
-				&plat_priv->mlo_group_info->chip_info[i];
-
-				v2->mlo_chip_info.chip_id =
-							mlo_chip_info->chip_id;
-				v2->mlo_chip_info.num_local_links =
-						mlo_chip_info->num_local_links;
-
-				for (j = 0; j < CNSS_MAX_LINKS_PER_CHIP; j++) {
-					v2->mlo_chip_info.hw_link_id[j] =
-						mlo_chip_info->hw_link_ids[j];
-					v2->mlo_chip_info.valid_mlo_link_id[j] =
-					mlo_chip_info->valid_link_ids[j];
-				}
-				v2->adj_mlo_num_chips =
-						mlo_chip_info->num_adj_chips;
-
-				for (j = 0; j < v2->adj_mlo_num_chips; j++) {
-					ch_idx = mlo_chip_info->adj_chip_ids[j];
-					adj_plat_priv =
-					cnss_get_plat_priv_by_chip_id(ch_idx);
-					if (adj_plat_priv)
-						adj_ch_info =
-						adj_plat_priv->mlo_chip_info;
-					else
-						continue;
-
-					adj_ch = &v2->adj_mlo_chip_info[j];
-					adj_ch->chip_id = adj_ch_info->chip_id;
-					adj_ch->num_local_links =
-						adj_ch_info->num_local_links;
-
-					local_links = adj_ch->num_local_links;
-					for (k = 0; k < local_links; k++) {
-						adj_ch->hw_link_id[k] =
-						adj_ch_info->hw_link_ids[k];
-						adj_ch->valid_mlo_link_id[k] =
-						adj_ch_info->valid_link_ids[k];
-					}
-				}
-			}
+		req->mlo_chip_info_valid = 0;
+		req->mlo_chip_v2_info_valid = 1;
+		for (i = 0; i < req->mlo_num_chips; i++) {
+			v2 = &req->mlo_chip_v2_info[i];
+			cnss_mlo_config_fill_req(plat_priv, v2, i);
 		}
 	}
 
@@ -1116,8 +1199,8 @@ static int cnss_wlfw_load_bdf(struct wlfw_bdf_download_req_msg_v01 *req,
 	char filename[30];
 	const struct firmware *fw;
 	char *bdf_addr;
-	unsigned int bdf_addr_pa, location[MAX_TGT_MEM_MODES];
-	int size;
+	unsigned int bdf_addr_pa, *location = NULL;
+	int size, bdf_arr_size;
 	struct device *dev;
 
 	dev = &plat_priv->plat_dev->dev;
@@ -1181,14 +1264,25 @@ static int cnss_wlfw_load_bdf(struct wlfw_bdf_download_req_msg_v01 *req,
 		return ret;
 	}
 	size = fw->size;
+
+	bdf_arr_size = of_property_count_elems_of_size(dev->of_node,
+						"qcom,bdf-addr",
+						sizeof(u32));
+	location = kcalloc(bdf_arr_size, sizeof(unsigned int), GFP_KERNEL);
+	if (!location) {
+		cnss_pr_err("Error: Cannot allocate location arr memory\n");
+		return -ENOMEM;
+	}
+
 	if (of_property_read_u32_array(dev->of_node, "qcom,bdf-addr", location,
-				       ARRAY_SIZE(location))) {
+				       bdf_arr_size)) {
 		pr_err("Error: No bdf_addr in device_tree\n");
+		kfree(location);
 		CNSS_ASSERT(0);
 		goto out;
 	}
-	CNSS_ASSERT(plat_priv->tgt_mem_cfg_mode < ARRAY_SIZE(location));
-	bdf_addr_pa = location[plat_priv->tgt_mem_cfg_mode];
+	CNSS_ASSERT(plat_priv->tgt_mem_cfg_mode < bdf_arr_size);
+	bdf_addr_pa = *(location + plat_priv->tgt_mem_cfg_mode);
 	bdf_addr = ioremap(bdf_addr_pa, BDF_MAX_SIZE);
 	if (!bdf_addr) {
 		cnss_pr_err("ERROR. not able to ioremap BDF location\n");
@@ -1229,6 +1323,8 @@ static int cnss_wlfw_load_bdf(struct wlfw_bdf_download_req_msg_v01 *req,
 out:
 	if (fw)
 		release_firmware(fw);
+	if (location)
+		kfree(location);
 	return ret;
 }
 
@@ -3280,11 +3376,15 @@ static void cnss_cal_report_download(struct cnss_plat_data *plat_priv)
 					0)) {
 		if (plat_priv->cold_boot_support &&
 		    plat_priv->cal_in_progress) {
-			cnss_cal_file_download_to_mem(plat_priv,
-						      &cal_file_size);
-			plat_priv->cal_file_size = cal_file_size;
-			cnss_pr_dbg("%s: Cold boot support enabled. CALDB downloaded, file size %u\n",
-				    __func__, plat_priv->cal_file_size);
+			if (plat_priv->cal_mem && plat_priv->cal_mem->va) {
+				cnss_cal_file_download_to_mem(plat_priv,
+							      &cal_file_size);
+				plat_priv->cal_file_size = cal_file_size;
+				cnss_pr_dbg("%s: Cold boot support enabled. CALDB downloaded, file size %u\n",
+					    __func__,
+					    plat_priv->cal_file_size);
+			} else
+				cnss_pr_err("FW CALDB memory invalid, Unable to copy cal data to mem.");
 		}
 	}
 }
@@ -3587,6 +3687,7 @@ static void cnss_wlfw_qdss_trace_save_ind_cb(struct qmi_handle *qmi_wlfw,
 	case QCN9224_DEVICE_ID:
 	case QCA5332_DEVICE_ID:
 	case QCN6432_DEVICE_ID:
+	case QCA5424_DEVICE_ID:
 		break;
 	case QCA8074_DEVICE_ID:
 	case QCA8074V2_DEVICE_ID:

@@ -180,7 +180,7 @@ enum cnss_cal_db_op {
  * |   0  |  46MB  |    36MB   | 0x2400000 | 0x2500000 | 0x2600000 |   26MB   |
  * +======+========+===========+===========+===========+===========+==========+
  */
-#define MAX_TGT_MEM_MODES		6
+#define MAX_TGT_MEM_MODES		7
 
 #define CNSS_EVENT_SYNC   BIT(0)
 #define CNSS_EVENT_UNINTERRUPTIBLE BIT(1)
@@ -762,6 +762,7 @@ struct cnss_plat_data {
 #endif
 	struct completion soc_reset_request_complete;
 	struct cnss_bus_ops *ops;
+	bool wsi_remap_state;
 };
 
 #ifdef CONFIG_ARCH_QCOM
@@ -820,7 +821,7 @@ int cnss_get_plat_env_index_from_plat_priv(struct cnss_plat_data *plat_priv);
 int cnss_qca9000_shutdown_part2(struct cnss_plat_data *plat_priv);
 
 #if defined(CNSS_LOWMEM_PROFILE) && defined(CONFIG_CNSS2_KERNEL_IPQ) && \
-	defined(QCA_CNSS_QCA5332)
+	defined(CNSS_FW_MOUNT_SUPPORT)
 #define MOUNT_PATH			"/lib/wifi/mount/mount_fw_partition.sh"
 #define UMOUNT_PATH			"/lib/wifi/mount/umount_fw_partition.sh"
 

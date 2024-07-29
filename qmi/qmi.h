@@ -147,6 +147,7 @@ int cnss_wlfw_qdss_data_send_sync(struct cnss_plat_data *plat_priv,
 				  char *file_name,
 				  u32 total_size);
 char *qmi_id_to_str(char *bdf_str, char *msg_name);
+int cnss_wlfw_mlo_wsi_remap_send_sync(struct cnss_plat_data *plat_priv);
 #else
 #define QMI_WLFW_TIMEOUT_MS		10000
 
@@ -330,6 +331,11 @@ int cnss_wlfw_qdss_data_send_sync(struct cnss_plat_data *plat_priv,
 }
 static inline
 char *qmi_id_to_str(char *bdf_str, char *msg_name)
+{
+	return 0;
+}
+static inline
+int cnss_wlfw_mlo_wsi_remap_send_sync(struct cnss_plat_data *plat_priv)
 {
 	return 0;
 }
