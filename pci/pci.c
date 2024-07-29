@@ -65,7 +65,7 @@
 #define MHI_NODE_NAME			"qcom,mhi"
 #define MHI_MSI_NAME			"MHI"
 #define QDSS_MSI_NAME			"QDSS"
-
+#define MHI_CNTRL_BUF_LEN		0x2000
 #define WAKE_MSI_NAME			"WAKE"
 
 #define FW_ASSERT_TIMEOUT		5000
@@ -205,7 +205,7 @@ static struct mhi_channel_config cnss_pci_mhi_channels[] = {
 #ifdef CONFIG_TARGET_SDX75
 		.num_elements = 64,
 #else
-		.num_elements = 32,
+		.num_elements = 8,
 #endif
 		.event_ring = 1,
 		.dir = DMA_TO_DEVICE,
@@ -226,7 +226,7 @@ static struct mhi_channel_config cnss_pci_mhi_channels[] = {
 #ifdef CONFIG_TARGET_SDX75
 		.num_elements = 64,
 #else
-		.num_elements = 32,
+		.num_elements = 8,
 #endif
 		.event_ring = 1,
 		.dir = DMA_FROM_DEVICE,
@@ -271,7 +271,11 @@ static struct mhi_controller_config cnss_pci_mhi_config = {
 	.max_channels = 30,
 	.timeout_ms = 10000,
 	.use_bounce_buf = false,
+#ifdef CONFIG_TARGET_SDX75
 	.buf_len = 0,
+#else
+	.buf_len = MHI_CNTRL_BUF_LEN,
+#endif
 	.num_channels = ARRAY_SIZE(cnss_pci_mhi_channels),
 	.ch_cfg = cnss_pci_mhi_channels,
 	.num_events = ARRAY_SIZE(cnss_pci_mhi_events),
