@@ -3276,7 +3276,7 @@ static int cnss_rproc_recovery(struct cnss_plat_data *plat_priv)
 
 	cnss_bus_update_status(plat_priv, CNSS_FW_DOWN);
 	if (rproc) {
-		ret = rproc_shutdown(rproc);
+		ret = rproc_stop(rproc, true);
 		if (ret < 0) {
 			cnss_pr_err("User pd rproc_stop failed\n");
 			return ret;
@@ -3284,7 +3284,7 @@ static int cnss_rproc_recovery(struct cnss_plat_data *plat_priv)
 	}
 
 	if (rproc_rootpd) {
-		ret = rproc_shutdown(rproc_rootpd);
+		ret = rproc_stop(rproc_rootpd, true);
 		if (ret < 0) {
 			cnss_pr_err("Root pd rproc_stop failed\n");
 			return ret;
@@ -3302,6 +3302,7 @@ static int cnss_rproc_recovery(struct cnss_plat_data *plat_priv)
 
 static int cnss_rproc_start(struct cnss_plat_data *plat_priv)
 {
+	const struct firmware *firmware_p = NULL;
 	struct rproc *rproc_rpd;
 	struct rproc *rproc;
 	int ret;
@@ -3309,18 +3310,36 @@ static int cnss_rproc_start(struct cnss_plat_data *plat_priv)
 	rproc = plat_priv->rproc_handle;
 	rproc_rpd = plat_priv->rproc_rpd_handle;
 	if (rproc_rpd) {
-		ret = rproc_boot(rproc_rpd);
+		ret = request_firmware(&firmware_p, rproc_rpd->firmware,
+				       &rproc_rpd->dev);
 		if (ret < 0) {
-			cnss_pr_err("Root pd rproc_start failed\n");
+			cnss_pr_err("Request_firmware failed: %d\n", ret);
 			return ret;
 		}
+
+		ret = rproc_start(rproc_rpd, firmware_p);
+		if (ret < 0) {
+			cnss_pr_err("Root pd rproc_start failed\n");
+			release_firmware(firmware_p);
+			return ret;
+		}
+		release_firmware(firmware_p);
 	} else {
+		ret = request_firmware(&firmware_p, rproc->firmware,
+				       &rproc->dev);
+		if (ret < 0) {
+			cnss_pr_err("Request_firmware failed: %d\n", ret);
+			return ret;
+		}
+
 		if (rproc) {
-			ret = rproc_boot(rproc);
+			ret = rproc_start(rproc, firmware_p);
 			if (ret < 0) {
 				cnss_pr_err("Root pd rproc_start failed\n");
+				release_firmware(firmware_p);
 				return ret;
 			}
+			release_firmware(firmware_p);
 		}
 	}
 	return 0;

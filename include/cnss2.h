@@ -15,6 +15,7 @@
 #define _NET_CNSS2_H
 
 #include <linux/pci.h>
+#include <linux/version.h>
 
 #define CNSS_MAX_FILE_NAME		20
 #define CNSS_MAX_TIMESTAMP_LEN		32
@@ -40,6 +41,23 @@ enum cnss_bus_width_type {
 	CNSS_BUS_WIDTH_VERY_HIGH
 };
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
+enum cnss_notif_type {
+	CNSS_BEFORE_POWERUP,
+	CNSS_AFTER_POWERUP,
+	CNSS_BEFORE_SHUTDOWN,
+	CNSS_AFTER_SHUTDOWN,
+	CNSS_PREPARE_FOR_FATAL_SHUTDOWN,
+	CNSS_RAMDUMP_NOTIFICATION,
+	CNSS_POWERUP_FAILURE,
+	CNSS_PROXY_VOTE,
+	CNSS_PROXY_UNVOTE,
+	CNSS_SOC_RESET,
+	CNSS_RAMDUMP_DONE,
+	/* The below event should be the last event for all devices */
+	CNSS_NOTIF_TYPE_MAX
+};
+#else
 enum cnss_notif_type {
 	CNSS_BEFORE_SHUTDOWN,
 	CNSS_AFTER_SHUTDOWN,
@@ -55,6 +73,7 @@ enum cnss_notif_type {
 	/* The below event should be the last event for all devices */
 	CNSS_NOTIF_TYPE_MAX
 };
+#endif
 
 enum cnss_platform_cap_flag {
 	CNSS_HAS_EXTERNAL_SWREG = 0x01,
