@@ -5524,6 +5524,27 @@ static void cnss_recovery_work_deinit(struct cnss_plat_data *plat_priv)
 }
 
 #ifdef CONFIG_CNSS2_KERNEL_5_15
+#ifdef CONFIG_CNSS2_SSR_UEVENT
+
+#define CNSS_SSR_UEVENT 2
+
+static void cnss_send_ssr_uevent(struct pci_dev *pci_dev)
+{
+	char *envp[2];
+
+	envp[0] = kasprintf(GFP_KERNEL, "QCAWIFI_KUENV=%d", CNSS_SSR_UEVENT);
+	envp[1] = NULL;
+	if (envp[0]) {
+		kobject_uevent_env(&pci_dev->dev.kobj, KOBJ_CHANGE, envp);
+		kfree(envp[0]);
+	}
+}
+#else
+static inline void cnss_send_ssr_uevent(struct pci_dev *pci_dev)
+{
+}
+#endif
+
 static void cnss_report_crash_work(struct work_struct *work)
 {
 	int index;
@@ -5546,8 +5567,10 @@ static void cnss_report_crash_work(struct work_struct *work)
 	cnss_bus_dev_ramdump(plat_priv);
 
 	/* Shutdown was skipped if recovery is disabled. */
-	if (plat_priv->recovery_enabled)
+	if (plat_priv->recovery_enabled) {
 		cnss_hif_power_up(plat_priv);
+		cnss_send_ssr_uevent(plat_priv->pci_dev);
+	}
 }
 #endif
 
