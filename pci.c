@@ -4668,11 +4668,24 @@ void cnss_pci_free_qdss_mem(struct cnss_plat_data *plat_priv)
 
 void cnss_pci_free_fw_mem(struct cnss_plat_data *plat_priv)
 {
-	struct cnss_pci_data *pci_priv = plat_priv->bus_priv;
-	struct cnss_fw_mem *fw_mem = plat_priv->fw_mem;
-	struct device *dev = &pci_priv->pci_dev->dev;
+	struct cnss_pci_data *pci_priv = NULL;
+	struct cnss_fw_mem *fw_mem = NULL;
+	struct device *dev = NULL;
 	int i;
 
+	if (!plat_priv) {
+		cnss_pr_err("%s: plat_priv is NULL\n", __func__);
+		return;
+	}
+
+	fw_mem = plat_priv->fw_mem;
+	pci_priv = plat_priv->bus_priv;
+	if (!pci_priv) {
+		cnss_pr_err("%s: pci_priv is NULL\n", __func__);
+		return;
+	}
+
+	dev = &pci_priv->pci_dev->dev;
 	if (plat_priv->dma_alloc_supported) {
 		for (i = 0; i < plat_priv->fw_mem_seg_len; i++) {
 			if (fw_mem[i].va && fw_mem[i].size) {
