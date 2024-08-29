@@ -1937,6 +1937,22 @@ int cnss_wlfw_qdss_data_send_sync(struct cnss_plat_data *plat_priv,
 		  resp_error_msg);
 
 	if (remaining == 0 && (resp->end_valid && resp->end)) {
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
+	{
+		struct cnss_dump_segment *segment;
+
+		segment = kzalloc(sizeof(*segment), GFP_KERNEL);
+		if (!segment) {
+			ret = -ENOMEM;
+			goto fail;
+		}
+		segment->len = total_size;
+		segment->vaddr = p_qdss_trace_data;
+		segment->type = CNSS_FW_QDSS_DATA;
+		cnss_coredump_build_inline(plat_priv, segment, 1);
+		kfree(segment);
+	}
+#else
 		ret = cnss_genl_send_msg(p_qdss_trace_data,
 					 CNSS_GENL_MSG_TYPE_QDSS, file_name,
 					 total_size);
@@ -1946,6 +1962,7 @@ int cnss_wlfw_qdss_data_send_sync(struct cnss_plat_data *plat_priv,
 		ret = -EINVAL;
 		goto fail;
 		}
+#endif
 	} else {
 		cnss_pr_err("%s: QDSS trace file corrupted: remaining %u, end_valid %u, end %u",
 			    __func__,
