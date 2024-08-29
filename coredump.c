@@ -194,8 +194,8 @@ void cnss_coredump_qdss_dump(struct cnss_plat_data *plat_priv,
 	if (num_seg == 1) {
 		segment->len = event_data->mem_seg[0].size;
 		segment->vaddr = qdss_mem[0].va;
-	cnss_pr_dbg("seg vaddr is 0x%p len is 0x%x\n",
-		    segment->vaddr, segment->len);
+		cnss_pr_dbg("seg vaddr is 0x%p len is 0x%x\n",
+			    segment->vaddr, segment->len);
 		segment->type = CNSS_FW_QDSS_DATA;
 	} else if (num_seg == 2) {
 		/*FW sends 2 segments with segment 0 and segment 1 */

@@ -1740,12 +1740,18 @@ static ssize_t cnss_platform_features_write(struct file *fp,
 					     plat_priv->driver_state);
 				return -EINVAL;
 			}
-
-			if (cnss_check_be_target(plat_priv))
-				val = QMI_WLANFW_QDSS_STOP_ALL_TRACE_BE;
-			else
-				val = QMI_WLANFW_QDSS_STOP_ALL_TRACE_LI;
-
+			if (sptr) {
+				token = strsep(&sptr, delim);
+				if (!token)
+					return -EINVAL;
+				if (kstrtou32(token, 0, &val))
+					return -EINVAL;
+			} else {
+				if (cnss_check_be_target(plat_priv))
+					val = QMI_WLANFW_QDSS_STOP_ALL_TRACE_BE;
+				else
+					val = QMI_WLANFW_QDSS_STOP_ALL_TRACE_LI;
+			}
 			cnss_wlfw_send_qdss_trace_mode_req(plat_priv,
 						QMI_WLFW_QDSS_TRACE_OFF_V01,
 						val);
