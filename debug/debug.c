@@ -376,15 +376,18 @@ int cnss_get_mhi_region_len(struct cnss_plat_data *plat_priv,
 }
 
 static int cnss_debug_read_pbl_data(struct cnss_pci_data *pci_priv,
-				    u32 log_size, u32 sram_start_reg,
-				    struct pbl_err_data *pbl_data)
+				    struct pbl_reg_addr *pbl_data,
+				    struct pbl_err_data *pbl_err_data)
 {
-	int i = 0;
-	int j = 0;
+	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
+	u32 log_size_v1 = pbl_data->pbl_log_sram_max_size_v1;
+	u32 log_size = pbl_data->pbl_log_sram_max_size;
+	u32 total_size = log_size + log_size_v1;
 	int gfp = GFP_KERNEL;
 	u32 *mem_addr = NULL;
 	u32 *buf = NULL;
-	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
+	int i = 0;
+	int j = 0;
 
 	if (test_bit(CNSS_MHI_MISSION_MODE, &pci_priv->mhi_state)) {
 		cnss_pr_err("%s: %s is already in Mission mode\n",
@@ -395,26 +398,33 @@ static int cnss_debug_read_pbl_data(struct cnss_pci_data *pci_priv,
 	if (in_interrupt() || irqs_disabled())
 		gfp = GFP_ATOMIC;
 
-	buf = kzalloc(log_size, gfp);
+	buf = kzalloc(total_size, gfp);
 	if (!buf)
 		return -ENOMEM;
 
-	mem_addr = kzalloc(log_size, gfp);
+	mem_addr = kzalloc(total_size, gfp);
 	if (!mem_addr) {
 		kfree(buf);
 		return -ENOMEM;
 	}
 
 	for (i = 0, j = 0; i < log_size; i += sizeof(u32), j++) {
-		mem_addr[j] = sram_start_reg + i;
+		mem_addr[j] = pbl_data->pbl_log_sram_start + i;
 		if (cnss_pci_reg_read(pci_priv->plat_priv,
 					mem_addr[j], &buf[j]))
 			break;
 	}
 
-	pbl_data->pbl_tbl_len = j;
-	pbl_data->pbl_vals = buf;
-	pbl_data->pbl_reg_tbl = mem_addr;
+	for (i = 0; i < log_size_v1; i += sizeof(u32), j++) {
+		mem_addr[j] = pbl_data->pbl_log_sram_start_v1 + i;
+		if (cnss_pci_reg_read(pci_priv->plat_priv,
+					mem_addr[j], &buf[j]))
+			break;
+	}
+
+	pbl_err_data->pbl_tbl_len = j;
+	pbl_err_data->pbl_vals = buf;
+	pbl_err_data->pbl_reg_tbl = mem_addr;
 
 	return 0;
 }
@@ -502,11 +512,27 @@ static int cnss_debug_read_misc_data(struct cnss_pci_data *pci_priv,
 			    __func__, plat_priv->device_name);
 		return -EINVAL;
 	}
-	if (plat_priv->device_id == QCN9224_DEVICE_ID) {
 #if defined(CONFIG_CNSS2_QCOM_KERNEL_DEPENDENCY) && IS_ENABLED(CONFIG_PCIE_QCOM)
-		pcie_parf_read(pci_priv->pci_dev, PCIE_CFG_PCIE_STATUS,
-			       &pbl_sbl_err->pcie_cfg_pcie_status);
+	pcie_parf_read(pci_priv->pci_dev, PCIE_CFG_PCIE_STATUS,
+		       &pbl_sbl_err->pcie_cfg_pcie_status);
 #endif
+	cnss_pci_reg_read(plat_priv,
+			  PCIE_PCIE_PARF_PM_STTS,
+			  &pbl_sbl_err->parf_pm_stts);
+	pci_read_config_word(pci_priv->pci_dev, PCI_COMMAND,
+			     &pbl_sbl_err->type0_status_cmd_reg);
+
+	pci_read_config_word(pci_priv->pci_dev,
+			     PCIE_PCI_MSI_CAP_ID_NEXT_CTRL_REG,
+			     &pbl_sbl_err->pci_msi_cap_id_next_ctrl_reg);
+	pci_read_config_word(pci_priv->pci_dev, PCIE_MSI_CAP_OFF_04H_REG,
+			     &pbl_sbl_err->pci_msi_cap_off_04h_reg);
+	pci_read_config_word(pci_priv->pci_dev, PCIE_MSI_CAP_OFF_08H_REG,
+			     &pbl_sbl_err->pci_msi_cap_off_08h_reg);
+	pci_read_config_word(pci_priv->pci_dev, PCIE_MSI_CAP_OFF_0CH_REG,
+			     &pbl_sbl_err->pci_msi_cap_off_0ch_reg);
+
+	if (plat_priv->device_id == QCN9224_DEVICE_ID) {
 		cnss_pci_reg_read(plat_priv,
 				  QCN9224_PCIE_PCIE_LOCAL_REG_REMAP_BAR_CTRL,
 				  &pbl_sbl_err->remap_bar_ctrl);
@@ -516,11 +542,6 @@ static int cnss_debug_read_misc_data(struct cnss_pci_data *pci_priv,
 		cnss_pci_reg_read(plat_priv,
 				  QCN9224_PCIE_PCIE_PARF_LTSSM,
 				  &pbl_sbl_err->parf_ltssm);
-		cnss_pci_reg_read(plat_priv,
-				  QCN9224_PCIE_PCIE_PARF_PM_STTS,
-				  &pbl_sbl_err->parf_pm_stts);
-		pci_read_config_word(pci_priv->pci_dev, PCI_COMMAND,
-				     &pbl_sbl_err->type0_status_cmd_reg);
 		cnss_pci_reg_read(plat_priv,
 				  QCN9224_GCC_RAMSS_CBCR,
 				  &pbl_sbl_err->gcc_ramss_cbcr);
@@ -560,8 +581,7 @@ static void cnss_debug_collect_bl_data(struct cnss_pci_data *pci_priv,
 	 * Q6 team requested. Please check with Q6 team before removing one
 	 * of the SRAM dump.
 	 */
-	if (cnss_debug_read_pbl_data(pci_priv, pbl_data->pbl_log_sram_max_size,
-				     pbl_data->pbl_log_sram_start,
+	if (cnss_debug_read_pbl_data(pci_priv, pbl_data,
 				     &pbl_sbl_err->pbl_data[0])) {
 		cnss_pr_err("%s: Failed to read PBL log data\n",
 			    __func__);
@@ -581,8 +601,7 @@ static void cnss_debug_collect_bl_data(struct cnss_pci_data *pci_priv,
 		return;
 	}
 
-	if (cnss_debug_read_pbl_data(pci_priv, pbl_data->pbl_log_sram_max_size,
-				     pbl_data->pbl_log_sram_start,
+	if (cnss_debug_read_pbl_data(pci_priv, pbl_data,
 				     &pbl_sbl_err->pbl_data[1])) {
 		cnss_pr_err("%s: Failed to read PBL log data\n",
 			    __func__);
@@ -653,21 +672,29 @@ static void cnss_debug_print_bl_data(struct cnss_pci_data *pci_priv,
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 
 #if defined(CONFIG_CNSS2_QCOM_KERNEL_DEPENDENCY) && IS_ENABLED(CONFIG_PCIE_QCOM)
-	if (plat_priv->device_id == QCN9224_DEVICE_ID)
-		cnss_pr_err("%s: PCIE_CFG_PCIE_STATUS: 0x%08x\n",
-			    __func__, pbl_sbl_err->pcie_cfg_pcie_status);
+	cnss_pr_err("%s: PCIE_CFG_PCIE_STATUS: 0x%08x\n",
+		    __func__, pbl_sbl_err->pcie_cfg_pcie_status);
 #endif
+	cnss_pr_err("%s: PARF_PM_STTS: 0x%08x, PCIE_TYPE0_STATUS_COMMAND_REG: 0x%08x\n",
+		    __func__, pbl_sbl_err->parf_pm_stts,
+		    pbl_sbl_err->type0_status_cmd_reg);
+
+	cnss_pr_err("%s: PCIE_PCI_MSI_CAP_ID_NEXT_CTRL_REG: 0x%08x, PCIE_MSI_CAP_OFF_04H_REG: 0x%08x\n",
+		    __func__, pbl_sbl_err->pci_msi_cap_id_next_ctrl_reg,
+		    pbl_sbl_err->pci_msi_cap_off_04h_reg);
+	cnss_pr_err("%s: PCIE_MSI_CAP_OFF_08H_REG: 0x%08x, PCIE_MSI_CAP_OFF_0CH_REG: 0x%08x\n",
+		    __func__, pbl_sbl_err->pci_msi_cap_off_08h_reg,
+		    pbl_sbl_err->pci_msi_cap_off_0ch_reg);
 
 	cnss_debug_print_pbl_data(pci_priv, &pbl_sbl_err->pbl_data[0]);
 
 	if (plat_priv->device_id == QCN9224_DEVICE_ID) {
-		cnss_pr_err("%s: LOCAL_REG_REMAP_BAR_CTRL: 0x%08x, WLAON_SOC_RESET_CAUSE_SHADOW_REG: 0x%08x, PARF_LTSSM: 0x%08x, PARF_PM_STTS: 0x%08x\n",
+		cnss_pr_err("%s: LOCAL_REG_REMAP_BAR_CTRL: 0x%08x, WLAON_SOC_RESET_CAUSE_SHADOW_REG: 0x%08x, PARF_LTSSM: 0x%08x\n",
 			    __func__, pbl_sbl_err->remap_bar_ctrl,
 			    pbl_sbl_err->soc_rc_shadow_reg,
-			    pbl_sbl_err->parf_ltssm, pbl_sbl_err->parf_pm_stts);
-		cnss_pr_err("%s: TYPE0_STATUS_COMMAND_REG: 0x%08x, GCC_RAMSS_CBCR: 0x%08x\n",
-			    __func__, pbl_sbl_err->type0_status_cmd_reg,
-			    pbl_sbl_err->gcc_ramss_cbcr);
+			    pbl_sbl_err->parf_ltssm);
+		cnss_pr_err("%s: GCC_RAMSS_CBCR: 0x%08x\n",
+			    __func__, pbl_sbl_err->gcc_ramss_cbcr);
 
 		cnss_debug_print_noc_data(pci_priv, pbl_sbl_err);
 	}
@@ -737,6 +764,9 @@ void cnss_pci_dump_bl_sram_mem(struct cnss_pci_data *pci_priv)
 		sbl_data.sbl_log_size_shift = 16;
 		pbl_data.pbl_log_sram_start = QCN9000_PBL_LOG_SRAM_START;
 		pbl_data.pbl_log_sram_max_size = QCN9000_PBL_LOG_SRAM_MAX_SIZE;
+		pbl_data.pbl_log_sram_start_v1 = QCN9000_PBL_LOG_SRAM_START_V1;
+		pbl_data.pbl_log_sram_max_size_v1 =
+					QCN9000_PBL_LOG_SRAM_MAX_SIZE_V1;
 		pbl_data.tcsr_pbl_logging_reg = QCN9000_TCSR_PBL_LOGGING_REG;
 		pbl_data.pbl_wlan_boot_cfg = QCN9000_PBL_WLAN_BOOT_CFG;
 		pbl_data.pbl_bootstrap_status = QCN9000_PBL_BOOTSTRAP_STATUS;
