@@ -676,6 +676,7 @@ int cnss_mlo_mem_alloc(struct cnss_plat_data *plat_priv, int index)
 
 static bool cnss_get_mlo_group_master_chip(struct cnss_plat_data *plat_priv)
 {
+	int master_chip_idx = 0;
 	struct cnss_mlo_group_info *mlo_group_info;
 
 	if (!plat_priv || !plat_priv->mlo_support)
@@ -687,8 +688,12 @@ static bool cnss_get_mlo_group_master_chip(struct cnss_plat_data *plat_priv)
 
 	mlo_group_info = plat_priv->mlo_group_info;
 
+	master_chip_idx = cnss_get_mlo_master_chip_id(mlo_group_info);
+
+	cnss_pr_dbg("%s, Master chip idx %d\n", __func__, master_chip_idx);
+
 	return plat_priv->mlo_chip_info->chip_id ==
-		mlo_group_info->chip_info[MLO_GROUP_MASTER_CHIP].chip_id;
+		mlo_group_info->chip_info[master_chip_idx].chip_id;
 }
 
 void cnss_do_mlo_global_memset(struct cnss_plat_data *plat_priv, u64 mem_size)

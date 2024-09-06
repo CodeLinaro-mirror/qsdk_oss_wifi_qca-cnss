@@ -48,7 +48,6 @@
 #define QCN6432_M3_DUMP_PREFIX		"m3_dump_qcn6432"
 #define M3_DUMP_NODE_LEN		18
 
-#define MLO_GROUP_MASTER_CHIP		0
 #define MODE_0_RECOVERY_MODE		1
 #define MODE_1_RECOVERY_MODE		2
 
