@@ -432,7 +432,6 @@ void cnss_set_wsi_remap_state(struct device *dev, bool state)
 
 	cnss_pr_dbg("WSI remap state: %d\n", state);
 	plat_priv->wsi_remap_state = state;
-
 }
 EXPORT_SYMBOL(cnss_set_wsi_remap_state);
 
@@ -1823,6 +1822,26 @@ int cnss_set_mlo_group_config(struct cnss_mlo_group_info *src_mlo_config,
 	return 0;
 }
 EXPORT_SYMBOL(cnss_set_mlo_group_config);
+
+int cnss_get_mlo_master_chip_id(struct cnss_mlo_group_info *mlo_group_info)
+{
+	int mlo_chip_id,mlo_master_chip_idx = 0;
+	struct cnss_plat_data *plat_priv = NULL;
+
+	for (mlo_chip_id = 0; mlo_chip_id < mlo_group_info->num_chips; mlo_chip_id++) {
+		plat_priv = cnss_get_plat_priv_by_chip_id(mlo_group_info->chip_info[mlo_chip_id].chip_id);
+		if ((plat_priv->mlo_support) && (!plat_priv->wsi_remap_state)) {
+			mlo_master_chip_idx = mlo_chip_id;
+			break;
+		}
+	}
+
+	if (mlo_chip_id == mlo_group_info->num_chips) {
+		mlo_master_chip_idx = 0;
+	}
+
+	return mlo_master_chip_idx;
+}
 
 int cnss_set_mlo_config(struct cnss_module_param *modparam,
 			struct cnss_mlo_group_info *src_mlo_config)
@@ -7439,6 +7458,7 @@ static int cnss_probe(struct platform_device *plat_dev)
 	plat_priv->device_id = device_id->driver_data;
 	plat_priv->plat_dev_id = (struct platform_device_id *)device_id;
 	plat_priv->service_id = WLFW_SERVICE_ID_V01;
+	plat_priv->wsi_remap_state = false;
 
 #ifdef CONFIG_CNSS2_DMA_ALLOC
 	plat_priv->dma_alloc_supported = true;
