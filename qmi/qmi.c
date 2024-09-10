@@ -76,6 +76,7 @@
 #define IMS_TIMEOUT                     QMI_WLFW_TIMEOUT_JF
 
 #define QMI_WLFW_MAX_RECV_BUF_SIZE	SZ_8K
+#define QDSS_MEM_SEG_LEN		1
 
 #define MAX_QDSS_CONFIG_FILE_NAME	64
 #define QDSS_CONFIG_FILE_PREFIX		"qdss_trace_config"
@@ -2612,7 +2613,7 @@ int cnss_wlfw_qdss_trace_mem_info_send_sync(struct cnss_plat_data *plat_priv)
 	struct wlfw_qdss_trace_mem_info_req_msg_v01 *req;
 	struct wlfw_qdss_trace_mem_info_resp_msg_v01 *resp;
 	struct qmi_txn txn;
-	struct cnss_fw_mem *qdss_mem = plat_priv->qdss_mem;
+	struct cnss_fw_mem qdss_mem = plat_priv->qdss_mem;
 	struct qdss_stream_data *qdss_stream = &plat_priv->qdss_stream;
 	int i;
 	int total_ents = 1;
@@ -2636,9 +2637,9 @@ int cnss_wlfw_qdss_trace_mem_info_send_sync(struct cnss_plat_data *plat_priv)
 		return -ENOMEM;
 	}
 
-	req->mem_seg_len = plat_priv->qdss_mem_seg_len;
+	req->mem_seg_len = QDSS_MEM_SEG_LEN;
 	if (plat_priv->qdss_etr_sg_mode)
-		total_ents = DIV_ROUND_UP(qdss_mem[0].size, PAGE_SIZE);
+		total_ents = DIV_ROUND_UP(qdss_mem.size, PAGE_SIZE);
 
 	while (pte_n < total_ents) {
 		if (plat_priv->qdss_etr_sg_mode) {
@@ -2654,18 +2655,18 @@ int cnss_wlfw_qdss_trace_mem_info_send_sync(struct cnss_plat_data *plat_priv)
 				phys_pte = CNSS_ETR_SG_ENT_TO_BLK(*virt_pte);
 				req->mem_seg[i].addr = phys_pte;
 				req->mem_seg[i].size = PAGE_SIZE;
-				req->mem_seg[i].type = qdss_mem[0].type;
+				req->mem_seg[i].type = qdss_mem.type;
 				pte_n++;
 			}
 		} else {
 			for (i = 0; i < req->mem_seg_len; i++) {
 				cnss_pr_dbg("Memory for FW, pa: 0x%x, size: 0x%x, type: %u\n",
-						(unsigned int)qdss_mem[i].pa,
-						(unsigned int)qdss_mem[i].size,
-						qdss_mem[i].type);
-				req->mem_seg[i].addr = qdss_mem[i].pa;
-				req->mem_seg[i].size = qdss_mem[i].size;
-				req->mem_seg[i].type = qdss_mem[i].type;
+						(unsigned int)qdss_mem.pa,
+						(unsigned int)qdss_mem.size,
+						qdss_mem.type);
+				req->mem_seg[i].addr = qdss_mem.pa;
+				req->mem_seg[i].size = qdss_mem.size;
+				req->mem_seg[i].type = qdss_mem.type;
 				pte_n++;
 			}
 		}
@@ -3636,7 +3637,6 @@ static void cnss_wlfw_qdss_trace_req_mem_ind_cb(struct qmi_handle *qmi_wlfw,
 	struct cnss_plat_data *plat_priv =
 		container_of(qmi_wlfw, struct cnss_plat_data, qmi_wlfw);
 	const struct wlfw_qdss_trace_req_mem_ind_msg_v01 *ind_msg = data;
-	int i;
 
 	cnss_pr_dbg("Received QMI WLFW QDSS trace request mem indication\n");
 	qmi_record(plat_priv->wlfw_service_instance_id,
@@ -3647,27 +3647,16 @@ static void cnss_wlfw_qdss_trace_req_mem_ind_cb(struct qmi_handle *qmi_wlfw,
 		return;
 	}
 
-	if (plat_priv->qdss_mem_seg_len) {
-		cnss_pr_err("Ignore double allocation for QDSS trace, "
-			    "current len %u\n",
-			    plat_priv->qdss_mem_seg_len);
-	} else {
-		plat_priv->qdss_mem_seg_len = ind_msg->mem_seg_len;
-		if (ind_msg->mem_seg_len > 1) {
-			cnss_pr_dbg("%s: FW requests %d segments, "
-				    "overwriting it with 1",
-				    __func__, ind_msg->mem_seg_len);
-			plat_priv->qdss_mem_seg_len = 1;
-		}
-
-		for (i = 0; i < plat_priv->qdss_mem_seg_len; i++) {
-			cnss_pr_dbg("QDSS requests for memory, size: 0x%x, "
-				    "type: %u\n", ind_msg->mem_seg[i].size,
-				    ind_msg->mem_seg[i].type);
-			plat_priv->qdss_mem[i].type = ind_msg->mem_seg[i].type;
-			plat_priv->qdss_mem[i].size = ind_msg->mem_seg[i].size;
-		}
+	if (ind_msg->mem_seg_len > 1) {
+		cnss_pr_dbg("%s: FW requests %d segments, overwriting it with 1",
+			    __func__, ind_msg->mem_seg_len);
 	}
+
+	cnss_pr_dbg("QDSS requests for memory, size: 0x%x, type: %u\n",
+		    ind_msg->mem_seg[0].size, ind_msg->mem_seg[0].type);
+
+	plat_priv->qdss_mem.type = ind_msg->mem_seg[0].type;
+	plat_priv->qdss_mem.size = ind_msg->mem_seg[0].size;
 
 	cnss_driver_event_post(plat_priv, CNSS_DRIVER_EVENT_QDSS_TRACE_REQ_MEM,
 			       0, NULL);

@@ -228,6 +228,10 @@ static unsigned int mlo_chip_bitmask = CNSS_DEFAULT_MLO_CHIP_BITMASK;
 module_param(mlo_chip_bitmask, uint, 0600);
 MODULE_PARM_DESC(mlo_chip_bitmask, "mlo_chip_bitmask");
 
+static ulong qdss_size = SZ_1M;
+module_param(qdss_size, ulong, 0600);
+MODULE_PARM_DESC(qdss_size, "qdss_size");
+
 /* Experimental module param to avoid FW shutdown/power on after coldboot
  * calibration. Current FW does not support this and should not be enabled
  * without FW support for this feature
@@ -1206,7 +1210,6 @@ out:
 }
 EXPORT_SYMBOL(cnss_athdiag_write);
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
 /*
  * Return true if target is a lithium target. else return false
  */
@@ -1250,7 +1253,6 @@ bool cnss_check_be_target(struct cnss_plat_data *plat_priv)
 
 	return false;
 }
-#endif
 
 /* Return 0 if device is a multi-pd target.
  * Else return -ENODEV.
@@ -5022,6 +5024,7 @@ static int cnss_qdss_trace_req_mem_hdlr(struct cnss_plat_data *plat_priv)
 	return cnss_wlfw_qdss_trace_mem_info_send_sync(plat_priv);
 }
 
+#ifdef QDSS_MULTI_SEGMENTS_SUPPORTED
 void *cnss_qdss_trace_pa_to_va(struct cnss_plat_data *plat_priv,
 			       u64 pa, u32 size, int *seg_id)
 {
@@ -5051,6 +5054,7 @@ void *cnss_qdss_trace_pa_to_va(struct cnss_plat_data *plat_priv,
 	*seg_id = i;
 	return va;
 }
+#endif
 
 static void get_updated_qdss_trace_filename(struct cnss_plat_data *plat_priv,
 					    char *raw_file_name,
@@ -5080,15 +5084,9 @@ static int cnss_qdss_trace_save_hdlr(struct cnss_plat_data *plat_priv,
 {
 	struct cnss_qmi_event_qdss_trace_save_data *event_data = data;
 
-	if (!plat_priv->qdss_mem_seg_len) {
-		cnss_pr_err("Memory for QDSS trace is not available\n");
-		return 0;
-	}
-
 	cnss_coredump_qdss_dump(plat_priv, event_data);
 
 	cnss_bus_free_qdss_mem(plat_priv);
-	plat_priv->qdss_mem_seg_len = 0;
 	return 0;
 }
 #else
@@ -5096,36 +5094,26 @@ static int cnss_qdss_trace_save_hdlr(struct cnss_plat_data *plat_priv,
 				     void *data)
 {
 	struct cnss_qmi_event_qdss_trace_save_data *event_data = data;
-	struct cnss_fw_mem *qdss_mem = plat_priv->qdss_mem;
+	struct cnss_fw_mem qdss_mem = plat_priv->qdss_mem;
 	int ret = 0;
-	int i;
 	char file_name[CNSS_GENL_STR_LEN_MAX];
-
-	if (!plat_priv->qdss_mem_seg_len) {
-		cnss_pr_err("Memory for QDSS trace is not available\n");
-		return -ENOMEM;
-	}
 
 	get_updated_qdss_trace_filename(plat_priv,
 					event_data->file_name, file_name,
 					sizeof(file_name));
 
 	if (event_data->mem_seg_len == 0) {
-		for (i = 0; i < plat_priv->qdss_mem_seg_len; i++) {
-			ret = cnss_genl_send_msg(qdss_mem[i].va,
-						 CNSS_GENL_MSG_TYPE_QDSS,
-						 file_name,
-						 qdss_mem[i].size);
-			if (ret < 0) {
-				cnss_pr_err("Fail to save QDSS data: %d\n",
-					    ret);
-				break;
-			}
-		}
+		ret = cnss_genl_send_msg(qdss_mem.va,
+					 CNSS_GENL_MSG_TYPE_QDSS,
+					 file_name,
+					 qdss_mem.size);
+		if (ret < 0)
+			cnss_pr_err("Fail to save QDSS data: %d\n",
+				    ret);
 	} else if ((event_data->mem_seg_len == 1) &&
-		   (event_data->mem_seg[0].addr == qdss_mem[0].pa) &&
-		   (event_data->mem_seg[0].size <= qdss_mem[0].size)) {
-		ret = cnss_genl_send_msg(qdss_mem[0].va,
+		   (event_data->mem_seg[0].addr == qdss_mem.pa) &&
+		   (event_data->mem_seg[0].size <= qdss_mem.size)) {
+		ret = cnss_genl_send_msg(qdss_mem.va,
 					 CNSS_GENL_MSG_TYPE_QDSS,
 					 file_name,
 					 event_data->mem_seg[0].size);
@@ -5153,20 +5141,20 @@ static int cnss_qdss_trace_save_hdlr(struct cnss_plat_data *plat_priv,
 		 * |   segment 0 end     |
 		 * +---------------------+
 		 */
-		if (event_data->mem_seg[1].addr != qdss_mem[0].pa) {
+		if (event_data->mem_seg[1].addr != qdss_mem.pa) {
 			cnss_pr_err("Invalid seg 0 addr 0x%llx",
 				    event_data->mem_seg[1].addr);
 			goto out;
 		}
 		if (event_data->mem_seg[0].size + event_data->mem_seg[1].size !=
-		    qdss_mem[0].size) {
+		    qdss_mem.size) {
 			cnss_pr_err("Invalid total size 0x%x 0x%x",
 				    event_data->mem_seg[0].size,
 				    event_data->mem_seg[1].size);
 			goto out;
 		}
 
-		ret = cnss_genl_send_msg((qdss_mem[0].va +
+		ret = cnss_genl_send_msg((qdss_mem.va +
 					 event_data->mem_seg[1].size),
 					 CNSS_GENL_MSG_TYPE_QDSS,
 					 file_name,
@@ -5175,7 +5163,7 @@ static int cnss_qdss_trace_save_hdlr(struct cnss_plat_data *plat_priv,
 			cnss_pr_err("Fail to save QDSS data 0: %d\n", ret);
 			goto out;
 		}
-		ret = cnss_genl_send_msg((qdss_mem[0].va),
+		ret = cnss_genl_send_msg((qdss_mem.va),
 					 CNSS_GENL_MSG_TYPE_QDSS,
 					 file_name,
 					 event_data->mem_seg[1].size);
@@ -5333,6 +5321,50 @@ static const struct file_operations m3_dump_fops = {
 	.read		= m3_dump_read,
 	.release	= m3_dump_release,
 };
+
+#ifndef CONFIG_TARGET_SDX75
+static int cnss_alloc_qdss_mem(struct cnss_plat_data *plat_priv)
+{
+	if (cnss_check_be_target(plat_priv)) {
+		plat_priv->qdss_mem.va =
+			dma_alloc_coherent(&plat_priv->plat_dev->dev,
+					   qdss_size, &plat_priv->qdss_mem.pa,
+					   GFP_KERNEL);
+
+		if (!plat_priv->qdss_mem.va) {
+			cnss_pr_err("QDSS memory alloc failed\n");
+			return 0;
+		}
+
+		cnss_pr_info("QDSS va: 0x%pK, pa: %pa size 0x%lx\n",
+			     plat_priv->qdss_mem.va,
+			     &plat_priv->qdss_mem.pa, qdss_size);
+	}
+
+	return 0;
+}
+
+int cnss_free_qdss_mem(struct cnss_plat_data *plat_priv)
+{
+	if (!plat_priv) {
+		cnss_pr_err("plat_priv is NULL\n");
+		return -ENODEV;
+	}
+
+	cnss_pr_info("Freeing QDSS memory\n");
+
+	if (plat_priv->qdss_mem.va && cnss_check_be_target(plat_priv)) {
+		dma_free_coherent(&plat_priv->plat_dev->dev, SZ_1M,
+					plat_priv->qdss_mem.va,
+					plat_priv->qdss_mem.pa);
+		plat_priv->qdss_mem.va = NULL;
+		plat_priv->qdss_mem.pa = 0;
+	} else
+		cnss_pr_info("QDSS memory is NULL\n");
+
+	return 0;
+}
+#endif
 
 static int cnss_init_m3_dump_class(struct cnss_plat_data *plat_priv)
 {
@@ -6403,6 +6435,21 @@ void cnss_config_param_update_cb(uint32_t instance_id,
 		plat_priv->qdss_support = value;
 		cnss_pr_info("Setting qdss_support=%llu for instance_id 0x%x\n",
 			     value, instance_id);
+#ifndef CONFIG_TARGET_SDX75
+		/* For 11BE chipsets, QDSS Memory will be allocated via
+		 * DMA alloc instead of dts and if the QDSS feature is
+		 * disabled in the firmware ini file, stop QDSS if already
+		 * started and clear the memory.
+		 */
+		if (!value && cnss_check_be_target(plat_priv)) {
+			cnss_pr_info("Stopping QDSS for %s",
+					plat_priv->device_name);
+			cnss_wlfw_send_qdss_trace_mode_req(plat_priv,
+						   QMI_WLFW_QDSS_TRACE_OFF_V01,
+						   value);
+			cnss_free_qdss_mem(plat_priv);
+		}
+#endif
 		break;
 	case CNSS_PLAT_IPC_PARAM_TYPE_QDSS_START_V01:
 		plat_priv->qdss_etr_sg_mode = value;
@@ -7719,6 +7766,12 @@ static int cnss_probe(struct platform_device *plat_dev)
 	if (ret < 0)
 		cnss_pr_err("CNSS genl init failed %d\n", ret);
 
+#ifndef CONFIG_TARGET_SDX75
+	ret = cnss_alloc_qdss_mem(plat_priv);
+	if (ret)
+		cnss_pr_err("QDSS memory alloc failed %d\n", ret);
+#endif
+
 	ret = cnss_init_m3_dump_class(plat_priv);
 	if (ret)
 		goto deinit_genl;
@@ -7815,6 +7868,9 @@ static int cnss_remove(struct platform_device *plat_dev)
 	cnss_event_work_deinit(plat_priv);
 	cnss_recovery_work_deinit(plat_priv);
 	cnss_remove_sysfs(plat_priv);
+#ifndef CONFIG_TARGET_SDX75
+	cnss_free_qdss_mem(plat_priv);
+#endif
 #ifdef CONFIG_CNSS2_PM
 	cnss_unregister_bus_scale(plat_priv);
 	cnss_unregister_esoc(plat_priv);
