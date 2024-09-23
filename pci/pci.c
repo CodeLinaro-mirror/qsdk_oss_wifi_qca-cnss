@@ -3909,6 +3909,78 @@ int cnss_smmu_unmap(struct device *dev, uint32_t iova_addr, size_t size)
 }
 EXPORT_SYMBOL(cnss_smmu_unmap);
 
+static struct cnss_msi_config msi_config_cold_qcn9000_pci0 = {
+	.total_vectors = 4,
+	.total_users = 2,
+	.users = (struct cnss_msi_user[]) {
+		{ .name = "MHI", .num_vectors = 2, .base_vector = 0 },
+		{ .name = "QDSS", .num_vectors = 1, .base_vector = 2 },
+	},
+};
+
+static struct cnss_msi_config msi_config_cold_qcn9000_pci1 = {
+	.total_vectors = 4,
+	.total_users = 2,
+	.users = (struct cnss_msi_user[]) {
+		{ .name = "MHI", .num_vectors = 2, .base_vector = 0 },
+		{ .name = "QDSS", .num_vectors = 1, .base_vector = 2 },
+	},
+};
+
+static struct cnss_msi_config msi_config_cold_qcn9000_pci2 = {
+	.total_vectors = 4,
+	.total_users = 2,
+	.users = (struct cnss_msi_user[]) {
+		{ .name = "MHI", .num_vectors = 2, .base_vector = 0 },
+		{ .name = "QDSS", .num_vectors = 1, .base_vector = 2 },
+	},
+};
+
+static struct cnss_msi_config msi_config_cold_qcn9000_pci3 = {
+	.total_vectors = 4,
+	.total_users = 2,
+	.users = (struct cnss_msi_user[]) {
+		{ .name = "MHI", .num_vectors = 2, .base_vector = 0 },
+		{ .name = "QDSS", .num_vectors = 1, .base_vector = 2 },
+	},
+};
+
+static struct cnss_msi_config msi_config_cold_qcn9224_pci0 = {
+	.total_vectors = 4,
+	.total_users = 2,
+	.users = (struct cnss_msi_user[]) {
+		{ .name = "MHI", .num_vectors = 2, .base_vector = 0 },
+		{ .name = "QDSS", .num_vectors = 1, .base_vector = 2 },
+	},
+};
+
+static struct cnss_msi_config msi_config_cold_qcn9224_pci1 = {
+	.total_vectors = 4,
+	.total_users = 2,
+	.users = (struct cnss_msi_user[]) {
+		{ .name = "MHI", .num_vectors = 2, .base_vector = 0 },
+		{ .name = "QDSS", .num_vectors = 1, .base_vector = 2 },
+	},
+};
+
+static struct cnss_msi_config msi_config_cold_qcn9224_pci2 = {
+	.total_vectors = 4,
+	.total_users = 2,
+	.users = (struct cnss_msi_user[]) {
+		{ .name = "MHI", .num_vectors = 2, .base_vector = 0 },
+		{ .name = "QDSS", .num_vectors = 1, .base_vector = 2 },
+	},
+};
+
+static struct cnss_msi_config msi_config_cold_qcn9224_pci3 = {
+	.total_vectors = 4,
+	.total_users = 2,
+	.users = (struct cnss_msi_user[]) {
+		{ .name = "MHI", .num_vectors = 2, .base_vector = 0 },
+		{ .name = "QDSS", .num_vectors = 1, .base_vector = 2 },
+	},
+};
+
 static struct cnss_msi_config msi_config_qcn9000_pci0 = {
 	.total_vectors = 16,
 	.total_users = 4,
@@ -4003,49 +4075,62 @@ static int cnss_pci_get_msi_assignment(struct cnss_pci_data *pci_priv)
 
 	switch (qrtr_node_id) {
 	case QCN9000_0:
-		cnss_override_msi_assignment(pci_priv->plat_priv,
-					    &msi_config_qcn9000_pci0);
-		pci_priv->msi_config = &msi_config_qcn9000_pci0;
+		if (pci_priv->plat_priv->cal_in_progress)
+			pci_priv->msi_config = &msi_config_cold_qcn9000_pci0;
+		else
+			pci_priv->msi_config = &msi_config_qcn9000_pci0;
 		break;
 	case QCN9000_1:
-		cnss_override_msi_assignment(pci_priv->plat_priv,
-					    &msi_config_qcn9000_pci1);
-		pci_priv->msi_config = &msi_config_qcn9000_pci1;
+		if (pci_priv->plat_priv->cal_in_progress)
+			pci_priv->msi_config = &msi_config_cold_qcn9000_pci1;
+		else
+			pci_priv->msi_config = &msi_config_qcn9000_pci1;
 		break;
 	case QCN9000_2:
-		cnss_override_msi_assignment(pci_priv->plat_priv,
-					    &msi_config_qcn9000_pci2);
-		pci_priv->msi_config = &msi_config_qcn9000_pci2;
+		if (pci_priv->plat_priv->cal_in_progress)
+			pci_priv->msi_config = &msi_config_cold_qcn9000_pci2;
+		else
+			pci_priv->msi_config = &msi_config_qcn9000_pci2;
 		break;
 	case QCN9000_3:
-		cnss_override_msi_assignment(pci_priv->plat_priv,
-					    &msi_config_qcn9000_pci3);
-		pci_priv->msi_config = &msi_config_qcn9000_pci3;
+		if (pci_priv->plat_priv->cal_in_progress)
+			pci_priv->msi_config = &msi_config_cold_qcn9000_pci3;
+		else
+			pci_priv->msi_config = &msi_config_qcn9000_pci3;
 		break;
 	case QCN9224_0:
-		cnss_override_msi_assignment(pci_priv->plat_priv,
-					    &msi_config_qcn9224_pci0);
-		pci_priv->msi_config = &msi_config_qcn9224_pci0;
+		if (pci_priv->plat_priv->cal_in_progress)
+			pci_priv->msi_config = &msi_config_cold_qcn9224_pci0;
+		else
+			pci_priv->msi_config = &msi_config_qcn9224_pci0;
 		break;
 	case QCN9224_1:
-		cnss_override_msi_assignment(pci_priv->plat_priv,
-					    &msi_config_qcn9224_pci1);
-		pci_priv->msi_config = &msi_config_qcn9224_pci1;
+		if (pci_priv->plat_priv->cal_in_progress)
+			pci_priv->msi_config = &msi_config_cold_qcn9224_pci1;
+		else
+			pci_priv->msi_config = &msi_config_qcn9224_pci1;
 		break;
 	case QCN9224_2:
-		cnss_override_msi_assignment(pci_priv->plat_priv,
-					    &msi_config_qcn9224_pci2);
-		pci_priv->msi_config = &msi_config_qcn9224_pci2;
+		if (pci_priv->plat_priv->cal_in_progress)
+			pci_priv->msi_config = &msi_config_cold_qcn9224_pci2;
+		else
+			pci_priv->msi_config = &msi_config_qcn9224_pci2;
 		break;
 	case QCN9224_3:
-		cnss_override_msi_assignment(pci_priv->plat_priv,
-					    &msi_config_qcn9224_pci3);
-		pci_priv->msi_config = &msi_config_qcn9224_pci3;
+		if (pci_priv->plat_priv->cal_in_progress)
+			pci_priv->msi_config = &msi_config_cold_qcn9224_pci3;
+		else
+			pci_priv->msi_config = &msi_config_qcn9224_pci3;
 		break;
 	default:
 		pr_err("Unknown qrtr_node_id 0x%X", qrtr_node_id);
 		return -EINVAL;
 	}
+
+	if (pci_priv->plat_priv->cal_in_progress)
+		return 0;
+
+	cnss_override_msi_assignment(pci_priv->plat_priv, pci_priv->msi_config);
 	return 0;
 }
 
