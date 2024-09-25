@@ -762,7 +762,7 @@ struct cnss_plat_data {
 	struct work_struct crash_work;
 #endif
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
-	struct srcu_notifier_head *notifier_list[2];
+	struct srcu_notifier_head *notifier_list[4];
 #endif
 	struct completion soc_reset_request_complete;
 	struct cnss_bus_ops *ops;
