@@ -584,6 +584,8 @@ enum cnss_recovery_type {
 	CNSS_SYNC_RECOVERY, /* synchronous recovery */
 };
 
+extern unsigned int enable_mlo_support;
+
 struct cnss_bus_ops {
 	int (*cnss_bus_init)(struct cnss_plat_data *plat_priv);
 	void (*cnss_bus_deinit)(struct cnss_plat_data *plat_priv);

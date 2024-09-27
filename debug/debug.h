@@ -244,6 +244,8 @@ struct dump_pbl_sbl_data {
 	struct pbl_err_data pbl_data[MAX_PBL_DATA_SNAPSHOT];
 };
 
+extern struct dentry *cnss_root_dentry;
+
 struct cnss_ce_base_addr *register_ce_object(struct cnss_plat_data *plat_priv);
 int cnss_get_mhi_region_len(struct cnss_plat_data *plat_priv,
 				   u32 *reg_start, u32 *reg_end);

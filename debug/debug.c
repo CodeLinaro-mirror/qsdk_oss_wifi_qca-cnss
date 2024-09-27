@@ -1920,6 +1920,87 @@ static const struct file_operations cnss_pci_switch_link_fops = {
 };
 #endif
 
+static ssize_t cnss_mlo_config_read(struct file *file, char __user *user_buf,
+				    size_t count, loff_t *ppos)
+{
+	struct cnss_mlo_group_info *mlo_group_info;
+	struct cnss_mlo_chip_info *chip_info;
+	int len = 0, l = 0, pos = 0;
+	int i, j, k, num_groups = 0;
+	const int soc_id_size = 32;
+	const int size = 512;
+	unsigned long bitmap;
+	char soc_id[32] = {0};
+	char buf[512] = {0};
+	char *ini_data = buf;
+	char *cur = soc_id;
+
+	if (!enable_mlo_support) {
+		pr_err("#MLO is disabled!\n");
+		return 0;
+	}
+
+	for (i = 0; i < CNSS_MAX_MLO_GROUPS; i++) {
+		mlo_group_info = &g_mlo_group_info[i];
+		if (mlo_group_info->group_id == 0xff)
+			continue;
+		num_groups++;
+	}
+
+	len += scnprintf(ini_data + len, size - len, "mlo_max_num_groups=%u\n",
+			 num_groups);
+
+	for (i = 0; i < num_groups; i++) {
+		mlo_group_info = &g_mlo_group_info[i];
+		len += scnprintf(ini_data + len, size - len,
+				 "\n[MLO_GROUP_%u]\n",
+				 mlo_group_info->group_id);
+		len += scnprintf(ini_data + len, size - len,
+				 "mlo_max_num_peers=%u\n",
+				 mlo_group_info->max_num_peers);
+		len += scnprintf(ini_data + len, size - len,
+				 "mlo_num_chips=%u\n",
+				 mlo_group_info->num_chips);
+		bitmap = (unsigned long)mlo_group_info->soc_chip_bitmap;
+		for_each_set_bit(pos, &bitmap, sizeof(bitmap) * 8)
+			l += scnprintf(cur + l, soc_id_size - l, "%u,", pos);
+		cur[strlen(cur) - 1] = '\0';
+		len += scnprintf(ini_data + len, size - len,
+				 "mlo_soc_chip_ids=%s\n", cur);
+
+		for (j = 0; j < mlo_group_info->num_chips; j++) {
+			chip_info = &mlo_group_info->chip_info[j];
+			len += scnprintf(ini_data + len, size - len,
+					 "\n[MLO_SOC_CHIP_%u]\n",
+					 chip_info->soc_id);
+			len += scnprintf(ini_data + len, size - len,
+					 "mlo_chip_idx=%u\n",
+					 chip_info->soc_id);
+			len += scnprintf(ini_data + len, size - len,
+					 "mlo_num_adj_chip=%u\n",
+					 chip_info->num_adj_chips);
+
+			memset(cur, '0', soc_id_size);
+			for (k = 0, l = 0; k < chip_info->num_adj_chips; k++) {
+				l += scnprintf(cur + l, soc_id_size - l, "%u,",
+					       chip_info->adj_chip_ids[k]);
+			}
+			cur[strlen(cur) - 1] = '\0';
+			len += scnprintf(ini_data + len, size - len,
+					 "mlo_adj_chip_idx=%s\n", cur);
+		}
+	}
+
+	return simple_read_from_buffer(user_buf, count, ppos, ini_data, len);
+}
+
+static const struct file_operations cnss_mlo_config_debug_fops = {
+	.read		= cnss_mlo_config_read,
+	.open		= simple_open,
+	.owner		= THIS_MODULE,
+	.llseek		= default_llseek,
+};
+
 int cnss_create_debug_only_node(struct cnss_plat_data *plat_priv)
 {
 	struct dentry *root_dentry = plat_priv->root_dentry;
@@ -1954,6 +2035,10 @@ int cnss_create_debug_only_node(struct cnss_plat_data *plat_priv)
 			    &cnss_pin_connect_fops);
 	debugfs_create_file("stats", 0644, root_dentry, plat_priv,
 			    &cnss_stats_fops);
+	if (cnss_root_dentry) {
+		debugfs_create_file("mlo_config_ini", 0600, cnss_root_dentry,
+				    NULL, &cnss_mlo_config_debug_fops);
+	}
 	return 0;
 }
 

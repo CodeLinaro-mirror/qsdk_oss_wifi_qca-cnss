@@ -244,6 +244,8 @@ struct cnss_mlo_group_info {
 	u16 rddm_dump_all;
 };
 
+extern struct cnss_mlo_group_info g_mlo_group_info[CNSS_MAX_MLO_GROUPS];
+
 struct cnss_module_param {
 	u8 mlo_max_groups;
 	u8 mlo_max_chips;

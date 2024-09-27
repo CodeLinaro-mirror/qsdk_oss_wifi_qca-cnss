@@ -109,7 +109,11 @@
 
 struct cnss_plat_data *plat_env[MAX_NUMBER_OF_SOCS];
 int plat_env_index;
-struct cnss_mlo_group_info g_mlo_group_info[CNSS_MAX_MLO_GROUPS];
+struct cnss_mlo_group_info g_mlo_group_info[CNSS_MAX_MLO_GROUPS] = {
+	{.group_id = 0xff},
+	{.group_id = 0xff},
+};
+
 static DEFINE_SPINLOCK(plat_env_spinlock);
 static DEFINE_SPINLOCK(rddm_spinlock);
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
@@ -220,7 +224,7 @@ static int soc_version_major;
 module_param(soc_version_major, int, 0444);
 MODULE_PARM_DESC(soc_version_major, "SOC Major Version");
 
-static unsigned int enable_mlo_support = 1;
+unsigned int enable_mlo_support = 1;
 module_param(enable_mlo_support, uint, 0600);
 MODULE_PARM_DESC(enable_mlo_support, "enable_mlo_support");
 
@@ -1524,11 +1528,22 @@ static int cnss_set_adj_chip_ids(struct cnss_mlo_group_info *mlo_group_info)
 		chip_info->num_adj_chips = num_adj_chips;
 		memset(chip_info->adj_chip_ids, 0,
 				sizeof(uint8_t) * CNSS_MAX_LINKS_PER_CHIP);
-		chip_info->adj_chip_ids[0] = (chip_info->chip_id + 1) %
+		if (num_chips == 4 && (chip_info->soc_id == 1 ||
+					chip_info->soc_id == 3)) {
+			chip_info->adj_chip_ids[1] = (chip_info->chip_id + 1) %
 								num_chips;
-		if (num_adj_chips >= 2)
-			chip_info->adj_chip_ids[1] = ((chip_info->chip_id - 1) +
-							num_chips) % num_chips;
+			if (num_adj_chips >= 2)
+				chip_info->adj_chip_ids[0] =
+						((chip_info->chip_id - 1) +
+						num_chips) % num_chips;
+		} else {
+			chip_info->adj_chip_ids[0] = (chip_info->chip_id + 1) %
+								num_chips;
+			if (num_adj_chips >= 2)
+				chip_info->adj_chip_ids[1] =
+						((chip_info->chip_id - 1) +
+						num_chips) % num_chips;
+		}
 		cnss_pr_dbg("Adjacent chip IDs (%u, %u) for chip %u\n",
 				chip_info->adj_chip_ids[0],
 				chip_info->adj_chip_ids[1], chip_info->chip_id);
@@ -1597,6 +1612,7 @@ static int cnss_set_static_mlo_config(struct cnss_mlo_group_info *in_group_info,
 		mlo_group_info->group_id = group_info->group_id;
 		mlo_group_info->max_num_peers = group_info->max_num_peers;
 		mlo_group_info->num_chips = group_info->num_chips;
+		mlo_group_info->soc_chip_bitmap = group_info->soc_chip_bitmap;
 
 		for (j = 0; j < group_info->num_chips; j++) {
 			chip_info = &mlo_group_info->chip_info[j];
@@ -1853,13 +1869,6 @@ int cnss_set_mlo_config(struct cnss_module_param *modparam,
 
 	if (!enable_mlo_support) {
 		cnss_pr_info("%s: MLO is disabled\n", __func__);
-		return 0;
-	}
-
-	if (skip_radio_bmap || skip_cnss ||
-	    (mlo_chip_bitmask != CNSS_DEFAULT_MLO_CHIP_BITMASK)) {
-		cnss_pr_info("Skip radio is set, proceeding default MLO config.\n");
-		cnss_set_default_mlo_config();
 		return 0;
 	}
 
@@ -2256,6 +2265,7 @@ void cnss_set_default_mlo_config(void)
 			ch_info->group_id = group_id;
 			ch_info->soc_id = i;
 			ch_info->chip_id = num_chip;
+			mlo_group_info[group_id].soc_chip_bitmap |= (1 << i);
 
 			dev = &plat_priv->plat_dev->dev;
 			memset(ch_info->hw_link_ids, 0,
