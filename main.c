@@ -3254,6 +3254,11 @@ static int cnss_rproc_start(struct cnss_plat_data *plat_priv)
 	return 0;
 }
 
+int cnss_handle_usrpd_in_rpd_crash(struct cnss_plat_data *plat_priv)
+{
+	return 0;
+}
+
 void *cnss_register_qcn9000_cb(struct cnss_plat_data *plat_priv)
 {
 	return NULL;
@@ -3280,89 +3285,6 @@ static int cnss_qca8074_notifier_nb(struct notifier_block *nb,
 {
 	return 0;
 }
-#else
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
-static int cnss_rproc_recovery(struct cnss_plat_data *plat_priv)
-{
-	struct rproc *rproc = NULL;
-	int ret = 0;
-
-	if (!plat_priv)
-		return 0;
-
-	rproc = plat_priv->rproc_handle;
-
-	cnss_bus_update_status(plat_priv, CNSS_FW_DOWN);
-	if (rproc) {
-		ret = rproc_stop(rproc, true);
-		if (ret < 0) {
-			cnss_pr_err("User pd rproc_stop failed\n");
-			return ret;
-		}
-	}
-
-	if (rproc_rootpd) {
-		ret = rproc_stop(rproc_rootpd, true);
-		if (ret < 0) {
-			cnss_pr_err("Root pd rproc_stop failed\n");
-			return ret;
-		}
-		rproc->ops->coredump(rproc_rootpd);
-	} else {
-		if (rproc) {
-			cnss_qca8074_notifier_nb(&plat_priv->modem_nb,
-					CNSS_RAMDUMP_NOTIFICATION, NULL);
-			rproc->ops->coredump(rproc);
-		}
-	}
-	return 0;
-}
-
-static int cnss_rproc_start(struct cnss_plat_data *plat_priv)
-{
-	const struct firmware *firmware_p = NULL;
-	struct rproc *rproc_rpd;
-	struct rproc *rproc;
-	int ret;
-
-	rproc = plat_priv->rproc_handle;
-	rproc_rpd = plat_priv->rproc_rpd_handle;
-	if (rproc_rpd) {
-		ret = request_firmware(&firmware_p, rproc_rpd->firmware,
-				       &rproc_rpd->dev);
-		if (ret < 0) {
-			cnss_pr_err("Request_firmware failed: %d\n", ret);
-			return ret;
-		}
-
-		ret = rproc_start(rproc_rpd, firmware_p);
-		if (ret < 0) {
-			cnss_pr_err("Root pd rproc_start failed\n");
-			release_firmware(firmware_p);
-			return ret;
-		}
-		release_firmware(firmware_p);
-	} else {
-		ret = request_firmware(&firmware_p, rproc->firmware,
-				       &rproc->dev);
-		if (ret < 0) {
-			cnss_pr_err("Request_firmware failed: %d\n", ret);
-			return ret;
-		}
-
-		if (rproc) {
-			ret = rproc_start(rproc, firmware_p);
-			if (ret < 0) {
-				cnss_pr_err("Root pd rproc_start failed\n");
-				release_firmware(firmware_p);
-				return ret;
-			}
-			release_firmware(firmware_p);
-		}
-	}
-	return 0;
-}
-
 #else
 int cnss_stop_rproc(struct cnss_plat_data *plat_priv, struct rproc *rproc)
 {
@@ -3542,58 +3464,6 @@ static int cnss_rproc_start(struct cnss_plat_data *plat_priv)
 	plat_priv->crash_type = CNSS_NO_CRASH;
 	return 0;
 }
-
-static int cnss_qcn9000_notifier_nb(struct notifier_block *nb,
-				    unsigned long code,
-				    void *ss_handle)
-{
-	struct cnss_plat_data *plat_priv =
-		container_of(nb, struct cnss_plat_data, modem_nb);
-	struct cnss_wlan_driver *driver_ops = NULL;
-	int event_code = cnss_get_event(code);
-
-	if (!plat_priv->cal_in_progress)
-		driver_ops = plat_priv->driver_ops;
-
-	if (event_code < 0)
-		return NOTIFY_OK;
-
-	if (event_code == CNSS_AFTER_POWERUP) {
-		if (driver_ops)
-			driver_ops->probe((struct pci_dev *)plat_priv->plat_dev,
-					  (const struct pci_device_id *)
-					  plat_priv->plat_dev_id);
-		clear_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state);
-		clear_bit(CNSS_DRIVER_LOADING, &plat_priv->driver_state);
-		set_bit(CNSS_DRIVER_PROBED, &plat_priv->driver_state);
-	} else if (event_code == CNSS_BEFORE_SHUTDOWN) {
-		if (driver_ops)
-			driver_ops->remove(
-					(struct pci_dev *)plat_priv->plat_dev);
-
-		clear_bit(CNSS_DRIVER_PROBED, &plat_priv->driver_state);
-		clear_bit(CNSS_DEV_ERR_NOTIFY, &plat_priv->driver_state);
-	} else if (event_code == CNSS_RAMDUMP_NOTIFICATION) {
-		if (driver_ops)
-			driver_ops->reinit(
-					(struct pci_dev *)plat_priv->plat_dev,
-					(const struct pci_device_id *)
-					plat_priv->plat_dev_id);
-
-		clear_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state);
-		return NOTIFY_DONE;
-	} else {
-		if (driver_ops)
-			driver_ops->update_status(
-					(struct pci_dev *)plat_priv->plat_dev,
-					(const struct pci_device_id *)
-					plat_priv->plat_dev_id, event_code);
-	}
-
-	return NOTIFY_OK;
-}
-
-#endif
 
 void  *__cnss_subsystem_get(struct cnss_plat_data *plat_priv)
 {
@@ -3889,6 +3759,56 @@ void *cnss_register_qcn9000_cb(struct cnss_plat_data *plat_priv)
 	return NULL;
 }
 #else
+static int cnss_qcn9000_notifier_nb(struct notifier_block *nb,
+				    unsigned long code,
+				    void *ss_handle)
+{
+	struct cnss_plat_data *plat_priv =
+		container_of(nb, struct cnss_plat_data, modem_nb);
+	struct cnss_wlan_driver *driver_ops = NULL;
+	int event_code = cnss_get_event(code);
+
+	if (!plat_priv->cal_in_progress)
+		driver_ops = plat_priv->driver_ops;
+
+	if (event_code < 0)
+		return NOTIFY_OK;
+
+	if (event_code == CNSS_AFTER_POWERUP) {
+		if (driver_ops)
+			driver_ops->probe((struct pci_dev *)plat_priv->plat_dev,
+					  (const struct pci_device_id *)
+					  plat_priv->plat_dev_id);
+		clear_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state);
+		clear_bit(CNSS_DRIVER_LOADING, &plat_priv->driver_state);
+		set_bit(CNSS_DRIVER_PROBED, &plat_priv->driver_state);
+	} else if (event_code == CNSS_BEFORE_SHUTDOWN) {
+		if (driver_ops)
+			driver_ops->remove(
+					(struct pci_dev *)plat_priv->plat_dev);
+
+		clear_bit(CNSS_DRIVER_PROBED, &plat_priv->driver_state);
+		clear_bit(CNSS_DEV_ERR_NOTIFY, &plat_priv->driver_state);
+	} else if (event_code == CNSS_RAMDUMP_NOTIFICATION) {
+		if (driver_ops)
+			driver_ops->reinit(
+					(struct pci_dev *)plat_priv->plat_dev,
+					(const struct pci_device_id *)
+					plat_priv->plat_dev_id);
+
+		clear_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state);
+		return NOTIFY_DONE;
+	} else {
+		if (driver_ops)
+			driver_ops->update_status(
+					(struct pci_dev *)plat_priv->plat_dev,
+					(const struct pci_device_id *)
+					plat_priv->plat_dev_id, event_code);
+	}
+
+	return NOTIFY_OK;
+}
+
 void *cnss_register_qcn9000_cb(struct cnss_plat_data *plat_priv)
 {
 	struct cnss_subsys_info *subsys_info;
@@ -4108,11 +4028,6 @@ int cnss_unregister_qcn9000_cb(struct cnss_plat_data *plat_priv)
 #endif
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
-int cnss_handle_usrpd_in_rpd_crash(struct cnss_plat_data *plat_priv)
-{
-	return 0;
-}
-
 static int cnss_get_node_id(struct platform_device *plat_dev,
 			    unsigned long device_id, u32 *node_id)
 {
