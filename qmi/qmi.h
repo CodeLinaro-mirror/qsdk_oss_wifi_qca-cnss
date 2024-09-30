@@ -76,6 +76,14 @@ struct cnss_qmi_event_server_arrive_data {
 #define QDSS_TRACE_SEG_LEN_MAX 32
 #define QDSS_TRACE_FILE_NAME_MAX 16
 
+struct cnss_fw_mem {
+	size_t size;
+	void *va;
+	phys_addr_t pa;
+	u8 valid;
+	u32 type;
+};
+
 struct cnss_mem_seg {
 	u64 addr;
 	u32 size;
@@ -92,6 +100,13 @@ struct cnss_qmi_event_m3_dump_upload_req_data {
 	u32 pdev_id;
 	u64 addr;
 	u64 size;
+};
+
+struct cnss_qmi_event_dump_ddr_region {
+	u32 total_size;
+	u32 mem_seg_len;
+	struct cnss_fw_mem mem_seg[QMI_WLFW_MAX_NUM_MEM_SEG_V01];
+	char file_name[QMI_WLFW_MAX_STR_LEN_V01 + 1];
 };
 
 #ifdef CONFIG_CNSS2_QMI
