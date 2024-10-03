@@ -3834,66 +3834,6 @@ void *cnss_register_qcn9000_cb(struct cnss_plat_data *plat_priv)
 }
 #endif
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
-void *cnss_register_qca8074_cb(struct cnss_plat_data *plat_priv)
-{
-	struct cnss_subsys_info *subsys_info;
-	void *ss_handle = NULL;
-	struct rproc *rproc_rpd;
-
-	subsys_info = &plat_priv->subsys_info;
-	plat_priv->modem_nb.notifier_call = cnss_qca8074_notifier_nb;
-	plat_priv->modem_atomic_nb.notifier_call =
-					cnss_qca8074_notifier_atomic_nb;
-	plat_priv->notifier_list[0] = qcom_register_ssr_notifier(subsys_info->subsys_desc.name, &plat_priv->modem_nb);
-	plat_priv->notifier_list[1] =
-		qcom_register_ssr_atomic_notifier(subsys_info->subsys_desc.name,
-						  &plat_priv->modem_atomic_nb);
-
-	rproc_rpd = plat_priv->rproc_rpd_handle;
-	if (rproc_rpd) {
-		plat_priv->rpd_nb.notifier_call = cnss_qca8074_rpd_notifier_nb;
-		plat_priv->rpd_atomic_nb.notifier_call =
-			cnss_qca8074_rpd_notifier_atomic_nb;
-		plat_priv->notifier_list[0] = qcom_register_ssr_notifier(rproc_rpd->name, &plat_priv->rpd_nb);
-		plat_priv->notifier_list[1] =
-			qcom_register_ssr_atomic_notifier(rproc_rpd->name,
-						&plat_priv->rpd_atomic_nb);
-	}
-
-	ss_handle = subsys_info;
-	return ss_handle;
-}
-
-int cnss_unregister_qca8074_cb(struct cnss_plat_data *plat_priv)
-{
-	struct rproc *rproc_rpd;
-
-	if (plat_priv->modem_nb.notifier_call) {
-	qcom_unregister_ssr_notifier(plat_priv->notifier_list[0], &plat_priv->modem_nb);
-	qcom_unregister_ssr_atomic_notifier(plat_priv->notifier_list[1],
-					    &plat_priv->modem_atomic_nb);
-		memset(&plat_priv->modem_nb, 0, sizeof(struct notifier_block));
-		memset(&plat_priv->modem_atomic_nb, 0,
-		       sizeof(struct notifier_block));
-	}
-
-	rproc_rpd = plat_priv->rproc_rpd_handle;
-	if (rproc_rpd) {
-		if (plat_priv->rpd_nb.notifier_call) {
-	qcom_unregister_ssr_notifier(plat_priv->notifier_list[0], &plat_priv->rpd_nb);
-	qcom_unregister_ssr_atomic_notifier(plat_priv->notifier_list[1],
-					    &plat_priv->rpd_atomic_nb);
-			memset(&plat_priv->rpd_nb, 0,
-					sizeof(struct notifier_block));
-			memset(&plat_priv->rpd_atomic_nb, 0,
-					sizeof(struct notifier_block));
-		}
-	}
-
-	return 0;
-}
-#else
 static int cnss_check_ahb_rpd_register(struct cnss_plat_data *plat_priv)
 {
 	int userpd = 0, rpd_registered = 0;
@@ -3918,6 +3858,69 @@ static int cnss_check_ahb_rpd_register(struct cnss_plat_data *plat_priv)
 	}
 	return rpd_registered;
 }
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
+void *cnss_register_qca8074_cb(struct cnss_plat_data *plat_priv)
+{
+	struct cnss_subsys_info *subsys_info;
+	void *ss_handle = NULL;
+	int register_rpd_notifier = 0;
+
+	subsys_info = &plat_priv->subsys_info;
+	plat_priv->modem_nb.notifier_call = cnss_qca8074_notifier_nb;
+	plat_priv->modem_atomic_nb.notifier_call =
+					cnss_qca8074_notifier_atomic_nb;
+	plat_priv->notifier_list[0] = qcom_register_ssr_notifier(subsys_info->subsys_desc.name, &plat_priv->modem_nb);
+	plat_priv->notifier_list[1] =
+		qcom_register_ssr_atomic_notifier(subsys_info->subsys_desc.name,
+						  &plat_priv->modem_atomic_nb);
+
+	/* Register Rootpd notifiers only if its not registered and we
+	 * need to register only for one AHB SOC.
+	 */
+	register_rpd_notifier = cnss_check_ahb_rpd_register(plat_priv);
+
+	if ((rproc_rootpd) && (!register_rpd_notifier) &&
+	    (plat_priv->recovery_type == CNSS_SYNC_RECOVERY)) {
+		plat_priv->rpd_nb.notifier_call = cnss_qca8074_rpd_notifier_nb;
+		plat_priv->rpd_atomic_nb.notifier_call =
+			cnss_qca8074_rpd_notifier_atomic_nb;
+		plat_priv->notifier_list[2] = qcom_register_ssr_notifier(rproc_rootpd->name, &plat_priv->rpd_nb);
+		plat_priv->notifier_list[3] =
+			qcom_register_ssr_atomic_notifier(rproc_rootpd->name,
+						&plat_priv->rpd_atomic_nb);
+	}
+
+	ss_handle = subsys_info;
+	return ss_handle;
+}
+
+int cnss_unregister_qca8074_cb(struct cnss_plat_data *plat_priv)
+{
+	if (plat_priv->modem_nb.notifier_call) {
+		qcom_unregister_ssr_notifier(plat_priv->notifier_list[0], &plat_priv->modem_nb);
+		qcom_unregister_ssr_atomic_notifier(plat_priv->notifier_list[1],
+						    &plat_priv->modem_atomic_nb);
+		memset(&plat_priv->modem_nb, 0, sizeof(struct notifier_block));
+		memset(&plat_priv->modem_atomic_nb, 0,
+		       sizeof(struct notifier_block));
+	}
+
+	if (rproc_rootpd) {
+		if (plat_priv->rpd_nb.notifier_call) {
+			qcom_unregister_ssr_notifier(plat_priv->notifier_list[2], &plat_priv->rpd_nb);
+			qcom_unregister_ssr_atomic_notifier(plat_priv->notifier_list[3],
+					    &plat_priv->rpd_atomic_nb);
+			memset(&plat_priv->rpd_nb, 0,
+					sizeof(struct notifier_block));
+			memset(&plat_priv->rpd_atomic_nb, 0,
+					sizeof(struct notifier_block));
+		}
+	}
+
+	return 0;
+}
+#else
 
 void *cnss_register_qca8074_cb(struct cnss_plat_data *plat_priv)
 {
