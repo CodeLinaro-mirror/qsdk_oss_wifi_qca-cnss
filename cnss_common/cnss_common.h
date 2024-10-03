@@ -144,7 +144,7 @@
 #define CNSS_ETR_SG_LST_ENT(phys_pte)	(((phys_pte >> PAGE_SHIFT) << 4) | 0x1)
 #define CNSS_ETR_SG_ENT_TO_BLK(phys_pte) \
 		(((phys_addr_t)phys_pte >> 4) << PAGE_SHIFT)
-#define MHI_SOC_RESET_DELAY	200  /* in msecs */
+#define MHI_SOC_RESET_DELAY	3000  /* in msecs */
 
 #define RDDM_DONE_DELAY        100  /* in msecs */
 
