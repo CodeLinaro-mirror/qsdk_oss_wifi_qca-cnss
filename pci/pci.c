@@ -3445,7 +3445,7 @@ int cnss_pci_alloc_fw_mem(struct cnss_plat_data *plat_priv)
 
 int cnss_pci_alloc_qdss_mem(struct cnss_pci_data *pci_priv)
 {
-	u32 i, addr = 0;
+	u32 addr = 0;
 	struct cnss_fw_mem *qdss_mem;
 	struct device *dev;
 	struct pci_dev *pci_dev;
@@ -3454,7 +3454,7 @@ int cnss_pci_alloc_qdss_mem(struct cnss_pci_data *pci_priv)
 	if (!plat_priv)
 		return -ENODEV;
 
-	qdss_mem = plat_priv->qdss_mem;
+	qdss_mem = &plat_priv->qdss_mem;
 	dev = &plat_priv->plat_dev->dev;
 	pci_dev = (struct pci_dev *)plat_priv->pci_dev;
 
@@ -3468,28 +3468,20 @@ int cnss_pci_alloc_qdss_mem(struct cnss_pci_data *pci_priv)
 		return -EINVAL;
 	}
 
-	if (plat_priv->qdss_mem_seg_len > 1) {
-		cnss_pr_err("%s: FW requests %d segments, max allowed is 1",
-			    __func__, plat_priv->qdss_mem_seg_len);
-		return -EINVAL;
-	}
-
 	if (plat_priv->dma_alloc_supported) {
-		for (i = 0; i < plat_priv->qdss_mem_seg_len; i++) {
-			if (!qdss_mem[i].va && qdss_mem[i].size) {
-				qdss_mem[i].va =
-					dma_alloc_attrs(&pci_dev->dev,
-						qdss_mem[i].size,
-						&qdss_mem[i].pa,
-						GFP_KERNEL,
-						DMA_ATTR_FORCE_CONTIGUOUS);
+		if (!qdss_mem->va && qdss_mem->size) {
+			qdss_mem->va =
+				dma_alloc_attrs(&pci_dev->dev,
+					qdss_mem->size,
+					&qdss_mem->pa,
+					GFP_KERNEL,
+					DMA_ATTR_FORCE_CONTIGUOUS);
 
-				if (!qdss_mem[i].va) {
-					cnss_pr_err("Failed to allocate memory for QDSS, size: 0x%zx, type: %u\n",
-						    qdss_mem[i].size,
-						    qdss_mem[i].type);
-					return -ENOMEM;
-				}
+			if (!qdss_mem->va) {
+				cnss_pr_err("Failed to allocate memory for QDSS, size: 0x%zx, type: %u\n",
+					    qdss_mem->size,
+					    qdss_mem->type);
+				return -ENOMEM;
 			}
 		}
 
@@ -3499,18 +3491,18 @@ int cnss_pci_alloc_qdss_mem(struct cnss_pci_data *pci_priv)
 	/* Currently we support qdss_mem_seg_len = 1 only, however, if required
 	 * this can be extended to support multiple QDSS memory segments
 	 */
-	for (i = 0; i < plat_priv->qdss_mem_seg_len; i++) {
-		if (plat_priv->qdss_etr_sg_mode)
-			cnss_etr_sg_tbl_alloc(plat_priv);
-		else {
-			switch (qdss_mem[i].type) {
-			case QMI_WLFW_MEM_QDSS_V01:
-				if (qdss_mem[i].size >
-					Q6_QDSS_ETR_SIZE_QCN9000) {
-					cnss_pr_err("%s: FW requests more memory 0x%zx\n",
-						__func__, qdss_mem[i].size);
-					return -ENOMEM;
-				}
+	if (plat_priv->qdss_etr_sg_mode)
+		cnss_etr_sg_tbl_alloc(plat_priv);
+	else {
+		switch (qdss_mem->type) {
+		case QMI_WLFW_MEM_QDSS_V01:
+			if (qdss_mem->size >
+				Q6_QDSS_ETR_SIZE_QCN9000) {
+				cnss_pr_err("%s: FW requests more memory 0x%zx\n",
+					__func__, qdss_mem->size);
+				return -ENOMEM;
+			}
+			if (!cnss_check_be_target(plat_priv)) {
 				if (of_property_read_u32(dev->of_node,
 							"etr-addr",
 							&addr)) {
@@ -3519,25 +3511,26 @@ int cnss_pci_alloc_qdss_mem(struct cnss_pci_data *pci_priv)
 					return -ENOMEM;
 				}
 
-				qdss_mem[i].pa = (phys_addr_t)addr;
-				qdss_mem[i].va = ioremap(qdss_mem[i].pa,
-						qdss_mem[i].size);
-				if (!qdss_mem[i].va) {
-					cnss_pr_err("WARNING etr-addr remap failed\n");
-					return -ENOMEM;
-				}
-				break;
-			default:
-				cnss_pr_err("%s: Unknown type %d\n",
-						__func__, qdss_mem[i].type);
-				break;
+				qdss_mem->pa = (phys_addr_t)addr;
+				qdss_mem->va = ioremap(qdss_mem->pa,
+						qdss_mem->size);
 			}
+
+
+			if (!qdss_mem->va) {
+				cnss_pr_err("WARNING etr-addr remap failed\n");
+				return -ENOMEM;
+			}
+			break;
+		default:
+			cnss_pr_err("%s: Unknown type %d\n",
+					__func__, qdss_mem->type);
+			break;
 		}
 	}
 
-	cnss_pr_dbg("%s: seg_len %d, type %d, size 0x%zx, pa: 0x%pa, va: 0x%p",
-		    __func__, plat_priv->qdss_mem_seg_len, qdss_mem[0].type,
-		    qdss_mem[0].size, &qdss_mem[0].pa, qdss_mem[0].va);
+	cnss_pr_dbg("%s: type %d, size 0x%zx, pa: 0x%pa, va: 0x%p", __func__,
+		    qdss_mem->type, qdss_mem->size, &qdss_mem->pa, qdss_mem->va);
 
 	return 0;
 }
@@ -4590,7 +4583,7 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 		plat_priv->ramdump_info_v2.dump_data_vaddr;
 	struct image_info *fw_image, *rddm_image;
 	struct cnss_fw_mem *fw_mem = plat_priv->fw_mem;
-	struct cnss_fw_mem *qdss_mem = plat_priv->qdss_mem;
+	struct cnss_fw_mem qdss_mem = plat_priv->qdss_mem;
 	int ret, i, skip_count = 0;
 
 	if (test_bit(CNSS_RDDM_DUMP_IN_PROGRESS, &plat_priv->driver_state)) {
@@ -4705,20 +4698,16 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 	}
 
 	cnss_pr_dbg("Collect QDSS dump segment\n");
-	for (i = 0; i < plat_priv->qdss_mem_seg_len; i++) {
-		if (qdss_mem[i].type == CNSS_MEM_ETR) {
-			if (!qdss_mem[i].pa)
-				continue;
-			dump_seg->address = qdss_mem[i].pa;
-			dump_seg->v_address = qdss_mem[i].va;
-			dump_seg->size = qdss_mem[i].size;
-			dump_seg->type = CNSS_FW_REMOTE_ETR;
-			cnss_pr_dbg("QDSS seg-%d: address 0x%lx, v_address %pK, size 0x%lx\n",
-				    i, dump_seg->address, dump_seg->v_address,
-				    dump_seg->size);
-			dump_seg++;
-			dump_data->nentries++;
-		}
+	if (qdss_mem.type == CNSS_MEM_ETR && qdss_mem.pa) {
+		dump_seg->address = qdss_mem.pa;
+		dump_seg->v_address = qdss_mem.va;
+		dump_seg->size = qdss_mem.size;
+		dump_seg->type = CNSS_FW_REMOTE_ETR;
+		cnss_pr_dbg("QDSS seg-%d: address 0x%lx, v_address %pK, size 0x%lx\n",
+			    i, dump_seg->address, dump_seg->v_address,
+			    dump_seg->size);
+		dump_seg++;
+		dump_data->nentries++;
 	}
 
 	cnss_pr_dbg("Collect Caldb dump segment\n");
@@ -6193,8 +6182,7 @@ out:
 
 static void cnss_pci_free_qdss_mem(struct cnss_plat_data *plat_priv)
 {
-	int i;
-	struct cnss_fw_mem *qdss_mem;
+	struct cnss_fw_mem qdss_mem;
 	struct qdss_stream_data *qdss_stream;
 	struct cnss_pci_data *pci_priv;
 	struct device *dev;
@@ -6217,39 +6205,46 @@ static void cnss_pci_free_qdss_mem(struct cnss_plat_data *plat_priv)
 	dev = &pci_priv->pci_dev->dev;
 
 	if (plat_priv->dma_alloc_supported) {
-		for (i = 0; i < plat_priv->qdss_mem_seg_len; i++) {
-			if (qdss_mem[i].va && qdss_mem[i].size) {
-				cnss_pr_dbg("Freeing memory for QDSS, va: 0x%pK, pa: 0x%pa, size: 0x%zx, type: %u\n",
-					    qdss_mem[i].va, &qdss_mem[i].pa,
-					    qdss_mem[i].size, qdss_mem[i].type);
-				dma_free_attrs(dev, qdss_mem[i].size,
-					       qdss_mem[i].va, qdss_mem[i].pa,
-					       DMA_ATTR_FORCE_CONTIGUOUS);
-				qdss_mem[i].va = NULL;
-				qdss_mem[i].pa = 0;
-				qdss_mem[i].size = 0;
-				qdss_mem[i].type = 0;
-			}
+		if (qdss_mem.va && qdss_mem.size) {
+			cnss_pr_dbg("Freeing memory for QDSS, va: 0x%pK, pa: 0x%pa, size: 0x%zx, type: %u\n",
+				    qdss_mem.va, &qdss_mem.pa,
+				    qdss_mem.size, qdss_mem.type);
+			dma_free_attrs(dev, qdss_mem.size,
+				       qdss_mem.va, qdss_mem.pa,
+				       DMA_ATTR_FORCE_CONTIGUOUS);
+			qdss_mem.va = NULL;
+			qdss_mem.pa = 0;
+			qdss_mem.size = 0;
+			qdss_mem.type = 0;
 		}
 	}
 
-	for (i = 0; i < plat_priv->qdss_mem_seg_len; i++) {
-		if (plat_priv->qdss_etr_sg_mode) {
-			cnss_etr_sg_tbl_free(
-				(uint32_t *)qdss_stream->qdss_vaddr,
-				plat_priv,
-				DIV_ROUND_UP(qdss_mem[i].size, PAGE_SIZE));
-		} else {
-			if (qdss_mem[i].va) {
+	if (plat_priv->qdss_etr_sg_mode) {
+		cnss_etr_sg_tbl_free(
+			(uint32_t *)qdss_stream->qdss_vaddr,
+			plat_priv,
+			DIV_ROUND_UP(qdss_mem.size, PAGE_SIZE));
+	} else {
+		if (qdss_mem.va) {
+			if (cnss_check_be_target(plat_priv)) {
+				/* When QDSS is stopped for Low memory
+				 * profiles, only memset the memory to
+				 * retain the allocation for consective
+				 * qdss start from cli. QDSS memory will be
+				 * cleared only when the feature is disabled,
+				 * as consecutive memory may not be available
+				 * in runtime.
+				 */
+				cnss_pr_dbg("Clearing the QDSS data\n");
+				memset(plat_priv->qdss_mem.va, 0, SZ_1M);
+			} else {
 				cnss_pr_dbg("Freeing QDSS Memory\n");
-				iounmap(qdss_mem[i].va);
-				qdss_mem[i].va = NULL;
-				qdss_mem[i].size = 0;
+				iounmap(qdss_mem.va);
+				qdss_mem.va = NULL;
+				qdss_mem.size = 0;
 			}
 		}
 	}
-
-	plat_priv->qdss_mem_seg_len = 0;
 }
 
 static void cnss_pci_get_msi_address(struct device *dev, u32 *msi_addr_low,

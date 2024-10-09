@@ -731,8 +731,8 @@ static void cnss_etr_sg_tbl_flush(uint32_t *vaddr,
 	uint32_t *virt_st_tbl, *virt_pte;
 	void *virt_blk;
 	phys_addr_t phys_pte;
-	struct cnss_fw_mem *qdss_mem = plat_priv->qdss_mem;
-	int total_ents = DIV_ROUND_UP(qdss_mem[0].size, PAGE_SIZE);
+	struct cnss_fw_mem qdss_mem = plat_priv->qdss_mem;
+	int total_ents = DIV_ROUND_UP(qdss_mem.size, PAGE_SIZE);
 	int ents_per_blk = PAGE_SIZE/sizeof(uint32_t);
 
 	virt_st_tbl = vaddr;
@@ -768,8 +768,8 @@ void cnss_etr_sg_tbl_free(uint32_t *vaddr,
 	uint32_t *virt_st_tbl, *virt_pte;
 	void *virt_blk;
 	phys_addr_t phys_pte;
-	struct cnss_fw_mem *qdss_mem = plat_priv->qdss_mem;
-	int total_ents = DIV_ROUND_UP(qdss_mem[0].size, PAGE_SIZE);
+	struct cnss_fw_mem qdss_mem = plat_priv->qdss_mem;
+	int total_ents = DIV_ROUND_UP(qdss_mem.size, PAGE_SIZE);
 	int ents_per_blk = PAGE_SIZE/sizeof(uint32_t);
 
 	if (vaddr == NULL)
@@ -815,9 +815,9 @@ int cnss_etr_sg_tbl_alloc(struct cnss_plat_data *plat_priv)
 	uint32_t i = 0, last_pte;
 	uint32_t *virt_pgdir, *virt_st_tbl;
 	void *virt_pte;
-	struct cnss_fw_mem *qdss_mem = plat_priv->qdss_mem;
+	struct cnss_fw_mem qdss_mem = plat_priv->qdss_mem;
 	struct qdss_stream_data *qdss_stream = &plat_priv->qdss_stream;
-	int total_ents = DIV_ROUND_UP(qdss_mem[0].size, PAGE_SIZE);
+	int total_ents = DIV_ROUND_UP(qdss_mem.size, PAGE_SIZE);
 	int ents_per_blk = PAGE_SIZE/sizeof(uint32_t);
 
 	virt_pgdir = (uint32_t *)__get_free_pages(GFP_KERNEL | __GFP_ZERO, 0);

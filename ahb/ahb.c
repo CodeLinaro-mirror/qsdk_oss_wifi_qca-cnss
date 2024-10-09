@@ -369,7 +369,6 @@ static void cnss_ahb_free_fw_mem(struct cnss_plat_data *plat_priv)
 
 static int cnss_ahb_alloc_qdss_mem(struct cnss_plat_data *plat_priv)
 {
-	int i;
 	struct device_node *dev_node = NULL;
 	struct resource q6_etr;
 	int ret;
@@ -377,75 +376,86 @@ static int cnss_ahb_alloc_qdss_mem(struct cnss_plat_data *plat_priv)
 	if (!plat_priv)
 		return -ENODEV;
 
-	dev_node = cnss_get_etr_dev_node(plat_priv);
-	if (!dev_node) {
-		cnss_pr_err("No q6_etr_dump available in dts");
-		return -ENOMEM;
-	}
+	if (cnss_check_be_target(plat_priv)) {
+		if (!plat_priv->qdss_mem.va) {
+			cnss_pr_err("QDSS memory is not allocated\n");
+			return -ENOMEM;
+		}
+		plat_priv->qdss_mem.size = SZ_1M;
+		plat_priv->qdss_mem.type = QMI_WLFW_MEM_QDSS_V01;
+	} else {
+		dev_node = cnss_get_etr_dev_node(plat_priv);
+		if (!dev_node) {
+			cnss_pr_err("No q6_etr_dump available in dts");
+			return -ENOMEM;
+		}
 
-	ret = of_address_to_resource(dev_node, 0, &q6_etr);
-	if (ret) {
-		cnss_pr_err("Failed to get resource for q6_etr_dump");
-		return -EINVAL;
-	}
+		ret = of_address_to_resource(dev_node, 0, &q6_etr);
+		if (ret) {
+			cnss_pr_err("Failed to get resource for q6_etr_dump");
+			return -EINVAL;
+		}
 
-	for (i = 0; i < plat_priv->qdss_mem_seg_len; i++) {
-		plat_priv->qdss_mem[i].va = NULL;
-		plat_priv->qdss_mem[i].pa = q6_etr.start;
-		plat_priv->qdss_mem[i].size = resource_size(&q6_etr);
-		plat_priv->qdss_mem[i].type = QMI_WLFW_MEM_QDSS_V01;
-
+		plat_priv->qdss_mem.va = NULL;
+		plat_priv->qdss_mem.pa = q6_etr.start;
+		plat_priv->qdss_mem.size = resource_size(&q6_etr);
+		plat_priv->qdss_mem.type = QMI_WLFW_MEM_QDSS_V01;
 		if (plat_priv->device_id == QCN6122_DEVICE_ID ||
-		    plat_priv->device_id == QCN9160_DEVICE_ID ||
-		    plat_priv->device_id == QCA5332_DEVICE_ID ||
-		    plat_priv->device_id == QCN6432_DEVICE_ID ||
-		    plat_priv->device_id == QCA5424_DEVICE_ID) {
-			plat_priv->qdss_mem[i].va =
-				ioremap(plat_priv->qdss_mem[i].pa,
-					plat_priv->qdss_mem[i].size);
-			if (!plat_priv->qdss_mem[i].va) {
+		    plat_priv->device_id == QCN9160_DEVICE_ID) {
+			plat_priv->qdss_mem.va =
+				ioremap(plat_priv->qdss_mem.pa,
+					plat_priv->qdss_mem.size);
+			if (!plat_priv->qdss_mem.va) {
 				cnss_pr_err("WARNING etr-addr remap failed\n");
 				return -ENOMEM;
 			}
 		}
-
-		cnss_pr_dbg("QDSS mem addr pa 0x%x va 0x%p, size 0x%x",
-			    (unsigned int)plat_priv->qdss_mem[i].pa,
-			    plat_priv->qdss_mem[i].va,
-			    (unsigned int)plat_priv->qdss_mem[i].size);
 	}
+
+	cnss_pr_dbg("QDSS mem addr pa 0x%x va 0x%p, size 0x%x",
+		    (unsigned int)plat_priv->qdss_mem.pa,
+		    plat_priv->qdss_mem.va,
+			    (unsigned int)plat_priv->qdss_mem.size);
 
 	return 0;
 }
 
 static void cnss_ahb_free_qdss_mem(struct cnss_plat_data *plat_priv)
 {
-	struct cnss_fw_mem *qdss_mem = plat_priv->qdss_mem;
+	struct cnss_fw_mem qdss_mem = plat_priv->qdss_mem;
 	struct qdss_stream_data *qdss_stream = &plat_priv->qdss_stream;
-	int i;
 
 	if (!plat_priv) {
 		cnss_pr_err("%s: plat_priv is NULL\n", __func__);
 		return;
 	}
 
-	for (i = 0; i < plat_priv->qdss_mem_seg_len; i++) {
-		if (plat_priv->qdss_etr_sg_mode) {
-			cnss_etr_sg_tbl_free(
-				(uint32_t *)qdss_stream->qdss_vaddr,
-				plat_priv,
-				DIV_ROUND_UP(qdss_mem[i].size, PAGE_SIZE));
-		} else {
-			if (qdss_mem[i].va) {
+	if (plat_priv->qdss_etr_sg_mode) {
+		cnss_etr_sg_tbl_free(
+			(uint32_t *)qdss_stream->qdss_vaddr,
+			plat_priv,
+			DIV_ROUND_UP(qdss_mem.size, PAGE_SIZE));
+	} else {
+		if (plat_priv->qdss_mem.va) {
+			if (cnss_check_be_target(plat_priv)) {
+				/* When QDSS is stopped for 11BE chipsets
+				 * only memset the memory,
+				 * to retain the allocation for consective
+				 * qdss start from cli. QDSS memory will be
+				 * cleared only when the feature is disabled,
+				 * as consecutive memory may not be available
+				 * in runtime.
+				 */
+				cnss_pr_dbg("Clearing the QDSS data\n");
+				memset(plat_priv->qdss_mem.va, 0, SZ_1M);
+			} else {
 				cnss_pr_dbg("Freeing QDSS Memory\n");
-				iounmap(qdss_mem[i].va);
-				qdss_mem[i].va = NULL;
-				qdss_mem[i].size = 0;
+				iounmap(qdss_mem.va);
+				qdss_mem.va = NULL;
+				qdss_mem.size = 0;
 			}
 		}
 	}
-
-	plat_priv->qdss_mem_seg_len = 0;
 }
 
 static int cnss_ahb_update_status(struct cnss_plat_data *plat_priv,
