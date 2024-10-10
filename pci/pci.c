@@ -2076,7 +2076,12 @@ int cnss_qcom_elf_dump(struct list_head *segs, struct device *dev,
 		memset(phdr, 0, sizeof_elf_phdr(class));
 		set_phdr_property(phdr, class, p_type, PT_LOAD);
 		set_phdr_property(phdr, class, p_offset, offset);
-		set_phdr_property(phdr, class, p_vaddr, segment->da);
+		if (segment->va) {
+			ptr = (void __iomem *)segment->va;
+			set_phdr_property(phdr, class, p_vaddr, (uintptr_t)ptr);
+		} else {
+			set_phdr_property(phdr, class, p_vaddr, segment->da);
+		}
 		set_phdr_property(phdr, class, p_paddr, segment->da);
 		set_phdr_property(phdr, class, p_filesz, segment->size);
 		set_phdr_property(phdr, class, p_memsz, segment->size);
@@ -2084,7 +2089,7 @@ int cnss_qcom_elf_dump(struct list_head *segs, struct device *dev,
 		set_phdr_property(phdr, class, p_align, 0);
 
 		if (segment->va) {
-			memcpy(data + offset, segment->va, segment->size);
+			memcpy_fromio(data + offset, ptr, segment->size);
 		} else {
 			ptr = devm_ioremap(dev, segment->da, segment->size);
 			if (!ptr) {
@@ -2136,7 +2141,7 @@ int cnss_qcn9000_ramdump(struct  cnss_pci_data *pci_priv)
 	meta_info->version = CNSS_RAMDUMP_VERSION_V2;
 	meta_info->chipset = plat_priv->device_id;
 	seg->va = meta_info;
-	seg->size = sizeof(meta_info);
+	seg->size = sizeof(*meta_info);
 	list_add(&seg->node, &head);
 
 	for (i = 0; i < dump_data->nentries; i++) {
