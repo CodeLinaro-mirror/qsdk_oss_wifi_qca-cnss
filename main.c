@@ -282,6 +282,7 @@ static struct class *m3_dump_class;
 struct rproc *rproc_rootpd, *rproc_textpd;
 
 atomic_t cal_in_progress_count;
+bool g_driver_mode;
 void *cnss_register_qca8074_cb(struct cnss_plat_data *plat_priv);
 int cnss_unregister_qca8074_cb(struct cnss_plat_data *plat_priv);
 void *cnss_register_qcn9000_cb(struct cnss_plat_data *plat_priv);
@@ -2696,8 +2697,17 @@ int cnss_set_driver_mode(unsigned int mode)
 	}
 
 	/* MLO support needs to be enabled only for Mission mode */
-	if (mode != CNSS_MISSION)
+	if (mode != CNSS_MISSION) {
 		cnss_set_global_mlo_support(false);
+		g_driver_mode = true;
+		return 0;
+	}
+
+	/* Enable back the MLO support if disabled in non-mission mode */
+	if (g_driver_mode) {
+		cnss_set_global_mlo_support(true);
+		g_driver_mode = false;
+	}
 
 	return 0;
 }
