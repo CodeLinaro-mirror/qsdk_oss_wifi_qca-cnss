@@ -3395,8 +3395,6 @@ static int cnss_rproc_recovery(struct cnss_plat_data *plat_priv)
 			ret = cnss_stop_rproc(plat_priv, rproc_rootpd);
 		}
 		if (!ret) {
-			cnss_qca8074_notifier_nb(&plat_priv->modem_nb,
-					CNSS_RAMDUMP_NOTIFICATION, NULL);
 			rproc_rootpd->ops->coredump(rproc_rootpd);
 		}
 	}
