@@ -676,6 +676,7 @@ int cnss_mlo_mem_alloc(struct cnss_plat_data *plat_priv, int index)
 
 static bool cnss_get_mlo_group_master_chip(struct cnss_plat_data *plat_priv)
 {
+	int master_chip_idx = 0;
 	struct cnss_mlo_group_info *mlo_group_info;
 
 	if (!plat_priv || !plat_priv->mlo_support)
@@ -687,8 +688,12 @@ static bool cnss_get_mlo_group_master_chip(struct cnss_plat_data *plat_priv)
 
 	mlo_group_info = plat_priv->mlo_group_info;
 
+	master_chip_idx = cnss_get_mlo_master_chip_id(mlo_group_info);
+
+	cnss_pr_dbg("%s, Master chip idx %d\n", __func__, master_chip_idx);
+
 	return plat_priv->mlo_chip_info->chip_id ==
-		mlo_group_info->chip_info[MLO_GROUP_MASTER_CHIP].chip_id;
+		mlo_group_info->chip_info[master_chip_idx].chip_id;
 }
 
 void cnss_do_mlo_global_memset(struct cnss_plat_data *plat_priv, u64 mem_size)
@@ -726,8 +731,8 @@ static void cnss_etr_sg_tbl_flush(uint32_t *vaddr,
 	uint32_t *virt_st_tbl, *virt_pte;
 	void *virt_blk;
 	phys_addr_t phys_pte;
-	struct cnss_fw_mem *qdss_mem = plat_priv->qdss_mem;
-	int total_ents = DIV_ROUND_UP(qdss_mem[0].size, PAGE_SIZE);
+	struct cnss_fw_mem qdss_mem = plat_priv->qdss_mem;
+	int total_ents = DIV_ROUND_UP(qdss_mem.size, PAGE_SIZE);
 	int ents_per_blk = PAGE_SIZE/sizeof(uint32_t);
 
 	virt_st_tbl = vaddr;
@@ -763,8 +768,8 @@ void cnss_etr_sg_tbl_free(uint32_t *vaddr,
 	uint32_t *virt_st_tbl, *virt_pte;
 	void *virt_blk;
 	phys_addr_t phys_pte;
-	struct cnss_fw_mem *qdss_mem = plat_priv->qdss_mem;
-	int total_ents = DIV_ROUND_UP(qdss_mem[0].size, PAGE_SIZE);
+	struct cnss_fw_mem qdss_mem = plat_priv->qdss_mem;
+	int total_ents = DIV_ROUND_UP(qdss_mem.size, PAGE_SIZE);
 	int ents_per_blk = PAGE_SIZE/sizeof(uint32_t);
 
 	if (vaddr == NULL)
@@ -810,9 +815,9 @@ int cnss_etr_sg_tbl_alloc(struct cnss_plat_data *plat_priv)
 	uint32_t i = 0, last_pte;
 	uint32_t *virt_pgdir, *virt_st_tbl;
 	void *virt_pte;
-	struct cnss_fw_mem *qdss_mem = plat_priv->qdss_mem;
+	struct cnss_fw_mem qdss_mem = plat_priv->qdss_mem;
 	struct qdss_stream_data *qdss_stream = &plat_priv->qdss_stream;
-	int total_ents = DIV_ROUND_UP(qdss_mem[0].size, PAGE_SIZE);
+	int total_ents = DIV_ROUND_UP(qdss_mem.size, PAGE_SIZE);
 	int ents_per_blk = PAGE_SIZE/sizeof(uint32_t);
 
 	virt_pgdir = (uint32_t *)__get_free_pages(GFP_KERNEL | __GFP_ZERO, 0);

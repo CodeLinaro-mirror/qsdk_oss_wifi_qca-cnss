@@ -112,7 +112,6 @@ void cnss_coredump_build_inline(struct cnss_plat_data *plat_priv,
 	size_t header_size;
 	struct device *dev;
 	struct pci_dev *pci_dev;
-	struct cnss_pci_data *pci_priv;
 	u8 *buf;
 
 	header_size = sizeof(*file_data);
@@ -129,18 +128,16 @@ void cnss_coredump_build_inline(struct cnss_plat_data *plat_priv,
 		sizeof(file_data->df_magic));
 	file_data->len = cpu_to_le32(header_size);
 	file_data->version = cpu_to_le32(CNSS_FW_CRASH_DUMP_V2);
+	dev = &plat_priv->plat_dev->dev;
 	if (plat_priv->bus_type == CNSS_BUS_AHB) {
 		file_data->chip_id = plat_priv->chip_info.chip_id;
 		file_data->qrtr_id = plat_priv->wlfw_service_instance_id;
 		file_data->bus_id = plat_priv->userpd_id;
-		dev = &plat_priv->plat_dev->dev;
 	} else {
 		pci_dev = plat_priv->pci_dev;
-		pci_priv = plat_priv->bus_priv;
 		file_data->chip_id = plat_priv->chip_info.chip_id;
 		file_data->qrtr_id = plat_priv->wlfw_service_instance_id;
 		file_data->bus_id = (pci_domain_nr(pci_dev->bus) & 0xF);
-		dev = &pci_priv->pci_dev->dev;
 	}
 	guid_gen(&file_data->guid);
 	ktime_get_real_ts64(&timestamp);
@@ -170,7 +167,7 @@ void cnss_coredump_build_inline(struct cnss_plat_data *plat_priv,
 void cnss_coredump_qdss_dump(struct cnss_plat_data *plat_priv,
 			     struct cnss_qmi_event_qdss_trace_save_data *event_data)
 {
-	struct cnss_fw_mem *qdss_mem = plat_priv->qdss_mem;
+	struct cnss_fw_mem qdss_mem = plat_priv->qdss_mem;
 	struct cnss_dump_segment *segment;
 	int len, num_seg;
 	void *dump;
@@ -184,7 +181,7 @@ void cnss_coredump_qdss_dump(struct cnss_plat_data *plat_priv,
 	}
 
 	if (event_data->total_size &&
-	    event_data->total_size <= qdss_mem[0].size)
+	    event_data->total_size <= qdss_mem.size)
 		dump = vzalloc(event_data->total_size);
 	if (!dump) {
 		vfree(segment);
@@ -193,20 +190,20 @@ void cnss_coredump_qdss_dump(struct cnss_plat_data *plat_priv,
 
 	if (num_seg == 1) {
 		segment->len = event_data->mem_seg[0].size;
-		segment->vaddr = qdss_mem[0].va;
-	cnss_pr_dbg("seg vaddr is 0x%p len is 0x%x\n",
-		    segment->vaddr, segment->len);
+		segment->vaddr = qdss_mem.va;
+		cnss_pr_dbg("seg vaddr is 0x%p len is 0x%x\n",
+			    segment->vaddr, segment->len);
 		segment->type = CNSS_FW_QDSS_DATA;
 	} else if (num_seg == 2) {
 		/*FW sends 2 segments with segment 0 and segment 1 */
 
-		if (event_data->mem_seg[1].addr != qdss_mem[0].pa) {
+		if (event_data->mem_seg[1].addr != qdss_mem.pa) {
 			cnss_pr_err("Invalid seg 0 addr 0x%llx\n",
 			    event_data->mem_seg[1].addr);
 			goto out;
 		}
 		if (event_data->mem_seg[0].size + event_data->mem_seg[1].size !=
-		    qdss_mem[0].size) {
+		    qdss_mem.size) {
 			cnss_pr_err("Invalid total size 0x%x 0x%x\n",
 				    event_data->mem_seg[0].size,
 				    event_data->mem_seg[1].size);
@@ -219,10 +216,10 @@ void cnss_coredump_qdss_dump(struct cnss_plat_data *plat_priv,
 			   event_data->mem_seg[1].addr, event_data->mem_seg[1].size);
 
 		memcpy(dump,
-		       qdss_mem[0].va + event_data->mem_seg[1].size,
+		       qdss_mem.va + event_data->mem_seg[1].size,
 		       event_data->mem_seg[0].size);
 		memcpy(dump + event_data->mem_seg[0].size,
-		       qdss_mem[0].va, event_data->mem_seg[1].size);
+		       qdss_mem.va, event_data->mem_seg[1].size);
 
 		segment->len = event_data->mem_seg[0].size + event_data->mem_seg[1].size;
 		segment->vaddr = dump;

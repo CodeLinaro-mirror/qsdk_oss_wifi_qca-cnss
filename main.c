@@ -228,6 +228,10 @@ static unsigned int mlo_chip_bitmask = CNSS_DEFAULT_MLO_CHIP_BITMASK;
 module_param(mlo_chip_bitmask, uint, 0600);
 MODULE_PARM_DESC(mlo_chip_bitmask, "mlo_chip_bitmask");
 
+static ulong qdss_size = SZ_1M;
+module_param(qdss_size, ulong, 0600);
+MODULE_PARM_DESC(qdss_size, "qdss_size");
+
 /* Experimental module param to avoid FW shutdown/power on after coldboot
  * calibration. Current FW does not support this and should not be enabled
  * without FW support for this feature
@@ -278,6 +282,7 @@ static struct class *m3_dump_class;
 struct rproc *rproc_rootpd, *rproc_textpd;
 
 atomic_t cal_in_progress_count;
+bool g_driver_mode;
 void *cnss_register_qca8074_cb(struct cnss_plat_data *plat_priv);
 int cnss_unregister_qca8074_cb(struct cnss_plat_data *plat_priv);
 void *cnss_register_qcn9000_cb(struct cnss_plat_data *plat_priv);
@@ -432,7 +437,6 @@ void cnss_set_wsi_remap_state(struct device *dev, bool state)
 
 	cnss_pr_dbg("WSI remap state: %d\n", state);
 	plat_priv->wsi_remap_state = state;
-
 }
 EXPORT_SYMBOL(cnss_set_wsi_remap_state);
 
@@ -1207,7 +1211,6 @@ out:
 }
 EXPORT_SYMBOL(cnss_athdiag_write);
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
 /*
  * Return true if target is a lithium target. else return false
  */
@@ -1251,7 +1254,6 @@ bool cnss_check_be_target(struct cnss_plat_data *plat_priv)
 
 	return false;
 }
-#endif
 
 /* Return 0 if device is a multi-pd target.
  * Else return -ENODEV.
@@ -1823,6 +1825,25 @@ int cnss_set_mlo_group_config(struct cnss_mlo_group_info *src_mlo_config,
 	return 0;
 }
 EXPORT_SYMBOL(cnss_set_mlo_group_config);
+
+int cnss_get_mlo_master_chip_id(struct cnss_mlo_group_info *mlo_group_info)
+{
+	int mlo_chip_id, mlo_master_chip_idx = 0;
+	struct cnss_plat_data *plat_priv = NULL;
+
+	for (mlo_chip_id = 0; mlo_chip_id < mlo_group_info->num_chips; mlo_chip_id++) {
+		plat_priv = cnss_get_plat_priv_by_chip_id(mlo_group_info->chip_info[mlo_chip_id].chip_id);
+		if ((plat_priv->mlo_support) && (!plat_priv->wsi_remap_state)) {
+			mlo_master_chip_idx = mlo_chip_id;
+			break;
+		}
+	}
+
+	if (mlo_chip_id == mlo_group_info->num_chips)
+		mlo_master_chip_idx = 0;
+
+	return mlo_master_chip_idx;
+}
 
 int cnss_set_mlo_config(struct cnss_module_param *modparam,
 			struct cnss_mlo_group_info *src_mlo_config)
@@ -2676,8 +2697,17 @@ int cnss_set_driver_mode(unsigned int mode)
 	}
 
 	/* MLO support needs to be enabled only for Mission mode */
-	if (mode != CNSS_MISSION)
+	if (mode != CNSS_MISSION) {
 		cnss_set_global_mlo_support(false);
+		g_driver_mode = true;
+		return 0;
+	}
+
+	/* Enable back the MLO support if disabled in non-mission mode */
+	if (g_driver_mode) {
+		cnss_set_global_mlo_support(true);
+		g_driver_mode = false;
+	}
 
 	return 0;
 }
@@ -3236,6 +3266,11 @@ static int cnss_rproc_start(struct cnss_plat_data *plat_priv)
 	return 0;
 }
 
+int cnss_handle_usrpd_in_rpd_crash(struct cnss_plat_data *plat_priv)
+{
+	return 0;
+}
+
 void *cnss_register_qcn9000_cb(struct cnss_plat_data *plat_priv)
 {
 	return NULL;
@@ -3262,89 +3297,6 @@ static int cnss_qca8074_notifier_nb(struct notifier_block *nb,
 {
 	return 0;
 }
-#else
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
-static int cnss_rproc_recovery(struct cnss_plat_data *plat_priv)
-{
-	struct rproc *rproc = NULL;
-	int ret = 0;
-
-	if (!plat_priv)
-		return 0;
-
-	rproc = plat_priv->rproc_handle;
-
-	cnss_bus_update_status(plat_priv, CNSS_FW_DOWN);
-	if (rproc) {
-		ret = rproc_stop(rproc, true);
-		if (ret < 0) {
-			cnss_pr_err("User pd rproc_stop failed\n");
-			return ret;
-		}
-	}
-
-	if (rproc_rootpd) {
-		ret = rproc_stop(rproc_rootpd, true);
-		if (ret < 0) {
-			cnss_pr_err("Root pd rproc_stop failed\n");
-			return ret;
-		}
-		rproc->ops->coredump(rproc_rootpd);
-	} else {
-		if (rproc) {
-			cnss_qca8074_notifier_nb(&plat_priv->modem_nb,
-					CNSS_RAMDUMP_NOTIFICATION, NULL);
-			rproc->ops->coredump(rproc);
-		}
-	}
-	return 0;
-}
-
-static int cnss_rproc_start(struct cnss_plat_data *plat_priv)
-{
-	const struct firmware *firmware_p = NULL;
-	struct rproc *rproc_rpd;
-	struct rproc *rproc;
-	int ret;
-
-	rproc = plat_priv->rproc_handle;
-	rproc_rpd = plat_priv->rproc_rpd_handle;
-	if (rproc_rpd) {
-		ret = request_firmware(&firmware_p, rproc_rpd->firmware,
-				       &rproc_rpd->dev);
-		if (ret < 0) {
-			cnss_pr_err("Request_firmware failed: %d\n", ret);
-			return ret;
-		}
-
-		ret = rproc_start(rproc_rpd, firmware_p);
-		if (ret < 0) {
-			cnss_pr_err("Root pd rproc_start failed\n");
-			release_firmware(firmware_p);
-			return ret;
-		}
-		release_firmware(firmware_p);
-	} else {
-		ret = request_firmware(&firmware_p, rproc->firmware,
-				       &rproc->dev);
-		if (ret < 0) {
-			cnss_pr_err("Request_firmware failed: %d\n", ret);
-			return ret;
-		}
-
-		if (rproc) {
-			ret = rproc_start(rproc, firmware_p);
-			if (ret < 0) {
-				cnss_pr_err("Root pd rproc_start failed\n");
-				release_firmware(firmware_p);
-				return ret;
-			}
-			release_firmware(firmware_p);
-		}
-	}
-	return 0;
-}
-
 #else
 int cnss_stop_rproc(struct cnss_plat_data *plat_priv, struct rproc *rproc)
 {
@@ -3524,58 +3476,6 @@ static int cnss_rproc_start(struct cnss_plat_data *plat_priv)
 	plat_priv->crash_type = CNSS_NO_CRASH;
 	return 0;
 }
-
-static int cnss_qcn9000_notifier_nb(struct notifier_block *nb,
-				    unsigned long code,
-				    void *ss_handle)
-{
-	struct cnss_plat_data *plat_priv =
-		container_of(nb, struct cnss_plat_data, modem_nb);
-	struct cnss_wlan_driver *driver_ops = NULL;
-	int event_code = cnss_get_event(code);
-
-	if (!plat_priv->cal_in_progress)
-		driver_ops = plat_priv->driver_ops;
-
-	if (event_code < 0)
-		return NOTIFY_OK;
-
-	if (event_code == CNSS_AFTER_POWERUP) {
-		if (driver_ops)
-			driver_ops->probe((struct pci_dev *)plat_priv->plat_dev,
-					  (const struct pci_device_id *)
-					  plat_priv->plat_dev_id);
-		clear_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state);
-		clear_bit(CNSS_DRIVER_LOADING, &plat_priv->driver_state);
-		set_bit(CNSS_DRIVER_PROBED, &plat_priv->driver_state);
-	} else if (event_code == CNSS_BEFORE_SHUTDOWN) {
-		if (driver_ops)
-			driver_ops->remove(
-					(struct pci_dev *)plat_priv->plat_dev);
-
-		clear_bit(CNSS_DRIVER_PROBED, &plat_priv->driver_state);
-		clear_bit(CNSS_DEV_ERR_NOTIFY, &plat_priv->driver_state);
-	} else if (event_code == CNSS_RAMDUMP_NOTIFICATION) {
-		if (driver_ops)
-			driver_ops->reinit(
-					(struct pci_dev *)plat_priv->plat_dev,
-					(const struct pci_device_id *)
-					plat_priv->plat_dev_id);
-
-		clear_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state);
-		return NOTIFY_DONE;
-	} else {
-		if (driver_ops)
-			driver_ops->update_status(
-					(struct pci_dev *)plat_priv->plat_dev,
-					(const struct pci_device_id *)
-					plat_priv->plat_dev_id, event_code);
-	}
-
-	return NOTIFY_OK;
-}
-
-#endif
 
 void  *__cnss_subsystem_get(struct cnss_plat_data *plat_priv)
 {
@@ -3871,6 +3771,56 @@ void *cnss_register_qcn9000_cb(struct cnss_plat_data *plat_priv)
 	return NULL;
 }
 #else
+static int cnss_qcn9000_notifier_nb(struct notifier_block *nb,
+				    unsigned long code,
+				    void *ss_handle)
+{
+	struct cnss_plat_data *plat_priv =
+		container_of(nb, struct cnss_plat_data, modem_nb);
+	struct cnss_wlan_driver *driver_ops = NULL;
+	int event_code = cnss_get_event(code);
+
+	if (!plat_priv->cal_in_progress)
+		driver_ops = plat_priv->driver_ops;
+
+	if (event_code < 0)
+		return NOTIFY_OK;
+
+	if (event_code == CNSS_AFTER_POWERUP) {
+		if (driver_ops)
+			driver_ops->probe((struct pci_dev *)plat_priv->plat_dev,
+					  (const struct pci_device_id *)
+					  plat_priv->plat_dev_id);
+		clear_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state);
+		clear_bit(CNSS_DRIVER_LOADING, &plat_priv->driver_state);
+		set_bit(CNSS_DRIVER_PROBED, &plat_priv->driver_state);
+	} else if (event_code == CNSS_BEFORE_SHUTDOWN) {
+		if (driver_ops)
+			driver_ops->remove(
+					(struct pci_dev *)plat_priv->plat_dev);
+
+		clear_bit(CNSS_DRIVER_PROBED, &plat_priv->driver_state);
+		clear_bit(CNSS_DEV_ERR_NOTIFY, &plat_priv->driver_state);
+	} else if (event_code == CNSS_RAMDUMP_NOTIFICATION) {
+		if (driver_ops)
+			driver_ops->reinit(
+					(struct pci_dev *)plat_priv->plat_dev,
+					(const struct pci_device_id *)
+					plat_priv->plat_dev_id);
+
+		clear_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state);
+		return NOTIFY_DONE;
+	} else {
+		if (driver_ops)
+			driver_ops->update_status(
+					(struct pci_dev *)plat_priv->plat_dev,
+					(const struct pci_device_id *)
+					plat_priv->plat_dev_id, event_code);
+	}
+
+	return NOTIFY_OK;
+}
+
 void *cnss_register_qcn9000_cb(struct cnss_plat_data *plat_priv)
 {
 	struct cnss_subsys_info *subsys_info;
@@ -3896,66 +3846,6 @@ void *cnss_register_qcn9000_cb(struct cnss_plat_data *plat_priv)
 }
 #endif
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
-void *cnss_register_qca8074_cb(struct cnss_plat_data *plat_priv)
-{
-	struct cnss_subsys_info *subsys_info;
-	void *ss_handle = NULL;
-	struct rproc *rproc_rpd;
-
-	subsys_info = &plat_priv->subsys_info;
-	plat_priv->modem_nb.notifier_call = cnss_qca8074_notifier_nb;
-	plat_priv->modem_atomic_nb.notifier_call =
-					cnss_qca8074_notifier_atomic_nb;
-	plat_priv->notifier_list[0] = qcom_register_ssr_notifier(subsys_info->subsys_desc.name, &plat_priv->modem_nb);
-	plat_priv->notifier_list[1] =
-		qcom_register_ssr_atomic_notifier(subsys_info->subsys_desc.name,
-						  &plat_priv->modem_atomic_nb);
-
-	rproc_rpd = plat_priv->rproc_rpd_handle;
-	if (rproc_rpd) {
-		plat_priv->rpd_nb.notifier_call = cnss_qca8074_rpd_notifier_nb;
-		plat_priv->rpd_atomic_nb.notifier_call =
-			cnss_qca8074_rpd_notifier_atomic_nb;
-		plat_priv->notifier_list[0] = qcom_register_ssr_notifier(rproc_rpd->name, &plat_priv->rpd_nb);
-		plat_priv->notifier_list[1] =
-			qcom_register_ssr_atomic_notifier(rproc_rpd->name,
-						&plat_priv->rpd_atomic_nb);
-	}
-
-	ss_handle = subsys_info;
-	return ss_handle;
-}
-
-int cnss_unregister_qca8074_cb(struct cnss_plat_data *plat_priv)
-{
-	struct rproc *rproc_rpd;
-
-	if (plat_priv->modem_nb.notifier_call) {
-	qcom_unregister_ssr_notifier(plat_priv->notifier_list[0], &plat_priv->modem_nb);
-	qcom_unregister_ssr_atomic_notifier(plat_priv->notifier_list[1],
-					    &plat_priv->modem_atomic_nb);
-		memset(&plat_priv->modem_nb, 0, sizeof(struct notifier_block));
-		memset(&plat_priv->modem_atomic_nb, 0,
-		       sizeof(struct notifier_block));
-	}
-
-	rproc_rpd = plat_priv->rproc_rpd_handle;
-	if (rproc_rpd) {
-		if (plat_priv->rpd_nb.notifier_call) {
-	qcom_unregister_ssr_notifier(plat_priv->notifier_list[0], &plat_priv->rpd_nb);
-	qcom_unregister_ssr_atomic_notifier(plat_priv->notifier_list[1],
-					    &plat_priv->rpd_atomic_nb);
-			memset(&plat_priv->rpd_nb, 0,
-					sizeof(struct notifier_block));
-			memset(&plat_priv->rpd_atomic_nb, 0,
-					sizeof(struct notifier_block));
-		}
-	}
-
-	return 0;
-}
-#else
 static int cnss_check_ahb_rpd_register(struct cnss_plat_data *plat_priv)
 {
 	int userpd = 0, rpd_registered = 0;
@@ -3980,6 +3870,69 @@ static int cnss_check_ahb_rpd_register(struct cnss_plat_data *plat_priv)
 	}
 	return rpd_registered;
 }
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
+void *cnss_register_qca8074_cb(struct cnss_plat_data *plat_priv)
+{
+	struct cnss_subsys_info *subsys_info;
+	void *ss_handle = NULL;
+	int register_rpd_notifier = 0;
+
+	subsys_info = &plat_priv->subsys_info;
+	plat_priv->modem_nb.notifier_call = cnss_qca8074_notifier_nb;
+	plat_priv->modem_atomic_nb.notifier_call =
+					cnss_qca8074_notifier_atomic_nb;
+	plat_priv->notifier_list[0] = qcom_register_ssr_notifier(subsys_info->subsys_desc.name, &plat_priv->modem_nb);
+	plat_priv->notifier_list[1] =
+		qcom_register_ssr_atomic_notifier(subsys_info->subsys_desc.name,
+						  &plat_priv->modem_atomic_nb);
+
+	/* Register Rootpd notifiers only if its not registered and we
+	 * need to register only for one AHB SOC.
+	 */
+	register_rpd_notifier = cnss_check_ahb_rpd_register(plat_priv);
+
+	if ((rproc_rootpd) && (!register_rpd_notifier) &&
+	    (plat_priv->recovery_type == CNSS_SYNC_RECOVERY)) {
+		plat_priv->rpd_nb.notifier_call = cnss_qca8074_rpd_notifier_nb;
+		plat_priv->rpd_atomic_nb.notifier_call =
+			cnss_qca8074_rpd_notifier_atomic_nb;
+		plat_priv->notifier_list[2] = qcom_register_ssr_notifier(rproc_rootpd->name, &plat_priv->rpd_nb);
+		plat_priv->notifier_list[3] =
+			qcom_register_ssr_atomic_notifier(rproc_rootpd->name,
+						&plat_priv->rpd_atomic_nb);
+	}
+
+	ss_handle = subsys_info;
+	return ss_handle;
+}
+
+int cnss_unregister_qca8074_cb(struct cnss_plat_data *plat_priv)
+{
+	if (plat_priv->modem_nb.notifier_call) {
+		qcom_unregister_ssr_notifier(plat_priv->notifier_list[0], &plat_priv->modem_nb);
+		qcom_unregister_ssr_atomic_notifier(plat_priv->notifier_list[1],
+						    &plat_priv->modem_atomic_nb);
+		memset(&plat_priv->modem_nb, 0, sizeof(struct notifier_block));
+		memset(&plat_priv->modem_atomic_nb, 0,
+		       sizeof(struct notifier_block));
+	}
+
+	if (rproc_rootpd) {
+		if (plat_priv->rpd_nb.notifier_call) {
+			qcom_unregister_ssr_notifier(plat_priv->notifier_list[2], &plat_priv->rpd_nb);
+			qcom_unregister_ssr_atomic_notifier(plat_priv->notifier_list[3],
+					    &plat_priv->rpd_atomic_nb);
+			memset(&plat_priv->rpd_nb, 0,
+					sizeof(struct notifier_block));
+			memset(&plat_priv->rpd_atomic_nb, 0,
+					sizeof(struct notifier_block));
+		}
+	}
+
+	return 0;
+}
+#else
 
 void *cnss_register_qca8074_cb(struct cnss_plat_data *plat_priv)
 {
@@ -4090,11 +4043,6 @@ int cnss_unregister_qcn9000_cb(struct cnss_plat_data *plat_priv)
 #endif
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
-int cnss_handle_usrpd_in_rpd_crash(struct cnss_plat_data *plat_priv)
-{
-	return 0;
-}
-
 static int cnss_get_node_id(struct platform_device *plat_dev,
 			    unsigned long device_id, u32 *node_id)
 {
@@ -5004,6 +4952,7 @@ static int cnss_qdss_trace_req_mem_hdlr(struct cnss_plat_data *plat_priv)
 	return cnss_wlfw_qdss_trace_mem_info_send_sync(plat_priv);
 }
 
+#ifdef QDSS_MULTI_SEGMENTS_SUPPORTED
 void *cnss_qdss_trace_pa_to_va(struct cnss_plat_data *plat_priv,
 			       u64 pa, u32 size, int *seg_id)
 {
@@ -5033,6 +4982,7 @@ void *cnss_qdss_trace_pa_to_va(struct cnss_plat_data *plat_priv,
 	*seg_id = i;
 	return va;
 }
+#endif
 
 static void get_updated_qdss_trace_filename(struct cnss_plat_data *plat_priv,
 					    char *raw_file_name,
@@ -5062,15 +5012,9 @@ static int cnss_qdss_trace_save_hdlr(struct cnss_plat_data *plat_priv,
 {
 	struct cnss_qmi_event_qdss_trace_save_data *event_data = data;
 
-	if (!plat_priv->qdss_mem_seg_len) {
-		cnss_pr_err("Memory for QDSS trace is not available\n");
-		return 0;
-	}
-
 	cnss_coredump_qdss_dump(plat_priv, event_data);
 
 	cnss_bus_free_qdss_mem(plat_priv);
-	plat_priv->qdss_mem_seg_len = 0;
 	return 0;
 }
 #else
@@ -5078,36 +5022,26 @@ static int cnss_qdss_trace_save_hdlr(struct cnss_plat_data *plat_priv,
 				     void *data)
 {
 	struct cnss_qmi_event_qdss_trace_save_data *event_data = data;
-	struct cnss_fw_mem *qdss_mem = plat_priv->qdss_mem;
+	struct cnss_fw_mem qdss_mem = plat_priv->qdss_mem;
 	int ret = 0;
-	int i;
 	char file_name[CNSS_GENL_STR_LEN_MAX];
-
-	if (!plat_priv->qdss_mem_seg_len) {
-		cnss_pr_err("Memory for QDSS trace is not available\n");
-		return -ENOMEM;
-	}
 
 	get_updated_qdss_trace_filename(plat_priv,
 					event_data->file_name, file_name,
 					sizeof(file_name));
 
 	if (event_data->mem_seg_len == 0) {
-		for (i = 0; i < plat_priv->qdss_mem_seg_len; i++) {
-			ret = cnss_genl_send_msg(qdss_mem[i].va,
-						 CNSS_GENL_MSG_TYPE_QDSS,
-						 file_name,
-						 qdss_mem[i].size);
-			if (ret < 0) {
-				cnss_pr_err("Fail to save QDSS data: %d\n",
-					    ret);
-				break;
-			}
-		}
+		ret = cnss_genl_send_msg(qdss_mem.va,
+					 CNSS_GENL_MSG_TYPE_QDSS,
+					 file_name,
+					 qdss_mem.size);
+		if (ret < 0)
+			cnss_pr_err("Fail to save QDSS data: %d\n",
+				    ret);
 	} else if ((event_data->mem_seg_len == 1) &&
-		   (event_data->mem_seg[0].addr == qdss_mem[0].pa) &&
-		   (event_data->mem_seg[0].size <= qdss_mem[0].size)) {
-		ret = cnss_genl_send_msg(qdss_mem[0].va,
+		   (event_data->mem_seg[0].addr == qdss_mem.pa) &&
+		   (event_data->mem_seg[0].size <= qdss_mem.size)) {
+		ret = cnss_genl_send_msg(qdss_mem.va,
 					 CNSS_GENL_MSG_TYPE_QDSS,
 					 file_name,
 					 event_data->mem_seg[0].size);
@@ -5135,20 +5069,20 @@ static int cnss_qdss_trace_save_hdlr(struct cnss_plat_data *plat_priv,
 		 * |   segment 0 end     |
 		 * +---------------------+
 		 */
-		if (event_data->mem_seg[1].addr != qdss_mem[0].pa) {
+		if (event_data->mem_seg[1].addr != qdss_mem.pa) {
 			cnss_pr_err("Invalid seg 0 addr 0x%llx",
 				    event_data->mem_seg[1].addr);
 			goto out;
 		}
 		if (event_data->mem_seg[0].size + event_data->mem_seg[1].size !=
-		    qdss_mem[0].size) {
+		    qdss_mem.size) {
 			cnss_pr_err("Invalid total size 0x%x 0x%x",
 				    event_data->mem_seg[0].size,
 				    event_data->mem_seg[1].size);
 			goto out;
 		}
 
-		ret = cnss_genl_send_msg((qdss_mem[0].va +
+		ret = cnss_genl_send_msg((qdss_mem.va +
 					 event_data->mem_seg[1].size),
 					 CNSS_GENL_MSG_TYPE_QDSS,
 					 file_name,
@@ -5157,7 +5091,7 @@ static int cnss_qdss_trace_save_hdlr(struct cnss_plat_data *plat_priv,
 			cnss_pr_err("Fail to save QDSS data 0: %d\n", ret);
 			goto out;
 		}
-		ret = cnss_genl_send_msg((qdss_mem[0].va),
+		ret = cnss_genl_send_msg((qdss_mem.va),
 					 CNSS_GENL_MSG_TYPE_QDSS,
 					 file_name,
 					 event_data->mem_seg[1].size);
@@ -5315,6 +5249,50 @@ static const struct file_operations m3_dump_fops = {
 	.read		= m3_dump_read,
 	.release	= m3_dump_release,
 };
+
+#ifndef CONFIG_TARGET_SDX75
+static int cnss_alloc_qdss_mem(struct cnss_plat_data *plat_priv)
+{
+	if (cnss_check_be_target(plat_priv)) {
+		plat_priv->qdss_mem.va =
+			dma_alloc_coherent(&plat_priv->plat_dev->dev,
+					   qdss_size, &plat_priv->qdss_mem.pa,
+					   GFP_KERNEL);
+
+		if (!plat_priv->qdss_mem.va) {
+			cnss_pr_err("QDSS memory alloc failed\n");
+			return 0;
+		}
+
+		cnss_pr_info("QDSS va: 0x%pK, pa: %pa size 0x%lx\n",
+			     plat_priv->qdss_mem.va,
+			     &plat_priv->qdss_mem.pa, qdss_size);
+	}
+
+	return 0;
+}
+
+int cnss_free_qdss_mem(struct cnss_plat_data *plat_priv)
+{
+	if (!plat_priv) {
+		cnss_pr_err("plat_priv is NULL\n");
+		return -ENODEV;
+	}
+
+	cnss_pr_info("Freeing QDSS memory\n");
+
+	if (plat_priv->qdss_mem.va && cnss_check_be_target(plat_priv)) {
+		dma_free_coherent(&plat_priv->plat_dev->dev, SZ_1M,
+					plat_priv->qdss_mem.va,
+					plat_priv->qdss_mem.pa);
+		plat_priv->qdss_mem.va = NULL;
+		plat_priv->qdss_mem.pa = 0;
+	} else
+		cnss_pr_info("QDSS memory is NULL\n");
+
+	return 0;
+}
+#endif
 
 static int cnss_init_m3_dump_class(struct cnss_plat_data *plat_priv)
 {
@@ -6385,6 +6363,21 @@ void cnss_config_param_update_cb(uint32_t instance_id,
 		plat_priv->qdss_support = value;
 		cnss_pr_info("Setting qdss_support=%llu for instance_id 0x%x\n",
 			     value, instance_id);
+#ifndef CONFIG_TARGET_SDX75
+		/* For 11BE chipsets, QDSS Memory will be allocated via
+		 * DMA alloc instead of dts and if the QDSS feature is
+		 * disabled in the firmware ini file, stop QDSS if already
+		 * started and clear the memory.
+		 */
+		if (!value && cnss_check_be_target(plat_priv)) {
+			cnss_pr_info("Stopping QDSS for %s",
+					plat_priv->device_name);
+			cnss_wlfw_send_qdss_trace_mode_req(plat_priv,
+						   QMI_WLFW_QDSS_TRACE_OFF_V01,
+						   value);
+			cnss_free_qdss_mem(plat_priv);
+		}
+#endif
 		break;
 	case CNSS_PLAT_IPC_PARAM_TYPE_QDSS_START_V01:
 		plat_priv->qdss_etr_sg_mode = value;
@@ -7530,6 +7523,7 @@ static int cnss_probe(struct platform_device *plat_dev)
 	plat_priv->plat_dev_id = (struct platform_device_id *)device_id;
 	plat_priv->service_id = WLFW_SERVICE_ID_V01;
 	plat_priv->pci_slot_id = pci_slot_id;
+	plat_priv->wsi_remap_state = false;
 
 #ifdef CONFIG_CNSS2_DMA_ALLOC
 	plat_priv->dma_alloc_supported = true;
@@ -7700,6 +7694,12 @@ static int cnss_probe(struct platform_device *plat_dev)
 	if (ret < 0)
 		cnss_pr_err("CNSS genl init failed %d\n", ret);
 
+#ifndef CONFIG_TARGET_SDX75
+	ret = cnss_alloc_qdss_mem(plat_priv);
+	if (ret)
+		cnss_pr_err("QDSS memory alloc failed %d\n", ret);
+#endif
+
 	ret = cnss_init_m3_dump_class(plat_priv);
 	if (ret)
 		goto deinit_genl;
@@ -7796,6 +7796,9 @@ static int cnss_remove(struct platform_device *plat_dev)
 	cnss_event_work_deinit(plat_priv);
 	cnss_recovery_work_deinit(plat_priv);
 	cnss_remove_sysfs(plat_priv);
+#ifndef CONFIG_TARGET_SDX75
+	cnss_free_qdss_mem(plat_priv);
+#endif
 #ifdef CONFIG_CNSS2_PM
 	cnss_unregister_bus_scale(plat_priv);
 	cnss_unregister_esoc(plat_priv);

@@ -687,8 +687,7 @@ struct cnss_plat_data {
 	u64 cal_time;
 	bool cbc_file_download;
 	u32 cal_file_size;
-	u32 qdss_mem_seg_len;
-	struct cnss_fw_mem qdss_mem[QMI_WLFW_MAX_NUM_MEM_SEG_V01];
+	struct cnss_fw_mem qdss_mem;
 	int tgt_mem_cfg_mode;
 	u32 *qdss_reg;
 	struct cnss_pin_connect_result pin_result;
@@ -762,7 +761,7 @@ struct cnss_plat_data {
 	struct work_struct crash_work;
 #endif
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
-	struct srcu_notifier_head *notifier_list[2];
+	struct srcu_notifier_head *notifier_list[4];
 #endif
 	struct completion soc_reset_request_complete;
 	struct cnss_bus_ops *ops;
@@ -851,13 +850,16 @@ const char *cnss_get_fw_path(struct cnss_plat_data *plat_priv);
 int cnss_cal_file_download_to_mem(struct cnss_plat_data *plat_priv,
 				  u32 *cal_file_size);
 struct cnss_plat_data *cnss_get_plat_priv_by_chip_id(int chip_id);
+#ifndef CONFIG_TARGET_SDX75
+int cnss_free_qdss_mem(struct cnss_plat_data *plat_priv);
+#endif
 int cnss_set_fw_type_and_name(struct cnss_plat_data *plat_priv);
+struct cnss_plat_data *cnss_get_plat_priv_by_soc_id(int soc_id);
+int cnss_get_mlo_master_chip_id(struct cnss_mlo_group_info *mlo_group_info);
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0))
 void cnss_modify_link_speed(struct cnss_plat_data *plat_priv);
 #endif
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
 bool cnss_check_li_target(struct cnss_plat_data *plat_priv);
 bool cnss_check_be_target(struct cnss_plat_data *plat_priv);
-#endif
 #endif /* _CNSS_MAIN_H */
