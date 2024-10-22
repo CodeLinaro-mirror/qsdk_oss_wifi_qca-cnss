@@ -24,6 +24,9 @@
 #include <linux/timer.h>
 #include <linux/coresight.h>
 #include <linux/remoteproc.h>
+#ifdef CONFIG_IO_COHERENCY
+#include <linux/tmelcom_ipc.h>
+#endif
 #include <linux/version.h>
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
 #include <linux/remoteproc/qcom_rproc.h>
@@ -1012,6 +1015,62 @@ void __cnss_hif_put(struct cnss_plat_data *plat_priv)
 }
 #endif
 
+#ifdef CONFIG_IO_COHERENCY
+static int cnss_configure_io_coherency_regs(struct cnss_plat_data *plat_priv,
+					    bool reset)
+{
+	struct device *dev = &plat_priv->plat_dev->dev;
+	struct device_node *np = dev->of_node;
+	int ret, num_elem, i = 0;
+	struct tmel_secure_io secure_reg;
+
+	num_elem = of_property_count_elems_of_size(np, "secure-reg",
+			sizeof(u32));
+
+	/* Read and enable the IO coherency and LLC registers */
+	while (i < num_elem) {
+		ret = of_property_read_u32_index(np,
+				"secure-reg", i++,
+				&secure_reg.reg_addr);
+		if (ret) {
+			cnss_pr_err("Failed to get secure reg %d\n", (i - 1));
+			return -EINVAL;
+		}
+
+		ret = of_property_read_u32_index(np,
+				"secure-reg", i++,
+				&secure_reg.reg_val);
+		if (ret) {
+			cnss_pr_err("Failed to get secure reg val %d\n", (i - 1));
+			return -EINVAL;
+		}
+
+		if (reset)
+			secure_reg.reg_val = 0;
+
+		cnss_pr_info("Configuring secure reg: 0x%x val: 0x%x\n",
+				secure_reg.reg_addr, secure_reg.reg_val);
+
+		ret = tmelcom_secure_io_write(&secure_reg,
+				sizeof(struct tmel_secure_io));
+		if (ret) {
+			cnss_pr_err("Failed to update secure_reg settings, ret = %d reg: 0x%x val: 0x%x\n",
+					ret, secure_reg.reg_addr,
+					secure_reg.reg_val);
+			return ret;
+		}
+	}
+
+	return 0;
+}
+#else
+static int cnss_configure_io_coherency_regs(struct cnss_plat_data *plat_priv,
+					    bool reset)
+{
+	return 0;
+}
+#endif
+
 int __cnss_wlan_enable(struct cnss_plat_data *plat_priv,
 		       struct cnss_wlan_enable_cfg *config,
 		       enum cnss_driver_mode mode,
@@ -1088,6 +1147,9 @@ skip_cfg:
 		cnss_wlfw_qdss_dnld_send_sync(plat_priv);
 	}
 
+	if (!plat_priv->cal_in_progress)
+		if ((ret = cnss_configure_io_coherency_regs(plat_priv, false)))
+			cnss_pr_err("Failed to set io coherency regs");
 out:
 	return ret;
 }
@@ -1116,6 +1178,10 @@ int cnss_wlan_disable(struct device *dev, enum cnss_driver_mode mode)
 
 	if (test_bit(QMI_BYPASS, &plat_priv->ctrl_params.quirks))
 		return 0;
+
+	if (!plat_priv->cal_in_progress)
+		if (cnss_configure_io_coherency_regs(plat_priv, true))
+			cnss_pr_err("Failed to reset io coherency regs");
 
 	return cnss_wlfw_wlan_mode_send_sync(plat_priv, CNSS_OFF);
 }
