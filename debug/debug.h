@@ -245,6 +245,7 @@ struct dump_pbl_sbl_data {
 };
 
 extern struct dentry *cnss_root_dentry;
+extern const struct file_operations cnss_mlo_config_ini_debug_fops;
 
 struct cnss_ce_base_addr *register_ce_object(struct cnss_plat_data *plat_priv);
 int cnss_get_mhi_region_len(struct cnss_plat_data *plat_priv,
