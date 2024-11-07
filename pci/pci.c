@@ -3907,78 +3907,6 @@ int cnss_smmu_unmap(struct device *dev, uint32_t iova_addr, size_t size)
 }
 EXPORT_SYMBOL(cnss_smmu_unmap);
 
-static struct cnss_msi_config msi_config_cold_qcn9000_pci0 = {
-	.total_vectors = 4,
-	.total_users = 2,
-	.users = (struct cnss_msi_user[]) {
-		{ .name = "MHI", .num_vectors = 2, .base_vector = 0 },
-		{ .name = "QDSS", .num_vectors = 1, .base_vector = 2 },
-	},
-};
-
-static struct cnss_msi_config msi_config_cold_qcn9000_pci1 = {
-	.total_vectors = 4,
-	.total_users = 2,
-	.users = (struct cnss_msi_user[]) {
-		{ .name = "MHI", .num_vectors = 2, .base_vector = 0 },
-		{ .name = "QDSS", .num_vectors = 1, .base_vector = 2 },
-	},
-};
-
-static struct cnss_msi_config msi_config_cold_qcn9000_pci2 = {
-	.total_vectors = 4,
-	.total_users = 2,
-	.users = (struct cnss_msi_user[]) {
-		{ .name = "MHI", .num_vectors = 2, .base_vector = 0 },
-		{ .name = "QDSS", .num_vectors = 1, .base_vector = 2 },
-	},
-};
-
-static struct cnss_msi_config msi_config_cold_qcn9000_pci3 = {
-	.total_vectors = 4,
-	.total_users = 2,
-	.users = (struct cnss_msi_user[]) {
-		{ .name = "MHI", .num_vectors = 2, .base_vector = 0 },
-		{ .name = "QDSS", .num_vectors = 1, .base_vector = 2 },
-	},
-};
-
-static struct cnss_msi_config msi_config_cold_qcn9224_pci0 = {
-	.total_vectors = 4,
-	.total_users = 2,
-	.users = (struct cnss_msi_user[]) {
-		{ .name = "MHI", .num_vectors = 2, .base_vector = 0 },
-		{ .name = "QDSS", .num_vectors = 1, .base_vector = 2 },
-	},
-};
-
-static struct cnss_msi_config msi_config_cold_qcn9224_pci1 = {
-	.total_vectors = 4,
-	.total_users = 2,
-	.users = (struct cnss_msi_user[]) {
-		{ .name = "MHI", .num_vectors = 2, .base_vector = 0 },
-		{ .name = "QDSS", .num_vectors = 1, .base_vector = 2 },
-	},
-};
-
-static struct cnss_msi_config msi_config_cold_qcn9224_pci2 = {
-	.total_vectors = 4,
-	.total_users = 2,
-	.users = (struct cnss_msi_user[]) {
-		{ .name = "MHI", .num_vectors = 2, .base_vector = 0 },
-		{ .name = "QDSS", .num_vectors = 1, .base_vector = 2 },
-	},
-};
-
-static struct cnss_msi_config msi_config_cold_qcn9224_pci3 = {
-	.total_vectors = 4,
-	.total_users = 2,
-	.users = (struct cnss_msi_user[]) {
-		{ .name = "MHI", .num_vectors = 2, .base_vector = 0 },
-		{ .name = "QDSS", .num_vectors = 1, .base_vector = 2 },
-	},
-};
-
 static struct cnss_msi_config msi_config_qcn9000_pci0 = {
 	.total_vectors = 16,
 	.total_users = 4,
@@ -4073,62 +4001,49 @@ static int cnss_pci_get_msi_assignment(struct cnss_pci_data *pci_priv)
 
 	switch (qrtr_node_id) {
 	case QCN9000_0:
-		if (pci_priv->plat_priv->cal_in_progress)
-			pci_priv->msi_config = &msi_config_cold_qcn9000_pci0;
-		else
-			pci_priv->msi_config = &msi_config_qcn9000_pci0;
+		cnss_override_msi_assignment(pci_priv->plat_priv,
+					     &msi_config_qcn9000_pci0);
+		pci_priv->msi_config = &msi_config_qcn9000_pci0;
 		break;
 	case QCN9000_1:
-		if (pci_priv->plat_priv->cal_in_progress)
-			pci_priv->msi_config = &msi_config_cold_qcn9000_pci1;
-		else
-			pci_priv->msi_config = &msi_config_qcn9000_pci1;
+		cnss_override_msi_assignment(pci_priv->plat_priv,
+					     &msi_config_qcn9000_pci1);
+		pci_priv->msi_config = &msi_config_qcn9000_pci1;
 		break;
 	case QCN9000_2:
-		if (pci_priv->plat_priv->cal_in_progress)
-			pci_priv->msi_config = &msi_config_cold_qcn9000_pci2;
-		else
-			pci_priv->msi_config = &msi_config_qcn9000_pci2;
+		cnss_override_msi_assignment(pci_priv->plat_priv,
+					     &msi_config_qcn9000_pci2);
+		pci_priv->msi_config = &msi_config_qcn9000_pci2;
 		break;
 	case QCN9000_3:
-		if (pci_priv->plat_priv->cal_in_progress)
-			pci_priv->msi_config = &msi_config_cold_qcn9000_pci3;
-		else
-			pci_priv->msi_config = &msi_config_qcn9000_pci3;
+		cnss_override_msi_assignment(pci_priv->plat_priv,
+					     &msi_config_qcn9000_pci3);
+		pci_priv->msi_config = &msi_config_qcn9000_pci3;
 		break;
 	case QCN9224_0:
-		if (pci_priv->plat_priv->cal_in_progress)
-			pci_priv->msi_config = &msi_config_cold_qcn9224_pci0;
-		else
-			pci_priv->msi_config = &msi_config_qcn9224_pci0;
+		cnss_override_msi_assignment(pci_priv->plat_priv,
+					     &msi_config_qcn9224_pci0);
+		pci_priv->msi_config = &msi_config_qcn9224_pci0;
 		break;
 	case QCN9224_1:
-		if (pci_priv->plat_priv->cal_in_progress)
-			pci_priv->msi_config = &msi_config_cold_qcn9224_pci1;
-		else
-			pci_priv->msi_config = &msi_config_qcn9224_pci1;
+		cnss_override_msi_assignment(pci_priv->plat_priv,
+					     &msi_config_qcn9224_pci1);
+		pci_priv->msi_config = &msi_config_qcn9224_pci1;
 		break;
 	case QCN9224_2:
-		if (pci_priv->plat_priv->cal_in_progress)
-			pci_priv->msi_config = &msi_config_cold_qcn9224_pci2;
-		else
-			pci_priv->msi_config = &msi_config_qcn9224_pci2;
+		cnss_override_msi_assignment(pci_priv->plat_priv,
+					     &msi_config_qcn9224_pci2);
+		pci_priv->msi_config = &msi_config_qcn9224_pci2;
 		break;
 	case QCN9224_3:
-		if (pci_priv->plat_priv->cal_in_progress)
-			pci_priv->msi_config = &msi_config_cold_qcn9224_pci3;
-		else
-			pci_priv->msi_config = &msi_config_qcn9224_pci3;
+		cnss_override_msi_assignment(pci_priv->plat_priv,
+					     &msi_config_qcn9224_pci3);
+		pci_priv->msi_config = &msi_config_qcn9224_pci3;
 		break;
 	default:
 		pr_err("Unknown qrtr_node_id 0x%X", qrtr_node_id);
 		return -EINVAL;
 	}
-
-	if (pci_priv->plat_priv->cal_in_progress)
-		return 0;
-
-	cnss_override_msi_assignment(pci_priv->plat_priv, pci_priv->msi_config);
 	return 0;
 }
 
@@ -4444,18 +4359,6 @@ static void cnss_pci_disable_bus(struct cnss_pci_data *pci_priv)
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 #endif
 
-	/* Call global reset here */
-	cnss_pci_global_reset(pci_priv);
-
-	/* On SOC_GLOBAL_RESET, target waits in PBL for host to set the
-	 * MHI_RESET bit to 1.
-	 */
-#if defined(CONFIG_CNSS2_KERNEL_MSM) || \
-	(KERNEL_VERSION(5, 7, 0) <= LINUX_VERSION_CODE)
-	cnss_reset_mhi_state(pci_priv);
-#else
-	mhi_set_mhi_state(pci_priv->mhi_ctrl, MHI_STATE_RESET);
-#endif
 	if (pci_priv->bar) {
 		pci_iounmap(pci_dev, pci_priv->bar);
 		pci_priv->bar = NULL;
@@ -5154,6 +5057,8 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 	struct pci_dev *pci_dev = pci_priv->pci_dev;
 	struct mhi_controller *mhi_ctrl;
+	u32 ramdump_size = 0;
+	struct device *dev = &plat_priv->plat_dev->dev;
 #ifdef CONFIG_CNSS2_KERNEL_MSM
 	char cnss_mhi_log_buf_name[20];
 #endif
@@ -5263,7 +5168,11 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 	mhi_ctrl->runtime_get = cnss_mhi_pm_runtime_get;
 	mhi_ctrl->runtime_put = cnss_mhi_pm_runtime_put_noidle;
 
-	mhi_ctrl->rddm_size = pci_priv->plat_priv->ramdump_info_v2.ramdump_size;
+	if (of_property_read_u32(dev->of_node, "qcom,wlan-ramdump-dynamic",
+				 &ramdump_size) == 0)
+		mhi_ctrl->rddm_size = ramdump_size;
+	cnss_pr_dbg("Ramdump size 0x%zx\n", mhi_ctrl->rddm_size);
+
 	mhi_ctrl->sbl_size = SZ_512K;
 	mhi_ctrl->seg_len = SZ_512K;
 	mhi_ctrl->fbc_download = true;
@@ -5464,7 +5373,6 @@ int cnss_pci_probe(struct pci_dev *pci_dev,
 		   struct cnss_plat_data *plat_priv)
 {
 	int ret = 0;
-	u32 val = 0;
 	struct cnss_pci_data *pci_priv;
 	if (!pci_dev) {
 		pr_err("%s: ERROR: PCI device is NULL\n", __func__);
@@ -5476,49 +5384,10 @@ int cnss_pci_probe(struct pci_dev *pci_dev,
 		return -EINVAL;
 	}
 
-	cnss_pr_dbg("PCI is probing, vendor ID: 0x%x, device ID: 0x%x\n",
-		    id->vendor, pci_dev->device);
-
 	pci_priv = cnss_get_pci_priv(pci_dev);
-	if (!pci_priv)
-		pci_priv = devm_kzalloc(&pci_dev->dev, sizeof(*pci_priv),
-					GFP_KERNEL);
-	if (!pci_priv) {
-		ret = -ENOMEM;
-		goto out;
-	}
 
-#ifdef CONFIG_CNSS2_KERNEL_MSM
-	pci_dev->no_d3hot = true;
-#endif
-	pci_priv->pci_link_state = PCI_LINK_UP;
-	pci_priv->plat_priv = plat_priv;
-	pci_priv->pci_dev = pci_dev;
-	pci_priv->driver_ops = plat_priv->driver_ops;
-	pci_priv->pci_device_id = id;
-	pci_priv->device_id = pci_dev->device;
-	cnss_set_pci_priv(pci_dev, pci_priv);
-	plat_priv->device_id = pci_dev->device;
 	plat_priv->bus_priv = pci_priv;
 	reinit_completion(&plat_priv->soc_reset_request_complete);
-
-#ifdef CONFIG_CNSS2_LEGACY_IRQ
-	if (plat_priv->enable_intx) {
-		pci_priv->os_legacy_irq =
-			platform_get_irq_byname(plat_priv->plat_dev, "inta");
-		if (pci_priv->os_legacy_irq < 0) {
-			pr_err("ERR: error identifying legacy irq ERR %d\n",
-			       pci_priv->os_legacy_irq);
-			return -EINVAL;
-		}
-
-		if (qcn9224_register_legacy_irq(plat_priv->lvirq,
-						pci_priv->os_legacy_irq)) {
-			pr_err("ERR: error registering legacy irq\n");
-			return -EINVAL;
-		}
-	}
-#endif
 
 	ret = cnss_register_ramdump(plat_priv);
 	if (ret)
@@ -5538,17 +5407,8 @@ int cnss_pci_probe(struct pci_dev *pci_dev,
 	}
 #endif
 
-	ret = cnss_pci_enable_bus(pci_priv);
-	if (ret)
-		goto dereg_pci_event;
-
-	pci_save_state(pci_dev);
-	pci_priv->default_state = pci_store_saved_state(pci_dev);
-
 	switch (pci_dev->device) {
 	case QCA6174_DEVICE_ID:
-		pci_read_config_word(pci_dev, QCA6174_REV_ID_OFFSET,
-				     &pci_priv->revision_id);
 		ret = cnss_suspend_pci_link(pci_priv);
 		if (ret)
 			cnss_pr_err("Failed to suspend PCI link, err = %d\n",
@@ -5556,13 +5416,6 @@ int cnss_pci_probe(struct pci_dev *pci_dev,
 		cnss_power_off_device(plat_priv, 0);
 		break;
 	case QCN9224_DEVICE_ID:
-		cnss_pci_reg_read(plat_priv,
-				  QCN9224_QFPROM_RAW_RFA_PDET_ROW13_LSB,
-				  &val);
-		pci_priv->otp_board_id = (val & OTP_BOARD_ID_MASK);
-		cnss_pr_dbg("%s: OTP fused board id is 0x%x\n",
-			    __func__, pci_priv->otp_board_id);
-		/* fall through */
 	case QCN9000_EMULATION_DEVICE_ID:
 	case QCN9000_DEVICE_ID:
 	case QCA6390_DEVICE_ID:
@@ -5574,22 +5427,6 @@ int cnss_pci_probe(struct pci_dev *pci_dev,
 		INIT_DELAYED_WORK(&pci_priv->time_sync_work,
 				  cnss_pci_time_sync_work_hdlr);
 
-		if (!plat_priv->enable_intx) {
-			ret = cnss_pci_enable_msi(pci_priv);
-			if (ret)
-				goto disable_bus;
-#ifdef CONFIG_CNSS2_LEGACY_IRQ
-		} else {
-			cnss_pci_enable_legacy_intx(pci_priv->bar, pci_dev);
-#endif
-		}
-
-		ret = cnss_pci_register_mhi(pci_priv);
-		if (ret) {
-			cnss_pci_disable_msi(pci_priv);
-			goto disable_bus;
-		}
-		cnss_pci_get_link_status(pci_priv);
 		if (EMULATION_HW)
 			break;
 		ret = cnss_suspend_pci_link(pci_priv);
@@ -5602,13 +5439,11 @@ int cnss_pci_probe(struct pci_dev *pci_dev,
 		cnss_pr_err("Unknown PCI device found: 0x%x\n",
 			    pci_dev->device);
 		ret = -ENODEV;
-		goto disable_bus;
+		goto dereg_pci_event;
 	}
 
 	return 0;
 
-disable_bus:
-	cnss_pci_disable_bus(pci_priv);
 dereg_pci_event:
 #ifdef CONFIG_CNSS2_PCI_MSM
 	cnss_dereg_pci_event(pci_priv);
@@ -5626,7 +5461,6 @@ unregister_subsys:
 	cnss_bus_dev_shutdown(plat_priv);
 #endif
 	plat_priv->bus_priv = NULL;
-out:
 	return ret;
 }
 EXPORT_SYMBOL(cnss_pci_probe);
@@ -5656,9 +5490,6 @@ void cnss_pci_remove(struct pci_dev *pci_dev)
 	case QCN9224_DEVICE_ID:
 	case QCA6390_DEVICE_ID:
 	case QCA6490_DEVICE_ID:
-		cnss_pci_unregister_mhi(pci_priv);
-		cnss_pci_disable_qdss_msi(pci_priv);
-		cnss_pci_disable_msi(pci_priv);
 		del_timer(&pci_priv->boot_debug_timer);
 		del_timer(&pci_priv->dev_rddm_timer);
 		break;
@@ -5666,15 +5497,19 @@ void cnss_pci_remove(struct pci_dev *pci_dev)
 		break;
 	}
 
-	pci_load_and_free_saved_state(pci_dev, &pci_priv->default_state);
+	/* Call global reset here */
+	cnss_pci_global_reset(pci_priv);
 
-	cnss_pci_disable_bus(pci_priv);
-#ifdef CONFIG_CNSS2_LEGACY_IRQ
-	if (plat_priv->enable_intx) {
-		qcn9224_unregister_legacy_irq(plat_priv->lvirq,
-					      pci_priv->os_legacy_irq);
-	}
+	/* On SOC_GLOBAL_RESET, target waits in PBL for host to set the
+	 * MHI_RESET bit to 1.
+	 */
+#if defined(CONFIG_CNSS2_KERNEL_MSM) || \
+	(KERNEL_VERSION(5, 7, 0) <= LINUX_VERSION_CODE)
+	cnss_reset_mhi_state(pci_priv);
+#else
+	mhi_set_mhi_state(pci_priv->mhi_ctrl, MHI_STATE_RESET);
 #endif
+
 #ifdef CONFIG_CNSS2_PCI_MSM
 	cnss_dereg_pci_event(pci_priv);
 #endif
@@ -5685,7 +5520,6 @@ void cnss_pci_remove(struct pci_dev *pci_dev)
 #ifdef CONFIG_CNSS2_KERNEL_IPQ
 	cnss_unregister_ramdump(plat_priv);
 #endif
-	cnss_pci_free_mhi_controller(pci_priv);
 	plat_priv->bus_priv = NULL;
 }
 EXPORT_SYMBOL(cnss_pci_remove);
@@ -5763,7 +5597,14 @@ int cnss_pci_probe_basic(struct pci_dev *pci_dev,
 {
 	struct cnss_plat_data *plat_priv = NULL;
 	u32 qrtr_instance = 0;
+	u32 val = 0;
+	struct cnss_pci_data *pci_priv;
 	int ret;
+
+	if (!pci_dev) {
+		cnss_pr_err("%s: ERROR: PCI device is NULL\n", __func__);
+		return -EINVAL;
+	}
 
 	ret = of_property_read_u32(pci_dev->dev.of_node,
 				   "qrtr_instance_id", &qrtr_instance);
@@ -5783,6 +5624,9 @@ int cnss_pci_probe_basic(struct pci_dev *pci_dev,
 
 	plat_priv->pci_dev = (struct platform_device *)pci_dev;
 	plat_priv->pci_dev_id = (struct platform_device_id *)id;
+
+	cnss_pr_dbg("PCI is probing, vendor ID: 0x%x, device ID: 0x%x\n",
+		    id->vendor, pci_dev->device);
 
 #ifdef CONFIG_CNSS2_DMA_ALLOC
 	ret = cnss_pci_of_reserved_mem_device_init(plat_priv);
@@ -5807,12 +5651,111 @@ int cnss_pci_probe_basic(struct pci_dev *pci_dev,
 		return ret;
 	}
 
+	pci_priv = cnss_get_pci_priv(pci_dev);
+	if (!pci_priv)
+		pci_priv = devm_kzalloc(&pci_dev->dev, sizeof(*pci_priv),
+					GFP_KERNEL);
+	if (!pci_priv) {
+		ret = -ENOMEM;
+		goto free_m3;
+	}
+
+#ifdef CONFIG_CNSS2_KERNEL_MSM
+	pci_dev->no_d3hot = true;
+#endif
+	pci_priv->pci_link_state = PCI_LINK_UP;
+	pci_priv->plat_priv = plat_priv;
+	pci_priv->pci_dev = pci_dev;
+	pci_priv->driver_ops = plat_priv->driver_ops;
+	pci_priv->pci_device_id = id;
+	pci_priv->device_id = pci_dev->device;
+	cnss_set_pci_priv(pci_dev, pci_priv);
+	plat_priv->device_id = pci_dev->device;
+	plat_priv->bus_priv = pci_priv;
+
+#ifdef CONFIG_CNSS2_LEGACY_IRQ
+	if (plat_priv->enable_intx) {
+		pci_priv->os_legacy_irq =
+			platform_get_irq_byname(plat_priv->plat_dev, "inta");
+		if (pci_priv->os_legacy_irq < 0) {
+			pr_err("ERR: error identifying legacy irq ERR %d\n",
+			       pci_priv->os_legacy_irq);
+			ret = -EINVAL;
+			goto free_m3;
+		}
+
+		if (qcn9224_register_legacy_irq(plat_priv->lvirq,
+						pci_priv->os_legacy_irq)) {
+			pr_err("ERR: error registering legacy irq\n");
+			ret = -EINVAL;
+			goto free_m3;
+		}
+	}
+#endif
+
+	ret = cnss_pci_enable_bus(pci_priv);
+	if (ret)
+		goto free_m3;
+
+	pci_save_state(pci_dev);
+	pci_priv->default_state = pci_store_saved_state(pci_dev);
+
+	switch (pci_dev->device) {
+	case QCA6174_DEVICE_ID:
+		pci_read_config_word(pci_dev, QCA6174_REV_ID_OFFSET,
+				     &pci_priv->revision_id);
+		break;
+	case QCN9224_DEVICE_ID:
+		cnss_pci_reg_read(plat_priv,
+				  QCN9224_QFPROM_RAW_RFA_PDET_ROW13_LSB,
+				  &val);
+		pci_priv->otp_board_id = (val & OTP_BOARD_ID_MASK);
+		cnss_pr_dbg("%s: OTP fused board id is 0x%x\n",
+			    __func__, pci_priv->otp_board_id);
+		/* fall through */
+	case QCN9000_EMULATION_DEVICE_ID:
+	case QCN9000_DEVICE_ID:
+	case QCA6390_DEVICE_ID:
+	case QCA6490_DEVICE_ID:
+		if (!plat_priv->enable_intx) {
+			ret = cnss_pci_enable_msi(pci_priv);
+			if (ret)
+				goto disable_bus;
+#ifdef CONFIG_CNSS2_LEGACY_IRQ
+		} else {
+			cnss_pci_enable_legacy_intx(pci_priv->bar, pci_dev);
+#endif
+		}
+
+		ret = cnss_pci_register_mhi(pci_priv);
+		if (ret) {
+			cnss_pci_disable_msi(pci_priv);
+			goto disable_bus;
+		}
+
+		cnss_pci_get_link_status(pci_priv);
+		break;
+	default:
+		cnss_pr_err("Unknown PCI device found: 0x%x\n",
+			    pci_dev->device);
+		ret = -ENODEV;
+		goto disable_bus;
+	}
+
 	return 0;
+
+disable_bus:
+	cnss_pci_disable_bus(pci_priv);
+free_m3:
+	cnss_pci_free_m3_mem(plat_priv);
+
+	return ret;
 }
 
 void cnss_pci_remove_basic(struct pci_dev *pci_dev)
 {
 	struct cnss_plat_data *plat_priv = NULL;
+	struct cnss_pci_data *pci_priv = cnss_get_pci_priv(pci_dev);
 	u32 qrtr_instance = 0;
 	int ret;
 
@@ -5832,6 +5775,31 @@ void cnss_pci_remove_basic(struct pci_dev *pci_dev)
 		return;
 	}
 
+	switch (pci_dev->device) {
+	case QCN9000_EMULATION_DEVICE_ID:
+	case QCN9000_DEVICE_ID:
+	case QCN9224_DEVICE_ID:
+	case QCA6390_DEVICE_ID:
+	case QCA6490_DEVICE_ID:
+		cnss_pci_unregister_mhi(pci_priv);
+		cnss_pci_disable_qdss_msi(pci_priv);
+		cnss_pci_disable_msi(pci_priv);
+		break;
+	default:
+		break;
+	}
+
+	pci_load_and_free_saved_state(pci_dev, &pci_priv->default_state);
+	cnss_pci_disable_bus(pci_priv);
+
+#ifdef CONFIG_CNSS2_LEGACY_IRQ
+	if (plat_priv->enable_intx) {
+		qcn9224_unregister_legacy_irq(plat_priv->lvirq,
+					      pci_priv->os_legacy_irq);
+	}
+#endif
+	cnss_pci_free_mhi_controller(pci_priv);
+	plat_priv->bus_priv = NULL;
 	cnss_pr_info("Removing PCI device %p\n", plat_priv->pci_dev);
 	cnss_pci_free_m3_mem(plat_priv);
 	plat_priv->pci_dev_id = NULL;
