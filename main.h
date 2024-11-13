@@ -848,6 +848,8 @@ int cnss_cal_file_download_to_mem(struct cnss_plat_data *plat_priv,
 				  u32 *cal_file_size);
 struct cnss_plat_data *cnss_get_plat_priv_by_chip_id(int chip_id);
 int cnss_set_fw_type_and_name(struct cnss_plat_data *plat_priv);
+struct cnss_plat_data *cnss_get_plat_priv_by_soc_id(int soc_id);
+int cnss_get_mlo_master_chip_id(struct cnss_mlo_group_info *mlo_group_info);
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0))
 void cnss_modify_link_speed(struct cnss_plat_data *plat_priv);
 #endif
