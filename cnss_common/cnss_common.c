@@ -1129,6 +1129,8 @@ int cnss_debugfs_create(struct cnss_plat_data *plat_priv)
 				    &cnss_qmi_record_debug_fops);
 		debugfs_create_file("mlo_config", 0600, cnss_root_dentry, NULL,
 				    &cnss_mlo_config_debug_fops);
+		debugfs_create_file("mlo_config_ini", 0600, cnss_root_dentry,
+				    NULL, &cnss_mlo_config_ini_debug_fops);
 	}
 
 	root_dentry = debugfs_create_dir((char *)&plat_priv->device_name,
