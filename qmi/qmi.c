@@ -3873,8 +3873,8 @@ static void cnss_wlfw_dump_ddr_region_ind_cb(struct qmi_handle *qmi_wlfw,
 	else
 		strscpy(event_data->file_name, "dump_ddr_region",
 			QMI_WLFW_MAX_STR_LEN_V01 + 1);
-	cnss_pr_dbg("Dump DDR region filename: %s\n",
-		    event_data->file_name);
+
+	cnss_pr_dbg("Dump DDR region filename: %s\n", event_data->file_name);
 	event_data->mem_seg_len = ind_msg->mem_seg_len;
 
 	fw_mem = plat_priv->fw_mem;
@@ -3904,8 +3904,9 @@ static void cnss_wlfw_dump_ddr_region_ind_cb(struct qmi_handle *qmi_wlfw,
 				goto free_event_data;
 			}
 		}
-		cnss_pr_dbg("seg-%d: addr 0x%pa size 0x%zx type %u\n", j,
-			    (void *)mem_seg[j].pa, mem_seg[j].size,
+
+		cnss_pr_dbg("seg-%d: va 0x%pK, pa 0x%pa, size 0x%zx, type %u\n",
+			    j, &mem_seg[j].va, &mem_seg[j].pa, mem_seg[j].size,
 			    mem_seg[j].type);
 		if (event_data->mem_seg_len == ++j)
 			break;

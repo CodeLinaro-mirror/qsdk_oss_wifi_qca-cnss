@@ -1016,8 +1016,8 @@ void __cnss_hif_put(struct cnss_plat_data *plat_priv)
 #endif
 
 #ifdef CONFIG_IO_COHERENCY
-static int cnss_configure_io_coherency_regs(struct cnss_plat_data *plat_priv,
-					    bool reset)
+int cnss_configure_io_coherency_regs(struct cnss_plat_data *plat_priv,
+				     bool reset)
 {
 	struct device *dev = &plat_priv->plat_dev->dev;
 	struct device_node *np = dev->of_node;
@@ -1064,8 +1064,8 @@ static int cnss_configure_io_coherency_regs(struct cnss_plat_data *plat_priv,
 	return 0;
 }
 #else
-static int cnss_configure_io_coherency_regs(struct cnss_plat_data *plat_priv,
-					    bool reset)
+int cnss_configure_io_coherency_regs(struct cnss_plat_data *plat_priv,
+				     bool reset)
 {
 	return 0;
 }
@@ -1178,10 +1178,6 @@ int cnss_wlan_disable(struct device *dev, enum cnss_driver_mode mode)
 
 	if (test_bit(QMI_BYPASS, &plat_priv->ctrl_params.quirks))
 		return 0;
-
-	if (!plat_priv->cal_in_progress)
-		if (cnss_configure_io_coherency_regs(plat_priv, true))
-			cnss_pr_err("Failed to reset io coherency regs");
 
 	return cnss_wlfw_wlan_mode_send_sync(plat_priv, CNSS_OFF);
 }

@@ -1792,6 +1792,10 @@ static int cnss_qcn9000_shutdown(struct cnss_pci_data *pci_priv)
 	cnss_pr_info("Shutting down %s\n", plat_priv->device_name);
 	cnss_pci_pm_runtime_resume(pci_priv);
 
+	if (!plat_priv->cal_in_progress)
+		if (cnss_configure_io_coherency_regs(plat_priv, true))
+			cnss_pr_err("Failed to reset io coherency regs");
+
 	cnss_request_bus_bandwidth(&plat_priv->plat_dev->dev,
 				   CNSS_BUS_WIDTH_NONE);
 	cnss_pci_set_monitor_wake_intr(pci_priv, false);
