@@ -2661,6 +2661,8 @@ static char *cnss_driver_event_to_str(enum cnss_driver_event_type type)
 		return "QDSS_TRACE_REQ_DATA";
 	case CNSS_DRIVER_EVENT_RAMDUMP_DONE:
 		return "RAMDUMP_DONE";
+	case CNSS_DRIVER_EVENT_DUMP_DDR_REGION:
+		return "DUMP_DDR_REGION";
 	case CNSS_DRIVER_EVENT_MAX:
 		return "EVENT_MAX";
 	}
@@ -5655,6 +5657,27 @@ static int cnss_event_ramdump_done_handler(struct cnss_plat_data *plat_priv)
 }
 #endif
 
+static void cnss_free_dump_ddr_region(struct cnss_qmi_event_dump_ddr_region *event_data)
+{
+	int i;
+
+	for (i = 0; i < event_data->mem_seg_len; i++)
+		if (event_data->mem_seg[i].va && event_data->mem_seg[i].valid)
+			iounmap(event_data->mem_seg[i].va);
+	kfree(event_data);
+}
+
+static void cnss_event_dump_ddr_region_handler(struct cnss_plat_data *plat_priv,
+					      void *data)
+{
+	struct cnss_qmi_event_dump_ddr_region *event_data = data;
+
+	if (!event_data)
+		return;
+
+	cnss_coredump_dump_ddr_region(plat_priv, event_data);
+	cnss_free_dump_ddr_region(event_data);
+}
 
 static void cnss_driver_event_work(struct work_struct *work)
 {
@@ -5767,6 +5790,10 @@ static void cnss_driver_event_work(struct work_struct *work)
 			break;
 		case CNSS_DRIVER_EVENT_RAMDUMP_DONE:
 			ret = cnss_event_ramdump_done_handler(plat_priv);
+			break;
+		case CNSS_DRIVER_EVENT_DUMP_DDR_REGION:
+			cnss_event_dump_ddr_region_handler(plat_priv,
+							   event->data);
 			break;
 		default:
 			cnss_pr_err("Invalid driver event type: %d",
