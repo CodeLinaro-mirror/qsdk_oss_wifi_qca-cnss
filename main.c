@@ -1080,12 +1080,16 @@ int __cnss_wlan_enable(struct cnss_plat_data *plat_priv,
 		       const char *host_version)
 {
 	int ret;
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 	u32 cal_file_size = 0;
+#endif
 
 	if (!plat_priv)
 		return 0;
 
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 	cal_file_size = plat_priv->cal_file_size;
+#endif
 
 	if (plat_priv->device_id == QCA6174_DEVICE_ID)
 		return 0;
@@ -5365,7 +5369,7 @@ static const struct file_operations m3_dump_fops = {
 	.release	= m3_dump_release,
 };
 
-#ifndef CONFIG_TARGET_SDX75
+#ifndef CONFIG_TARGET_SDX_WKK
 static int cnss_alloc_qdss_mem(struct cnss_plat_data *plat_priv)
 {
 	if (cnss_check_be_target(plat_priv)) {
@@ -6503,7 +6507,7 @@ void cnss_config_param_update_cb(uint32_t instance_id,
 		plat_priv->qdss_support = value;
 		cnss_pr_info("Setting qdss_support=%llu for instance_id 0x%x\n",
 			     value, instance_id);
-#ifndef CONFIG_TARGET_SDX75
+#ifndef CONFIG_TARGET_SDX_WKK
 		/* For 11BE chipsets, QDSS Memory will be allocated via
 		 * DMA alloc instead of dts and if the QDSS feature is
 		 * disabled in the firmware ini file, stop QDSS if already
@@ -7850,7 +7854,7 @@ static int cnss_probe(struct platform_device *plat_dev)
 	if (ret < 0)
 		cnss_pr_err("CNSS genl init failed %d\n", ret);
 
-#ifndef CONFIG_TARGET_SDX75
+#ifndef CONFIG_TARGET_SDX_WKK
 	ret = cnss_alloc_qdss_mem(plat_priv);
 	if (ret)
 		cnss_pr_err("QDSS memory alloc failed %d\n", ret);
@@ -7959,7 +7963,7 @@ static int cnss_remove(struct platform_device *plat_dev)
 	cnss_cal_work_deinit(plat_priv);
 	cnss_recovery_work_deinit(plat_priv);
 	cnss_remove_sysfs(plat_priv);
-#ifndef CONFIG_TARGET_SDX75
+#ifndef CONFIG_TARGET_SDX_WKK
 	cnss_free_qdss_mem(plat_priv);
 #endif
 #ifdef CONFIG_CNSS2_PM
