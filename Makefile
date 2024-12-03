@@ -82,8 +82,9 @@ ifeq ($(QCA_CNSS_KERNEL_DEPENDENCY),y)
 endif
 endif
 
-ifeq ($(CONFIG_TARGET_SDX75),y)
-	ccflags-y += -DCONFIG_TARGET_SDX75
+ifneq (, $(filter y, $(strip ${CONFIG_TARGET_SDX75}) \
+			$(strip ${CONFIG_TARGET_SDX85})))
+	ccflags-y += -DCONFIG_TARGET_SDX_WKK
 endif
 
 all:

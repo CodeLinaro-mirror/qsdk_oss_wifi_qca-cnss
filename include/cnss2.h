@@ -612,7 +612,7 @@ extern int cnss_get_platform_cap(struct device *dev,
 extern struct iommu_domain *cnss_smmu_get_domain(struct device *dev);
 extern int cnss_smmu_map(struct device *dev,
 			 phys_addr_t paddr, uint32_t *iova_addr, size_t size);
-#ifdef CONFIG_TARGET_SDX75
+#ifdef CONFIG_TARGET_SDX_WKK
 extern int cnss_smmu_unmap(struct device *dev, uint32_t iova_addr, size_t size);
 #endif
 #endif
