@@ -180,6 +180,9 @@ static int disable_regdb_bmap;
 module_param(disable_regdb_bmap, int, 0644);
 MODULE_PARM_DESC(disable_regdb_bmap, "Bitmap to Disable RegDB download");
 
+unsigned int assert_timeout = 20;
+module_param(assert_timeout, int, 0644);
+MODULE_PARM_DESC(assert_timeout, "assert_timeout");
 /* probe_order needs to be defined in the format of hex.
  * The order of socX can be rearranged based on the given value.
  * For example, if default order is Soc0->Soc1->Soc2, then 0x213 will make
@@ -4615,7 +4618,9 @@ void cnss_crash_wait_timeout_hdlr(struct timer_list *timer)
 	 */
 	if (plat_priv->target_asserted &&
 	    group_info->num_chips != group_info->rddm_dump_all) {
-		cnss_pr_info("Partner crash not received %d, so force ASSERT\n", group_info->rddm_dump_all);
+		cnss_pr_info("Partner crash not received %d, only %d crash received, so force ASSERT\n",
+			group_info->num_chips - group_info->rddm_dump_all,
+			group_info->rddm_dump_all);
 		CNSS_ASSERT(0);
 	} else
 		del_timer(timer);
@@ -4693,7 +4698,8 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 				    cnss_crash_wait_timeout_hdlr, 0);
 
 			mod_timer(&plat_priv->crash_wait_timer, jiffies +
-				  msecs_to_jiffies(10000));
+				  msecs_to_jiffies(assert_timeout *
+							WLAN_RECOVERY_DELAY));
 
 			if (!test_bit(CNSS_FW_READY, &plat_priv->driver_state))
 				cnss_pr_info("FW_READY not received for the device, so early assert\n");
