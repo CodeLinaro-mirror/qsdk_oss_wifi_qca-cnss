@@ -3273,6 +3273,15 @@ void cnss_wlan_unregister_driver(struct cnss_wlan_driver *driver_ops)
 			return;
 		}
 
+		if (plat_priv->bus_type == CNSS_BUS_PCI) {
+			if(!plat_priv->pci_dev) {
+				cnss_pr_dbg("pci_dev is NULL, skip unregister for plat_env index: %d",
+					     i);
+				plat_priv->driver_status = CNSS_UNINITIALIZED;
+				continue;
+			}
+		}
+
 		plat_priv->driver_status = CNSS_LOAD_UNLOAD;
 		ops = plat_priv->driver_ops;
 
