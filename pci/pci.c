@@ -5390,6 +5390,7 @@ int cnss_pci_probe(struct pci_dev *pci_dev,
 
 	pci_priv = cnss_get_pci_priv(pci_dev);
 
+	pci_priv->driver_ops = plat_priv->driver_ops;
 	plat_priv->bus_priv = pci_priv;
 	reinit_completion(&plat_priv->soc_reset_request_complete);
 
