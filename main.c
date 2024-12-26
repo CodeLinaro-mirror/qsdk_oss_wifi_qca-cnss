@@ -3731,7 +3731,8 @@ static int cnss_qca8074_notifier_nb(struct notifier_block *nb,
 			 * SSR recovery.
 			 */
 			if (plat_priv->device_id == QCA5332_DEVICE_ID ||
-				plat_priv->device_id == QCA5424_DEVICE_ID)
+				plat_priv->device_id == QCA5424_DEVICE_ID ||
+				plat_priv->device_id == QCN6432_DEVICE_ID)
 				clear_bit(CNSS_QDSS_STARTED,
 					  &plat_priv->driver_state);
 			cnss_bus_free_fw_mem(plat_priv);
