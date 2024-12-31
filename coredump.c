@@ -24,87 +24,41 @@
 #endif
 #include "cnss_common/cnss_common.h"
 
-static void *cnss_coredump_find_segment(loff_t user_offset,
-					struct cnss_dump_segment *segment,
-					int num_seg, size_t *data_left)
-{
-	int i;
-
-	for (i = 0; i < num_seg; i++, segment++) {
-		if (user_offset < segment->len) {
-			*data_left = user_offset;
-			return segment;
-		}
-		user_offset -= segment->len;
-	}
-
-	*data_left = 0;
-	return NULL;
-}
-
 static ssize_t cnss_coredump_read_q6dump(char *buffer, loff_t offset,
 					 size_t count, void *data,
-					 size_t header_size)
+					 size_t datalen)
 {
-	struct cnss_coredump_state *dump_state = data;
-	struct cnss_dump_segment *segments = dump_state->segments;
-	struct cnss_dump_segment *seg;
-	size_t data_left, copy_size, bytes_left = count;
-	void __iomem *addr;
+	struct cnss_dump_segment *segments = data;
+	int ret = 0;
 
-	while (bytes_left) {
-		seg = cnss_coredump_find_segment(offset, segments,
-						 dump_state->num_seg,
-						 &data_left);
-		/* End of segments check */
-		if (!seg) {
-			pr_info("Ramdump complete %lld bytes read\n", offset);
-			return 0;
-		}
+	ret = memory_read_from_buffer(buffer, count, &offset,
+				      segments->vaddr, datalen);
+	if (!ret)
+		pr_info("Ramdump complete, %lld  bytes read\n", offset);
 
-		if (data_left)
-			copy_size = min_t(size_t, bytes_left, data_left);
-		else
-			copy_size = bytes_left;
-
-		addr = (void __iomem *)seg->vaddr;
-		addr += data_left;
-		memcpy_fromio(buffer, addr, copy_size);
-
-		offset += copy_size;
-		buffer += copy_size;
-		bytes_left -= copy_size;
-	}
-
-	return count - bytes_left;
+	return ret;
 }
 
 static void cnss_coredump_free_q6dump(void *data)
 {
-	struct cnss_coredump_state *dump_state = data;
+	struct cnss_dump_segment *segments = data;
 
-	complete(&dump_state->dump_done);
+	complete(&segments->dump_done);
 }
 
 void cnss_coredump_build_inline(struct cnss_plat_data *plat_priv,
-				struct cnss_dump_segment *segments, int num_seg)
+				struct cnss_dump_segment *segments,
+				size_t datalen)
 {
-	struct cnss_coredump_state dump_state;
-	size_t header_size;
 	struct device *dev = &plat_priv->plat_dev->dev;
 
-	header_size = num_seg * sizeof(*segments);
-	header_size = PAGE_ALIGN(header_size);
+	init_completion(&segments->dump_done);
 
-	dump_state.num_seg = num_seg;
-	dump_state.segments = segments;
-	init_completion(&dump_state.dump_done);
-
-	dev_coredumpm(dev, THIS_MODULE, &dump_state, header_size, GFP_KERNEL,
+	dev_coredumpm(dev, THIS_MODULE, segments, datalen, GFP_KERNEL,
 		      cnss_coredump_read_q6dump, cnss_coredump_free_q6dump);
 
 	/* Wait until the dump is read and free is called */
-	wait_for_completion(&dump_state.dump_done);
+	wait_for_completion(&segments->dump_done);
 }
 
 void cnss_coredump_qdss_dump(struct cnss_plat_data *plat_priv,
@@ -116,7 +70,7 @@ void cnss_coredump_qdss_dump(struct cnss_plat_data *plat_priv,
 	void *dump;
 
 	num_seg = event_data->mem_seg_len;
-	segment = vzalloc(sizeof(*segment));
+	segment = kzalloc(sizeof(*segment), GFP_KERNEL);
 	if (!segment) {
 		cnss_pr_err("fail to alloc memory for qdss\n");
 		return;
@@ -124,9 +78,9 @@ void cnss_coredump_qdss_dump(struct cnss_plat_data *plat_priv,
 
 	if (event_data->total_size &&
 	    event_data->total_size <= qdss_mem.size)
-		dump = vzalloc(event_data->total_size);
+		dump = kzalloc(event_data->total_size, GFP_KERNEL);
 	if (!dump) {
-		vfree(segment);
+		kfree(segment);
 		return;
 	}
 
@@ -173,12 +127,10 @@ void cnss_coredump_qdss_dump(struct cnss_plat_data *plat_priv,
 		segment->type = CNSS_FW_QDSS_DATA;
 	}
 
-	cnss_coredump_build_inline(plat_priv, segment, 1);
-	vfree(dump);
-	return;
+	cnss_coredump_build_inline(plat_priv, segment, segment->len);
 out:
-	vfree(segment);
-	vfree(dump);
+	kfree(segment);
+	kfree(dump);
 }
 
 void cnss_coredump_m3_dump(struct cnss_plat_data *plat_priv,
@@ -187,13 +139,7 @@ void cnss_coredump_m3_dump(struct cnss_plat_data *plat_priv,
 	struct cnss_fw_mem *target_mem = plat_priv->fw_mem;
 	struct cnss_dump_segment *segment;
 	struct device *dev;
-	void *dump;
 	int i, ret = 0;
-
-	dump = vzalloc(event_data->size);
-	if (!dump) {
-		return;
-	}
 
 	for (i = 0; i < plat_priv->fw_mem_seg_len; i++) {
 		if (target_mem[i].pa == event_data->addr &&
@@ -208,7 +154,7 @@ void cnss_coredump_m3_dump(struct cnss_plat_data *plat_priv,
 	}
 
 	dev = &plat_priv->plat_dev->dev;
-	segment = vzalloc(sizeof(*segment));
+	segment = kzalloc(sizeof(*segment), GFP_KERNEL);
 	if (!segment) {
 		cnss_pr_err("fail to alloc memory for m3\n");
 		ret = -EINVAL;
@@ -218,25 +164,25 @@ void cnss_coredump_m3_dump(struct cnss_plat_data *plat_priv,
 	segment->vaddr = target_mem[i].va;
 	segment->type = CNSS_FW_M3_DUMP;
 
-	cnss_coredump_build_inline(plat_priv, segment, 1);
+	cnss_coredump_build_inline(plat_priv, segment, segment->len);
 
 send_resp:
-	vfree(dump);
 	ret = cnss_wlfw_m3_dump_upload_done_send_sync(plat_priv,
 						event_data->pdev_id,
 						ret);
        if (ret < 0)
 		cnss_pr_err("qmi M3 dump upload done failed\n");
+	kfree(segment);
 }
 
 void cnss_coredump_dump_ddr_region(struct cnss_plat_data *plat_priv,
-				   struct  cnss_qmi_event_dump_ddr_region *event_data)
+				   struct cnss_qmi_event_dump_ddr_region *event_data)
 {
 	struct cnss_dump_segment *segment, *seg_info;
 	int num_seg, i;
 
 	num_seg = event_data->mem_seg_len;
-	segment = vzalloc(num_seg * sizeof(*segment));
+	segment = kcalloc(num_seg, sizeof(*segment), GFP_KERNEL);
 	if (!segment) {
 		cnss_pr_err("Failed to allocate memory for segment for ddr region download\n");
 		return;
@@ -256,5 +202,6 @@ void cnss_coredump_dump_ddr_region(struct cnss_plat_data *plat_priv,
 		seg_info++;
 	}
 
-	cnss_coredump_build_inline(plat_priv, segment, num_seg);
+	cnss_coredump_build_inline(plat_priv, segment, event_data->total_size);
+	kfree(segment);
 }

@@ -1945,7 +1945,7 @@ int cnss_wlfw_qdss_data_send_sync(struct cnss_plat_data *plat_priv,
 	{
 		struct cnss_dump_segment *segment;
 
-		segment = vzalloc(sizeof(*segment));
+		segment = kzalloc(sizeof(*segment), GFP_KERNEL);
 		if (!segment) {
 			ret = -ENOMEM;
 			goto fail;
@@ -1953,7 +1953,8 @@ int cnss_wlfw_qdss_data_send_sync(struct cnss_plat_data *plat_priv,
 		segment->len = total_size;
 		segment->vaddr = p_qdss_trace_data;
 		segment->type = CNSS_FW_QDSS_DATA;
-		cnss_coredump_build_inline(plat_priv, segment, 1);
+		cnss_coredump_build_inline(plat_priv, segment, total_size);
+		kfree(segment);
 	}
 #else
 		ret = cnss_genl_send_msg(p_qdss_trace_data,
