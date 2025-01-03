@@ -24,14 +24,9 @@
 #endif
 #include "cnss_common/cnss_common.h"
 
-struct cnss_coredump_segment_info cnss_coredump_seg_info;
-EXPORT_SYMBOL(cnss_coredump_seg_info);
-struct cnss_coredump_info cnss_coredump_ram_info;
-EXPORT_SYMBOL(cnss_coredump_ram_info);
-
 static void *cnss_coredump_find_segment(loff_t user_offset,
-					  struct cnss_dump_segment *segment,
-					  int num_seg, size_t *data_left)
+					struct cnss_dump_segment *segment,
+					int num_seg, size_t *data_left)
 {
 	int i;
 
@@ -47,32 +42,20 @@ static void *cnss_coredump_find_segment(loff_t user_offset,
 	return NULL;
 }
 
-static ssize_t cnss_coredump_read_q6dump(char *buffer, loff_t offset, size_t count,
-					   void *data, size_t header_size)
+static ssize_t cnss_coredump_read_q6dump(char *buffer, loff_t offset,
+					 size_t count, void *data,
+					 size_t header_size)
 {
 	struct cnss_coredump_state *dump_state = data;
 	struct cnss_dump_segment *segments = dump_state->segments;
 	struct cnss_dump_segment *seg;
-	void *elfcore = dump_state->header;
 	size_t data_left, copy_size, bytes_left = count;
 	void __iomem *addr;
 
-	/* Copy the header first */
-	if (offset < header_size) {
-		copy_size = header_size - offset;
-		copy_size = min(copy_size, bytes_left);
-
-		memcpy(buffer, elfcore + offset, copy_size);
-		offset += copy_size;
-		bytes_left -= copy_size;
-		buffer += copy_size;
-
-		return copy_size;
-	}
-
 	while (bytes_left) {
-		seg = cnss_coredump_find_segment(offset - header_size, segments,
-						   dump_state->num_seg, &data_left);
+		seg = cnss_coredump_find_segment(offset, segments,
+						 dump_state->num_seg,
+						 &data_left);
 		/* End of segments check */
 		if (!seg) {
 			pr_info("Ramdump complete %lld bytes read\n", offset);
@@ -104,54 +87,15 @@ static void cnss_coredump_free_q6dump(void *data)
 }
 
 void cnss_coredump_build_inline(struct cnss_plat_data *plat_priv,
-				  struct cnss_dump_segment *segments, int num_seg)
+				struct cnss_dump_segment *segments, int num_seg)
 {
 	struct cnss_coredump_state dump_state;
-	struct timespec64 timestamp;
-	struct cnss_dump_file_data *file_data;
 	size_t header_size;
-	struct device *dev;
-	struct pci_dev *pci_dev;
-	u8 *buf;
+	struct device *dev = &plat_priv->plat_dev->dev;
 
-	header_size = sizeof(*file_data);
-	header_size += num_seg * sizeof(*segments);
+	header_size = num_seg * sizeof(*segments);
 	header_size = PAGE_ALIGN(header_size);
-	buf = kzalloc(header_size, GFP_ATOMIC);
-	if (!buf) {
-		cnss_pr_err("Failed to allocate memory for coredump\n");
-		return;
-	}
 
-	file_data = (struct cnss_dump_file_data *)buf;
-	strscpy(file_data->df_magic, "CNSS-FW-DUMP",
-		sizeof(file_data->df_magic));
-	file_data->len = cpu_to_le32(header_size);
-	file_data->version = cpu_to_le32(CNSS_FW_CRASH_DUMP_V2);
-	dev = &plat_priv->plat_dev->dev;
-	if (plat_priv->bus_type == CNSS_BUS_AHB) {
-		file_data->chip_id = plat_priv->chip_info.chip_id;
-		file_data->qrtr_id = plat_priv->wlfw_service_instance_id;
-		file_data->bus_id = plat_priv->userpd_id;
-	} else {
-		pci_dev = plat_priv->pci_dev;
-		file_data->chip_id = plat_priv->chip_info.chip_id;
-		file_data->qrtr_id = plat_priv->wlfw_service_instance_id;
-		file_data->bus_id = (pci_domain_nr(pci_dev->bus) & 0xF);
-	}
-	guid_gen(&file_data->guid);
-	ktime_get_real_ts64(&timestamp);
-	file_data->tv_sec = cpu_to_le64(timestamp.tv_sec);
-	file_data->tv_nsec = cpu_to_le64(timestamp.tv_nsec);
-	file_data->num_seg = cpu_to_le32(num_seg);
-	file_data->seg_size = cpu_to_le32(sizeof(*segments));
-
-	/* copy segment details to file */
-	buf += offsetof(struct cnss_dump_file_data, seg);
-	file_data->seg = (struct cnss_dump_segment *)buf;
-	memcpy(file_data->seg, segments, num_seg * sizeof(*segments));
-
-	dump_state.header = file_data;
 	dump_state.num_seg = num_seg;
 	dump_state.segments = segments;
 	init_completion(&dump_state.dump_done);
@@ -161,7 +105,6 @@ void cnss_coredump_build_inline(struct cnss_plat_data *plat_priv,
 
 	/* Wait until the dump is read and free is called */
 	wait_for_completion(&dump_state.dump_done);
-	kfree(file_data);
 }
 
 void cnss_coredump_qdss_dump(struct cnss_plat_data *plat_priv,
@@ -169,12 +112,11 @@ void cnss_coredump_qdss_dump(struct cnss_plat_data *plat_priv,
 {
 	struct cnss_fw_mem qdss_mem = plat_priv->qdss_mem;
 	struct cnss_dump_segment *segment;
-	int len, num_seg;
+	int num_seg;
 	void *dump;
 
 	num_seg = event_data->mem_seg_len;
-	len = sizeof(*segment);
-	segment = vzalloc(len);
+	segment = vzalloc(sizeof(*segment));
 	if (!segment) {
 		cnss_pr_err("fail to alloc memory for qdss\n");
 		return;
@@ -211,9 +153,11 @@ void cnss_coredump_qdss_dump(struct cnss_plat_data *plat_priv,
 		}
 
 		cnss_pr_dbg("qdss mem seg0 addr 0x%llx size 0x%x\n",
-			   event_data->mem_seg[0].addr, event_data->mem_seg[0].size);
+			   event_data->mem_seg[0].addr,
+			   event_data->mem_seg[0].size);
 		cnss_pr_dbg("qdss mem seg1 addr 0x%llx size 0x%x\n",
-			   event_data->mem_seg[1].addr, event_data->mem_seg[1].size);
+			   event_data->mem_seg[1].addr,
+			   event_data->mem_seg[1].size);
 
 		memcpy(dump,
 		       qdss_mem.va + event_data->mem_seg[1].size,
@@ -221,24 +165,27 @@ void cnss_coredump_qdss_dump(struct cnss_plat_data *plat_priv,
 		memcpy(dump + event_data->mem_seg[0].size,
 		       qdss_mem.va, event_data->mem_seg[1].size);
 
-		segment->len = event_data->mem_seg[0].size + event_data->mem_seg[1].size;
+		segment->len = event_data->mem_seg[0].size +
+					event_data->mem_seg[1].size;
 		segment->vaddr = dump;
 		cnss_pr_dbg("seg vaddr is 0x%p and len is 0x%x\n",
 			   segment->vaddr, segment->len);
 		segment->type = CNSS_FW_QDSS_DATA;
 	}
+
 	cnss_coredump_build_inline(plat_priv, segment, 1);
+	vfree(dump);
+	return;
 out:
 	vfree(segment);
 	vfree(dump);
 }
 
 void cnss_coredump_m3_dump(struct cnss_plat_data *plat_priv,
-			     struct cnss_qmi_event_m3_dump_upload_req_data *event_data)
+			   struct cnss_qmi_event_m3_dump_upload_req_data *event_data)
 {
 	struct cnss_fw_mem *target_mem = plat_priv->fw_mem;
-	struct cnss_pci_data *pci_priv;
-	struct m3_dump m3_dump_data;
+	struct cnss_dump_segment *segment;
 	struct device *dev;
 	void *dump;
 	int i, ret = 0;
@@ -257,35 +204,57 @@ void cnss_coredump_m3_dump(struct cnss_plat_data *plat_priv,
 	if (i == plat_priv->fw_mem_seg_len) {
 		cnss_pr_err("qmi invalid paddr from firmware for M3 dump\n");
 		ret = -EINVAL;
-		vfree(dump);
 		goto send_resp;
 	}
 
-	m3_dump_data.dump_addr = target_mem[i].va;
-	m3_dump_data.size = event_data->size;
-	m3_dump_data.pdev_id = event_data->pdev_id;
-	m3_dump_data.timestamp = ktime_to_ms(ktime_get());
-
-	memcpy(dump, m3_dump_data.dump_addr, m3_dump_data.size);
-
-	if (plat_priv->bus_type == CNSS_BUS_AHB) {
-		dev = &plat_priv->plat_dev->dev;
-	} else {
-		pci_priv = plat_priv->bus_priv;
-		if (!pci_priv) {
-			cnss_pr_err("%s: PCI priv is NULL\n", __func__);
-			ret = -EINVAL;
-			vfree(dump);
-			goto send_resp;
-		}
-		dev = &pci_priv->pci_dev->dev;
+	dev = &plat_priv->plat_dev->dev;
+	segment = vzalloc(sizeof(*segment));
+	if (!segment) {
+		cnss_pr_err("fail to alloc memory for m3\n");
+		ret = -EINVAL;
+		goto send_resp;
 	}
-	dev_coredumpv(dev, dump, m3_dump_data.size, GFP_KERNEL);
+	segment->len = event_data->size;
+	segment->vaddr = target_mem[i].va;
+	segment->type = CNSS_FW_M3_DUMP;
+
+	cnss_coredump_build_inline(plat_priv, segment, 1);
 
 send_resp:
+	vfree(dump);
 	ret = cnss_wlfw_m3_dump_upload_done_send_sync(plat_priv,
 						event_data->pdev_id,
 						ret);
        if (ret < 0)
 		cnss_pr_err("qmi M3 dump upload done failed\n");
+}
+
+void cnss_coredump_dump_ddr_region(struct cnss_plat_data *plat_priv,
+				   struct  cnss_qmi_event_dump_ddr_region *event_data)
+{
+	struct cnss_dump_segment *segment, *seg_info;
+	int num_seg, i;
+
+	num_seg = event_data->mem_seg_len;
+	segment = vzalloc(num_seg * sizeof(*segment));
+	if (!segment) {
+		cnss_pr_err("Failed to allocate memory for segment for ddr region download\n");
+		return;
+	}
+	seg_info = segment;
+
+	for (i = 0; i < num_seg; i++) {
+		if (!event_data->mem_seg[i].pa)
+			continue;
+
+		seg_info->len = event_data->mem_seg[i].size;
+		seg_info->vaddr = event_data->mem_seg[i].va;
+		seg_info->addr = event_data->mem_seg[i].pa;
+		seg_info->type = event_data->mem_seg[i].type;
+		cnss_pr_dbg("seg vaddr: %p len: 0x%x type: %d\n",
+			    seg_info->vaddr, seg_info->len, seg_info->type);
+		seg_info++;
+	}
+
+	cnss_coredump_build_inline(plat_priv, segment, num_seg);
 }

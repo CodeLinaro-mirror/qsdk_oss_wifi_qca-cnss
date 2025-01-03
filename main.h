@@ -310,14 +310,6 @@ struct cnss_wlan_mac_info {
 	bool is_wlan_mac_set;
 };
 
-struct cnss_fw_mem {
-	size_t size;
-	void *va;
-	phys_addr_t pa;
-	u8 valid;
-	u32 type;
-};
-
 struct wlfw_rf_chip_info {
 	u32 chip_id;
 	u32 chip_family;
@@ -404,6 +396,7 @@ enum cnss_driver_event_type {
 	CNSS_DRIVER_EVENT_QDSS_MEM_READY,
 	CNSS_DRIVER_EVENT_QDSS_TRACE_REQ_DATA,
 	CNSS_DRIVER_EVENT_RAMDUMP_DONE,
+	CNSS_DRIVER_EVENT_DUMP_DDR_REGION,
 	CNSS_DRIVER_EVENT_MAX,
 };
 

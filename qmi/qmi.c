@@ -200,6 +200,7 @@ static struct qmi_msg_string qmi_str_table[] = {
 	{ "QDSS_FREE_", QMI_WLFW_QDSS_TRACE_FREE_IND_V01 },
 	{ "QDSS_MEM_RDY_", QMI_WLFW_QDSS_MEM_READY_IND_V01 },
 	{ "MLO_WSI_REMAP_", QMI_WLFW_MLO_RECONFIG_INFO_REQ_V01 },
+	{ "DUMP_DRR_REGION_", QMI_WLFW_DUMP_DDR_REGION_IND_V01 },
 	{ "UNKNOWN_", 0 },
 };
 
@@ -386,6 +387,8 @@ static int cnss_wlfw_ind_register_send_sync(struct cnss_plat_data *plat_priv)
 	req->m3_dump_upload_req_enable = 1;
 	req->qdss_mem_ready_enable_valid = 1;
 	req->qdss_mem_ready_enable = 1;
+	req->dump_ddr_region_enable_valid = 1;
+	req->dump_ddr_region_enable = 1;
 
 	qmi_record(plat_priv->wlfw_service_instance_id,
 		   (QMI_TYPE_REQ | QMI_WLFW_IND_REGISTER_REQ_V01), ret,
@@ -1942,7 +1945,7 @@ int cnss_wlfw_qdss_data_send_sync(struct cnss_plat_data *plat_priv,
 	{
 		struct cnss_dump_segment *segment;
 
-		segment = kzalloc(sizeof(*segment), GFP_KERNEL);
+		segment = vzalloc(sizeof(*segment));
 		if (!segment) {
 			ret = -ENOMEM;
 			goto fail;
@@ -1951,7 +1954,6 @@ int cnss_wlfw_qdss_data_send_sync(struct cnss_plat_data *plat_priv,
 		segment->vaddr = p_qdss_trace_data;
 		segment->type = CNSS_FW_QDSS_DATA;
 		cnss_coredump_build_inline(plat_priv, segment, 1);
-		kfree(segment);
 	}
 #else
 		ret = cnss_genl_send_msg(p_qdss_trace_data,
@@ -3815,6 +3817,12 @@ static void cnss_wlfw_m3_dump_upload_req_ind_cb(struct qmi_handle *qmi_wlfw,
 	cnss_pr_dbg("M3 Dump upload info: pdev_id %d addr: 0x%llx size 0x%llx\n",
 		    ind_msg->pdev_id, ind_msg->addr, ind_msg->size);
 
+	if (!ind_msg->addr || !ind_msg->size) {
+		cnss_pr_dbg("Invalid addr and size for pdev_id %d addr: 0x%llx size 0x%llx\n",
+			    ind_msg->pdev_id, ind_msg->addr, ind_msg->size);
+		return;
+	}
+
 	event_data = kzalloc(sizeof(*event_data), GFP_KERNEL);
 	if (!event_data)
 		return;
@@ -3825,6 +3833,97 @@ static void cnss_wlfw_m3_dump_upload_req_ind_cb(struct qmi_handle *qmi_wlfw,
 
 	cnss_driver_event_post(plat_priv, CNSS_DRIVER_EVENT_M3_DUMP_UPLOAD_REQ,
 			       0, event_data);
+}
+
+static void cnss_wlfw_dump_ddr_region_ind_cb(struct qmi_handle *qmi_wlfw,
+					     struct sockaddr_qrtr *sq,
+					     struct qmi_txn *txn,
+					     const void *data)
+{
+	struct cnss_plat_data *plat_priv =
+		container_of(qmi_wlfw, struct cnss_plat_data, qmi_wlfw);
+	const struct wlfw_dump_ddr_region_ind_msg_v01 *ind_msg = data;
+	struct cnss_qmi_event_dump_ddr_region *event_data;
+	struct cnss_fw_mem *mem_seg = NULL;
+	struct cnss_fw_mem *fw_mem = NULL;
+	uintptr_t offset = 0;
+	int i, j;
+
+	cnss_pr_info("Received QMI WLFW dump DDR region indication\n");
+	qmi_record(plat_priv->wlfw_service_instance_id,
+		   QMI_WLFW_DUMP_DDR_REGION_IND_V01, 0, 0);
+
+	if (!txn) {
+		cnss_pr_err("Spurious indication\n");
+		return;
+	}
+
+	if (!ind_msg->mem_seg_len) {
+		cnss_pr_err("Number of DDR dump region is not given\n");
+		return;
+	}
+
+	event_data = kzalloc(sizeof(*event_data), GFP_KERNEL);
+	if (!event_data)
+		return;
+
+	if (ind_msg->file_name_valid)
+		strscpy(event_data->file_name, ind_msg->file_name,
+			QMI_WLFW_MAX_STR_LEN_V01 + 1);
+	else
+		strscpy(event_data->file_name, "dump_ddr_region",
+			QMI_WLFW_MAX_STR_LEN_V01 + 1);
+
+	cnss_pr_dbg("Dump DDR region filename: %s\n", event_data->file_name);
+	event_data->mem_seg_len = ind_msg->mem_seg_len;
+
+	fw_mem = plat_priv->fw_mem;
+	for (i = 0, j = 0; i < plat_priv->fw_mem_seg_len; i++) {
+		if (ind_msg->mem_seg[j].type != fw_mem[i].type)
+			continue;
+
+		mem_seg = &event_data->mem_seg[j];
+		if (ind_msg->mem_seg[j].addr >= fw_mem[i].pa &&
+		    (ind_msg->mem_seg[j].addr + ind_msg->mem_seg[j].size) <=
+		    (fw_mem[i].pa + fw_mem[i].size)) {
+			event_data->total_size += ind_msg->mem_seg[j].size;
+			mem_seg[j].pa = (phys_addr_t)ind_msg->mem_seg[j].addr;
+			mem_seg[j].size = ind_msg->mem_seg[j].size;
+			mem_seg[j].type = ind_msg->mem_seg[j].type;
+			if (!fw_mem[i].va) {
+				mem_seg[j].va = ioremap(mem_seg[j].pa,
+							mem_seg[j].size);
+				mem_seg[j].valid = true;
+			} else {
+				offset = mem_seg[j].pa - fw_mem[i].pa;
+				mem_seg[j].va = (void *)((char *)fw_mem[i].va +
+						offset);
+			}
+			if (!mem_seg[j].va) {
+				cnss_pr_err("IO remap failed\n");
+				goto free_event_data;
+			}
+		}
+
+		cnss_pr_dbg("seg-%d: va 0x%pK, pa 0x%pa, size 0x%zx, type %u\n",
+			    j, &mem_seg[j].va, &mem_seg[j].pa, mem_seg[j].size,
+			    mem_seg[j].type);
+		if (event_data->mem_seg_len == ++j)
+			break;
+	}
+
+	if (!j) {
+		cnss_pr_err("Given segments are not found\n");
+		goto free_event_data;
+	}
+
+	cnss_driver_event_post(plat_priv,
+			       CNSS_DRIVER_EVENT_DUMP_DDR_REGION,
+			       0, event_data);
+	return;
+
+free_event_data:
+	kfree(event_data);
 }
 
 static struct qmi_msg_handler qmi_wlfw_msg_handlers[] = {
@@ -3910,6 +4009,14 @@ static struct qmi_msg_handler qmi_wlfw_msg_handlers[] = {
 		.decoded_size =
 			sizeof(struct wlfw_m3_dump_upload_req_ind_msg_v01),
 		.fn = cnss_wlfw_m3_dump_upload_req_ind_cb,
+	},
+	{
+		.type = QMI_INDICATION,
+		.msg_id = QMI_WLFW_DUMP_DDR_REGION_IND_V01,
+		.ei = wlfw_dump_ddr_region_ind_msg_v01_ei,
+		.decoded_size =
+			sizeof(struct wlfw_dump_ddr_region_ind_msg_v01),
+		.fn = cnss_wlfw_dump_ddr_region_ind_cb,
 	},
 	{}
 };

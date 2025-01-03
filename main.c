@@ -180,6 +180,9 @@ static int disable_regdb_bmap;
 module_param(disable_regdb_bmap, int, 0644);
 MODULE_PARM_DESC(disable_regdb_bmap, "Bitmap to Disable RegDB download");
 
+unsigned int assert_timeout = 20;
+module_param(assert_timeout, int, 0644);
+MODULE_PARM_DESC(assert_timeout, "assert_timeout");
 /* probe_order needs to be defined in the format of hex.
  * The order of socX can be rearranged based on the given value.
  * For example, if default order is Soc0->Soc1->Soc2, then 0x213 will make
@@ -1016,8 +1019,8 @@ void __cnss_hif_put(struct cnss_plat_data *plat_priv)
 #endif
 
 #ifdef CONFIG_IO_COHERENCY
-static int cnss_configure_io_coherency_regs(struct cnss_plat_data *plat_priv,
-					    bool reset)
+int cnss_configure_io_coherency_regs(struct cnss_plat_data *plat_priv,
+				     bool reset)
 {
 	struct device *dev = &plat_priv->plat_dev->dev;
 	struct device_node *np = dev->of_node;
@@ -1064,8 +1067,8 @@ static int cnss_configure_io_coherency_regs(struct cnss_plat_data *plat_priv,
 	return 0;
 }
 #else
-static int cnss_configure_io_coherency_regs(struct cnss_plat_data *plat_priv,
-					    bool reset)
+int cnss_configure_io_coherency_regs(struct cnss_plat_data *plat_priv,
+				     bool reset)
 {
 	return 0;
 }
@@ -1178,10 +1181,6 @@ int cnss_wlan_disable(struct device *dev, enum cnss_driver_mode mode)
 
 	if (test_bit(QMI_BYPASS, &plat_priv->ctrl_params.quirks))
 		return 0;
-
-	if (!plat_priv->cal_in_progress)
-		if (cnss_configure_io_coherency_regs(plat_priv, true))
-			cnss_pr_err("Failed to reset io coherency regs");
 
 	return cnss_wlfw_wlan_mode_send_sync(plat_priv, CNSS_OFF);
 }
@@ -2661,6 +2660,8 @@ static char *cnss_driver_event_to_str(enum cnss_driver_event_type type)
 		return "QDSS_TRACE_REQ_DATA";
 	case CNSS_DRIVER_EVENT_RAMDUMP_DONE:
 		return "RAMDUMP_DONE";
+	case CNSS_DRIVER_EVENT_DUMP_DDR_REGION:
+		return "DUMP_DDR_REGION";
 	case CNSS_DRIVER_EVENT_MAX:
 		return "EVENT_MAX";
 	}
@@ -3270,6 +3271,15 @@ void cnss_wlan_unregister_driver(struct cnss_wlan_driver *driver_ops)
 		if (!plat_priv) {
 			printk(KERN_ERR "%s plat_priv is NULL!\n", __func__);
 			return;
+		}
+
+		if (plat_priv->bus_type == CNSS_BUS_PCI) {
+			if(!plat_priv->pci_dev) {
+				cnss_pr_dbg("pci_dev is NULL, skip unregister for plat_env index: %d",
+					     i);
+				plat_priv->driver_status = CNSS_UNINITIALIZED;
+				continue;
+			}
 		}
 
 		plat_priv->driver_status = CNSS_LOAD_UNLOAD;
@@ -4617,7 +4627,9 @@ void cnss_crash_wait_timeout_hdlr(struct timer_list *timer)
 	 */
 	if (plat_priv->target_asserted &&
 	    group_info->num_chips != group_info->rddm_dump_all) {
-		cnss_pr_info("Partner crash not received %d, so force ASSERT\n", group_info->rddm_dump_all);
+		cnss_pr_info("Partner crash not received %d, only %d crash received, so force ASSERT\n",
+			group_info->num_chips - group_info->rddm_dump_all,
+			group_info->rddm_dump_all);
 		CNSS_ASSERT(0);
 	} else
 		del_timer(timer);
@@ -4695,7 +4707,8 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 				    cnss_crash_wait_timeout_hdlr, 0);
 
 			mod_timer(&plat_priv->crash_wait_timer, jiffies +
-				  msecs_to_jiffies(10000));
+				  msecs_to_jiffies(assert_timeout *
+							WLAN_RECOVERY_DELAY));
 
 			if (!test_bit(CNSS_FW_READY, &plat_priv->driver_state))
 				cnss_pr_info("FW_READY not received for the device, so early assert\n");
@@ -5655,6 +5668,27 @@ static int cnss_event_ramdump_done_handler(struct cnss_plat_data *plat_priv)
 }
 #endif
 
+static void cnss_free_dump_ddr_region(struct cnss_qmi_event_dump_ddr_region *event_data)
+{
+	int i;
+
+	for (i = 0; i < event_data->mem_seg_len; i++)
+		if (event_data->mem_seg[i].va && event_data->mem_seg[i].valid)
+			iounmap(event_data->mem_seg[i].va);
+	kfree(event_data);
+}
+
+static void cnss_event_dump_ddr_region_handler(struct cnss_plat_data *plat_priv,
+					      void *data)
+{
+	struct cnss_qmi_event_dump_ddr_region *event_data = data;
+
+	if (!event_data)
+		return;
+
+	cnss_coredump_dump_ddr_region(plat_priv, event_data);
+	cnss_free_dump_ddr_region(event_data);
+}
 
 static void cnss_driver_event_work(struct work_struct *work)
 {
@@ -5767,6 +5801,10 @@ static void cnss_driver_event_work(struct work_struct *work)
 			break;
 		case CNSS_DRIVER_EVENT_RAMDUMP_DONE:
 			ret = cnss_event_ramdump_done_handler(plat_priv);
+			break;
+		case CNSS_DRIVER_EVENT_DUMP_DDR_REGION:
+			cnss_event_dump_ddr_region_handler(plat_priv,
+							   event->data);
 			break;
 		default:
 			cnss_pr_err("Invalid driver event type: %d",
@@ -6746,12 +6784,22 @@ static void cnss_driver_cal_work(struct work_struct *work)
 	atomic_dec(&cal_in_progress_count);
 }
 
+static void cnss_cal_work_deinit(struct cnss_plat_data *plat_priv)
+{
+	cancel_work_sync(&plat_priv->cal_work);
+}
+
 static void cnss_cal_work_init(struct cnss_plat_data *plat_priv)
 {
 	INIT_WORK(&plat_priv->cal_work, cnss_driver_cal_work);
 }
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
+static void cnss_crash_work_deinit(struct cnss_plat_data *plat_priv)
+{
+	cancel_work_sync(&plat_priv->crash_work);
+}
+
 static void cnss_crash_work_init(struct cnss_plat_data *plat_priv)
 {
 	INIT_WORK(&plat_priv->crash_work, cnss_report_crash_work);
@@ -7210,6 +7258,12 @@ static void cnss_panic_notifier_register(void)
 	else
 		cnss_pr_dbg("%s: atomic_notifier_chain_register success.\n", __func__);
 
+	return;
+}
+
+static void cnss_panic_notifier_unregister(void)
+{
+	atomic_notifier_chain_unregister(&panic_notifier_list, &panic_nb);
 	return;
 }
 #endif
@@ -7864,6 +7918,9 @@ static int cnss_remove(struct platform_device *plat_dev)
 	unsigned long flags = 0;
 	struct cnss_plat_data *plat_priv = platform_get_drvdata(plat_dev);
 
+	if (!plat_priv)
+		return 0;
+
 	/* For platforms that support dma_alloc, FW memory is allocated during
 	 * first wifi load and not freed during wifi down, so we are freeing
 	 * here during rmmod of cnss2
@@ -7896,6 +7953,10 @@ static int cnss_remove(struct platform_device *plat_dev)
 #endif
 	cnss_qmi_deinit(plat_priv);
 	cnss_event_work_deinit(plat_priv);
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
+	cnss_crash_work_deinit(plat_priv);
+#endif
+	cnss_cal_work_deinit(plat_priv);
 	cnss_recovery_work_deinit(plat_priv);
 	cnss_remove_sysfs(plat_priv);
 #ifndef CONFIG_TARGET_SDX75
@@ -7980,8 +8041,12 @@ static int __init cnss_initialize(void)
 
 static void __exit cnss_exit(void)
 {
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
+	cnss_panic_notifier_unregister();
+#endif
 	cnss_plat_ipc_unregister(CNSS_PLAT_IPC_DAEMON_QMI_CLIENT_V01, NULL);
 	cnss_plat_ipc_qmi_svc_exit();
+	cnss_pci_deinit(NULL);
 #ifdef CONFIG_CNSS2_LEGACY_IRQ
 	cnss_legacy_irq_deinit();
 #endif
