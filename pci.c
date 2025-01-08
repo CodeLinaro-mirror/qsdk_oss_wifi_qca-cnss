@@ -4882,8 +4882,15 @@ static int cnss_pci_smmu_fault_handler(struct iommu_domain *domain,
 	plat_priv = pci_priv->plat_priv;
 
 	cnss_pr_err("SMMU fault happened with IOVA 0x%lx\n", iova);
-
+#ifdef CONFIG_CNSS2_PANIC_ON_SMMU_FAULT
+	/* we can't find clue in fw dump by forcing fw assert here,
+	 * make host system stop immediately to protect memory we want
+	 * to track instead.
+	 */
+	BUG();
+#else
 	cnss_force_fw_assert(&pci_priv->pci_dev->dev);
+#endif
 
 	/* IOMMU driver requires non-zero return value to print debug info. */
 	return -EINVAL;
