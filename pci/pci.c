@@ -2271,6 +2271,11 @@ int cnss_pci_dev_crash_shutdown(struct cnss_pci_data *pci_priv)
 	}
 	plat_priv = pci_priv->plat_priv;
 
+	if (plat_priv->driver_state == 0) {
+		cnss_pr_err("Driver state is NULL\n");
+		return -ENODEV;
+	}
+
 	switch (pci_priv->device_id) {
 	case QCA6174_DEVICE_ID:
 		cnss_qca6174_crash_shutdown(pci_priv);
