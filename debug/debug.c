@@ -1758,6 +1758,14 @@ static ssize_t cnss_platform_features_write(struct file *fp,
 			cnss_wlfw_send_qdss_trace_mode_req(plat_priv,
 						QMI_WLFW_QDSS_TRACE_OFF_V01,
 						val);
+#ifndef CONFIG_TARGET_SDX75
+			/* For 11BE chipsets, QDSS Memory will be allocated via
+			 * DMA alloc instead of dts and if the QDSS feature is
+			 * disabled in the firmware ini file, stop QDSS if
+			 * already started and clear the memory.
+			 */
+			cnss_free_qdss_mem(plat_priv);
+#endif
 			break;
 		case CNSS_QDSS_START:
 			if (test_bit(CNSS_QDSS_STARTED,

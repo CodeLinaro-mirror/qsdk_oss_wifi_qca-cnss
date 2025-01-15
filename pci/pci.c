@@ -3532,7 +3532,6 @@ int cnss_pci_alloc_qdss_mem(struct cnss_pci_data *pci_priv)
 						qdss_mem->size);
 			}
 
-
 			if (!qdss_mem->va) {
 				cnss_pr_err("WARNING etr-addr remap failed\n");
 				return -ENOMEM;
@@ -6183,7 +6182,7 @@ out:
 
 static void cnss_pci_free_qdss_mem(struct cnss_plat_data *plat_priv)
 {
-	struct cnss_fw_mem qdss_mem;
+	struct cnss_fw_mem *qdss_mem;
 	struct qdss_stream_data *qdss_stream;
 	struct cnss_pci_data *pci_priv;
 	struct device *dev;
@@ -6193,7 +6192,7 @@ static void cnss_pci_free_qdss_mem(struct cnss_plat_data *plat_priv)
 		return;
 	}
 
-	qdss_mem = plat_priv->qdss_mem;
+	qdss_mem = &plat_priv->qdss_mem;
 	qdss_stream = &plat_priv->qdss_stream;
 
 	pci_priv = plat_priv->bus_priv;
@@ -6206,17 +6205,17 @@ static void cnss_pci_free_qdss_mem(struct cnss_plat_data *plat_priv)
 	dev = &pci_priv->pci_dev->dev;
 
 	if (plat_priv->dma_alloc_supported) {
-		if (qdss_mem.va && qdss_mem.size) {
+		if (qdss_mem->va && qdss_mem->size) {
 			cnss_pr_dbg("Freeing memory for QDSS, va: 0x%pK, pa: 0x%pa, size: 0x%zx, type: %u\n",
-				    qdss_mem.va, &qdss_mem.pa,
-				    qdss_mem.size, qdss_mem.type);
-			dma_free_attrs(dev, qdss_mem.size,
-				       qdss_mem.va, qdss_mem.pa,
+				    qdss_mem->va, &qdss_mem->pa,
+				    qdss_mem->size, qdss_mem->type);
+			dma_free_attrs(dev, qdss_mem->size,
+				       qdss_mem->va, qdss_mem->pa,
 				       DMA_ATTR_FORCE_CONTIGUOUS);
-			qdss_mem.va = NULL;
-			qdss_mem.pa = 0;
-			qdss_mem.size = 0;
-			qdss_mem.type = 0;
+			qdss_mem->va = NULL;
+			qdss_mem->pa = 0;
+			qdss_mem->size = 0;
+			qdss_mem->type = 0;
 		}
 	}
 
@@ -6224,9 +6223,9 @@ static void cnss_pci_free_qdss_mem(struct cnss_plat_data *plat_priv)
 		cnss_etr_sg_tbl_free(
 			(uint32_t *)qdss_stream->qdss_vaddr,
 			plat_priv,
-			DIV_ROUND_UP(qdss_mem.size, PAGE_SIZE));
+			DIV_ROUND_UP(qdss_mem->size, PAGE_SIZE));
 	} else {
-		if (qdss_mem.va) {
+		if (qdss_mem->va) {
 			if (cnss_check_be_target(plat_priv)) {
 				/* When QDSS is stopped for Low memory
 				 * profiles, only memset the memory to
@@ -6240,9 +6239,9 @@ static void cnss_pci_free_qdss_mem(struct cnss_plat_data *plat_priv)
 				memset(plat_priv->qdss_mem.va, 0, SZ_1M);
 			} else {
 				cnss_pr_dbg("Freeing QDSS Memory\n");
-				iounmap(qdss_mem.va);
-				qdss_mem.va = NULL;
-				qdss_mem.size = 0;
+				iounmap(qdss_mem->va);
+				qdss_mem->va = NULL;
+				qdss_mem->size = 0;
 			}
 		}
 	}
