@@ -38,19 +38,14 @@ struct cnss_dump_segment {
 	void *vaddr;
 	unsigned int len;
 	unsigned int type;
-};
-
-struct cnss_coredump_state {
-	struct cnss_dump_segment *segments;
 	struct completion dump_done;
-	u32 num_seg;
 };
 
 #ifdef CONFIG_WANT_DEV_COREDUMP
 void cnss_coredump_download_rddm(struct cnss_plat_data *plat_priv);
 void cnss_coredump_build_inline(struct cnss_plat_data *plat_priv,
 				struct cnss_dump_segment *segments,
-				int num_seg);
+				size_t datalen);
 void cnss_coredump_qdss_dump(struct cnss_plat_data *plat_priv,
 			     struct cnss_qmi_event_qdss_trace_save_data *event_data);
 void cnss_coredump_m3_dump(struct cnss_plat_data *plat_priv,
@@ -65,7 +60,7 @@ cnss_coredump_download_rddm(struct cnss_plat_data *plat_priv)
 
 static inline void
 cnss_coredump_build_inline(struct cnss_plat_data *plat_priv,
-			   struct cnss_dump_segment *segments, int num_seg)
+			   struct cnss_dump_segment *segments, size_t datalen)
 {
 }
 static inline void

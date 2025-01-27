@@ -202,7 +202,7 @@ static struct mhi_channel_config cnss_pci_mhi_channels[] = {
 	{
 		.num = 20,
 		.name = "IPCR",
-#ifdef CONFIG_TARGET_SDX75
+#ifdef CONFIG_TARGET_SDX_WKK
 		.num_elements = 64,
 #else
 		.num_elements = 8,
@@ -223,7 +223,7 @@ static struct mhi_channel_config cnss_pci_mhi_channels[] = {
 	{
 		.num = 21,
 		.name = "IPCR",
-#ifdef CONFIG_TARGET_SDX75
+#ifdef CONFIG_TARGET_SDX_WKK
 		.num_elements = 64,
 #else
 		.num_elements = 8,
@@ -271,7 +271,7 @@ static struct mhi_controller_config cnss_pci_mhi_config = {
 	.max_channels = 30,
 	.timeout_ms = 10000,
 	.use_bounce_buf = false,
-#ifdef CONFIG_TARGET_SDX75
+#ifdef CONFIG_TARGET_SDX_WKK
 	.buf_len = 0,
 #else
 	.buf_len = MHI_CNTRL_BUF_LEN,
@@ -280,8 +280,10 @@ static struct mhi_controller_config cnss_pci_mhi_config = {
 	.ch_cfg = cnss_pci_mhi_channels,
 	.num_events = ARRAY_SIZE(cnss_pci_mhi_events),
 	.event_cfg = cnss_pci_mhi_events,
-#ifdef CONFIG_TARGET_SDX75
+#ifdef CONFIG_TARGET_SDX_WKK
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 	.rddm_timeout_us = 400000,
+#endif
 #endif
 };
 #endif
@@ -1744,7 +1746,7 @@ out:
 	return ret;
 }
 
-#ifndef CONFIG_TARGET_SDX75
+#ifndef CONFIG_TARGET_SDX_WKK
 static void cnss_mhi_soc_reset(struct pci_dev *pci_dev)
 {
 	struct cnss_pci_data *pci_priv = cnss_get_pci_priv(pci_dev);
@@ -1785,7 +1787,7 @@ static int cnss_qcn9000_shutdown(struct cnss_pci_data *pci_priv)
 		cnss_pr_info("Skipping shutdown to wait for dump collection\n");
 		return ret;
 	}
-#ifndef CONFIG_TARGET_SDX75
+#ifndef CONFIG_TARGET_SDX_WKK
 	cnss_mhi_soc_reset(plat_priv->pci_dev);
 #endif
 
@@ -2268,6 +2270,11 @@ int cnss_pci_dev_crash_shutdown(struct cnss_pci_data *pci_priv)
 		return -ENODEV;
 	}
 	plat_priv = pci_priv->plat_priv;
+
+	if (plat_priv->driver_state == 0) {
+		cnss_pr_err("Driver state is NULL\n");
+		return -ENODEV;
+	}
 
 	switch (pci_priv->device_id) {
 	case QCA6174_DEVICE_ID:
@@ -3525,7 +3532,6 @@ int cnss_pci_alloc_qdss_mem(struct cnss_pci_data *pci_priv)
 						qdss_mem->size);
 			}
 
-
 			if (!qdss_mem->va) {
 				cnss_pr_err("WARNING etr-addr remap failed\n");
 				return -ENOMEM;
@@ -3724,7 +3730,11 @@ static int cnss_pci_init_smmu(struct cnss_pci_data *pci_priv)
 	struct device_node *of_node;
 	struct resource *res;
 	const char *iommu_dma_type;
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
+	u32 addr_win[4];
+#else
 	u32 addr_win[2];
+#endif
 	int ret = 0;
 
 	of_node = of_parse_phandle(pci_dev->dev.of_node, "qcom,iommu-group", 0);
@@ -3759,8 +3769,13 @@ static int cnss_pci_init_smmu(struct cnss_pci_data *pci_priv)
 		return ret;
 	}
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
+	pci_priv->smmu_iova_start = addr_win[1];
+	pci_priv->smmu_iova_len = addr_win[3];
+#else
 	pci_priv->smmu_iova_start = addr_win[0];
 	pci_priv->smmu_iova_len = addr_win[1];
+#endif
 	cnss_pr_dbg("smmu_iova_start: %pa, smmu_iova_len: 0x%zx\n",
 		    &pci_priv->smmu_iova_start,
 		    pci_priv->smmu_iova_len);
@@ -3855,8 +3870,13 @@ int cnss_smmu_map(struct device *dev,
 
 	cnss_pr_dbg("IOMMU map: iova %lx, len %zu\n", iova, len);
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
+	ret = iommu_map(pci_priv->iommu_domain, iova,
+			rounddown(paddr, PAGE_SIZE), len, flag, GFP_KERNEL);
+#else
 	ret = iommu_map(pci_priv->iommu_domain, iova,
 			rounddown(paddr, PAGE_SIZE), len, flag);
+#endif
 	if (ret) {
 		cnss_pr_err("PA to IOVA mapping failed, ret %d\n", ret);
 		return ret;
@@ -5202,8 +5222,10 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 	}
 
 #if (KERNEL_VERSION(6, 1, 0) <= LINUX_VERSION_CODE)
+#if !defined(CONFIG_TARGET_SDX_WKK)
 	mhi_ctrl->rddm_prealloc = false;
 	mhi_ctrl->rddm_seg_len = SZ_4K;
+#endif
 #endif
 	cnss_update_soc_version(pci_priv);
 
@@ -5641,7 +5663,7 @@ int cnss_pci_probe_basic(struct pci_dev *pci_dev,
 	}
 #endif
 
-#if defined(CONFIG_CNSS2_KERNEL_MSM) || defined(CONFIG_TARGET_SDX75)
+#if defined(CONFIG_CNSS2_KERNEL_MSM) || defined(CONFIG_TARGET_SDX_WKK)
 	cnss_pr_info("Taking PM vote for %s", plat_priv->device_name);
 	device_set_wakeup_enable(&pci_dev->dev, true);
 	pm_stay_awake(&pci_dev->dev);
@@ -6160,7 +6182,7 @@ out:
 
 static void cnss_pci_free_qdss_mem(struct cnss_plat_data *plat_priv)
 {
-	struct cnss_fw_mem qdss_mem;
+	struct cnss_fw_mem *qdss_mem;
 	struct qdss_stream_data *qdss_stream;
 	struct cnss_pci_data *pci_priv;
 	struct device *dev;
@@ -6170,7 +6192,7 @@ static void cnss_pci_free_qdss_mem(struct cnss_plat_data *plat_priv)
 		return;
 	}
 
-	qdss_mem = plat_priv->qdss_mem;
+	qdss_mem = &plat_priv->qdss_mem;
 	qdss_stream = &plat_priv->qdss_stream;
 
 	pci_priv = plat_priv->bus_priv;
@@ -6183,17 +6205,17 @@ static void cnss_pci_free_qdss_mem(struct cnss_plat_data *plat_priv)
 	dev = &pci_priv->pci_dev->dev;
 
 	if (plat_priv->dma_alloc_supported) {
-		if (qdss_mem.va && qdss_mem.size) {
+		if (qdss_mem->va && qdss_mem->size) {
 			cnss_pr_dbg("Freeing memory for QDSS, va: 0x%pK, pa: 0x%pa, size: 0x%zx, type: %u\n",
-				    qdss_mem.va, &qdss_mem.pa,
-				    qdss_mem.size, qdss_mem.type);
-			dma_free_attrs(dev, qdss_mem.size,
-				       qdss_mem.va, qdss_mem.pa,
+				    qdss_mem->va, &qdss_mem->pa,
+				    qdss_mem->size, qdss_mem->type);
+			dma_free_attrs(dev, qdss_mem->size,
+				       qdss_mem->va, qdss_mem->pa,
 				       DMA_ATTR_FORCE_CONTIGUOUS);
-			qdss_mem.va = NULL;
-			qdss_mem.pa = 0;
-			qdss_mem.size = 0;
-			qdss_mem.type = 0;
+			qdss_mem->va = NULL;
+			qdss_mem->pa = 0;
+			qdss_mem->size = 0;
+			qdss_mem->type = 0;
 		}
 	}
 
@@ -6201,9 +6223,9 @@ static void cnss_pci_free_qdss_mem(struct cnss_plat_data *plat_priv)
 		cnss_etr_sg_tbl_free(
 			(uint32_t *)qdss_stream->qdss_vaddr,
 			plat_priv,
-			DIV_ROUND_UP(qdss_mem.size, PAGE_SIZE));
+			DIV_ROUND_UP(qdss_mem->size, PAGE_SIZE));
 	} else {
-		if (qdss_mem.va) {
+		if (qdss_mem->va) {
 			if (cnss_check_be_target(plat_priv)) {
 				/* When QDSS is stopped for Low memory
 				 * profiles, only memset the memory to
@@ -6217,9 +6239,9 @@ static void cnss_pci_free_qdss_mem(struct cnss_plat_data *plat_priv)
 				memset(plat_priv->qdss_mem.va, 0, SZ_1M);
 			} else {
 				cnss_pr_dbg("Freeing QDSS Memory\n");
-				iounmap(qdss_mem.va);
-				qdss_mem.va = NULL;
-				qdss_mem.size = 0;
+				iounmap(qdss_mem->va);
+				qdss_mem->va = NULL;
+				qdss_mem->size = 0;
 			}
 		}
 	}
