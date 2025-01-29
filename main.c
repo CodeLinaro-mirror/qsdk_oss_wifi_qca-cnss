@@ -492,9 +492,15 @@ static struct delayed_work umount_firmware_wq;
 void cnss_mount_firmware(struct cnss_plat_data *plat_priv)
 {
 	char *argv[] = {MOUNT_PATH, NULL };
+	int index;
 
-	set_bit(cnss_get_plat_env_index_from_plat_priv(plat_priv),
-		&fw_load_in_progress_bmap);
+	index = cnss_get_plat_env_index_from_plat_priv(plat_priv);
+	if (index < 0) {
+		cnss_pr_err("failed to get the plat_env_index %d\n", index);
+		return;
+	}
+
+	set_bit(index, &fw_load_in_progress_bmap);
 	call_usermodehelper(argv[0], argv, NULL, UMH_WAIT_PROC);
 }
 
@@ -510,8 +516,15 @@ void cnss_mount_firmware(struct cnss_plat_data *plat_priv)
  */
 void cnss_unmount_firmware(struct cnss_plat_data *plat_priv)
 {
-	clear_bit(cnss_get_plat_env_index_from_plat_priv(plat_priv),
-		  &fw_load_in_progress_bmap);
+	int index;
+
+	index = cnss_get_plat_env_index_from_plat_priv(plat_priv);
+	if (index < 0) {
+		cnss_pr_err("failed to get the plat_env_index %d\n", index);
+		return;
+	}
+
+	clear_bit(index, &fw_load_in_progress_bmap);
 	cancel_delayed_work_sync(&umount_firmware_wq);
 	schedule_delayed_work(&umount_firmware_wq,
 			      msecs_to_jiffies(umount_firmware_delay));
@@ -3128,6 +3141,7 @@ int cnss_wlan_probe_driver(void)
 		if (plat_priv->cold_boot_support && !plat_priv->cal_done)
 			plat_priv->cal_in_progress = true;
 
+		cnss_mount_firmware(plat_priv);
 		ret = cnss_register_subsys(plat_priv);
 		if (ret)
 			goto reset_ctx;
@@ -3588,7 +3602,6 @@ void  *__cnss_subsystem_get(struct cnss_plat_data *plat_priv)
 	}
 	clear_bit(CNSS_RECOVERY_WAIT_FOR_DRIVER, &plat_priv->driver_state);
 
-	cnss_mount_firmware(plat_priv);
 #ifdef CONFIG_CNSS2_KERNEL_SSR_FRAMEWORK
 	subsys_info->subsys_handle =
 				subsystem_get(subsys_info->subsys_desc.name);
@@ -4222,6 +4235,7 @@ void  *cnss_subsystem_get(struct device *dev, int device_id)
 	if (!plat_priv)
 		return NULL;
 
+	cnss_mount_firmware(plat_priv);
 	if(cnss_get_bus_type(device_id) == CNSS_BUS_AHB)
 		return __cnss_subsystem_get(plat_priv);
 	else
@@ -6045,7 +6059,6 @@ int cnss_register_subsys(struct cnss_plat_data *plat_priv)
 	plat_priv->esoc_info.modem_notify_handler =
 		cnss_register_notifier_cb(plat_priv);
 
-	cnss_mount_firmware(plat_priv);
 	ret = rproc_boot(subsys_info->subsys_handle);
 	if (ret) {
 		cnss_pr_err("%s: Failed to boot device %s (%d)\n",
