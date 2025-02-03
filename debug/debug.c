@@ -1726,6 +1726,16 @@ static ssize_t cnss_platform_features_write(struct file *fp,
 		plat_priv->qdss_support = val;
 		cnss_pr_info("Setting qdss_support=%u for instance_id 0x%x\n",
 			     val, plat_priv->wlfw_service_instance_id);
+#ifndef CONFIG_TARGET_SDX_WKK
+			/* For 11BE chipsets, QDSS Memory will be allocated via
+			 * DMA alloc instead of dts and if the QDSS feature is
+			 * disabled in the firmware ini file, stop QDSS if
+			 * already started and clear the memory.
+			 */
+			if (!val) {
+				cnss_free_qdss_mem(plat_priv);
+			}
+#endif
 	} else if (strcmp(cmd, "enable_hds_support") == 0) {
 		plat_priv->hds_support = val;
 		cnss_pr_info("Setting hds_support=%u for instance_id 0x%x\n",
@@ -1758,14 +1768,6 @@ static ssize_t cnss_platform_features_write(struct file *fp,
 			cnss_wlfw_send_qdss_trace_mode_req(plat_priv,
 						QMI_WLFW_QDSS_TRACE_OFF_V01,
 						val);
-#ifndef CONFIG_TARGET_SDX75
-			/* For 11BE chipsets, QDSS Memory will be allocated via
-			 * DMA alloc instead of dts and if the QDSS feature is
-			 * disabled in the firmware ini file, stop QDSS if
-			 * already started and clear the memory.
-			 */
-			cnss_free_qdss_mem(plat_priv);
-#endif
 			break;
 		case CNSS_QDSS_START:
 			if (test_bit(CNSS_QDSS_STARTED,
