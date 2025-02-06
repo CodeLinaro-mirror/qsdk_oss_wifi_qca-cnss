@@ -1680,7 +1680,8 @@ int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv,
 			 * regdb_mandatory is true, assert. If it is false,
 			 * just print the message and skip it.
 			 */
-			cnss_pr_info("Failed to load RegDB %s\n", filename);
+			cnss_pr_info("Failed to load RegDB %s: %d\n",
+				     filename, ret);
 			if (!plat_priv->regdb_mandatory) {
 				cnss_pr_info("Skipping regdb download for %s since it is not mandatory as indicated by the target caps\n",
 					     plat_priv->device_name);
@@ -1689,13 +1690,14 @@ int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv,
 			goto out;
 		} else if (bdf_type == CNSS_BDF_RXGAINLUT) {
 			/* If RXGAINLUT bin file download is not mandatory */
-			cnss_pr_dbg("Failed to load RXGAINLUT. %s is not a mandatory file\n",
-					     filename);
+			cnss_pr_dbg("Failed to load RXGAINLUT. %s is not a mandatory file: %d\n",
+					     filename, ret);
 			ret = 0;
 			goto out;
 		} else {
 			/* BDF download is mandatory for all targets */
-			cnss_pr_err("Failed to load BDF: %s\n", filename);
+			cnss_pr_err("Failed to load BDF: %s: %d\n",
+				    filename, ret);
 			goto out;
 		}
 	}
