@@ -422,19 +422,22 @@ static int cnss_ahb_alloc_qdss_mem(struct cnss_plat_data *plat_priv)
 
 static void cnss_ahb_free_qdss_mem(struct cnss_plat_data *plat_priv)
 {
-	struct cnss_fw_mem qdss_mem = plat_priv->qdss_mem;
-	struct qdss_stream_data *qdss_stream = &plat_priv->qdss_stream;
+	struct cnss_fw_mem *qdss_mem;
+	struct qdss_stream_data *qdss_stream;
 
 	if (!plat_priv) {
 		cnss_pr_err("%s: plat_priv is NULL\n", __func__);
 		return;
 	}
 
+	qdss_mem = &plat_priv->qdss_mem;
+	qdss_stream = &plat_priv->qdss_stream;
+
 	if (plat_priv->qdss_etr_sg_mode) {
 		cnss_etr_sg_tbl_free(
 			(uint32_t *)qdss_stream->qdss_vaddr,
 			plat_priv,
-			DIV_ROUND_UP(qdss_mem.size, PAGE_SIZE));
+			DIV_ROUND_UP(qdss_mem->size, PAGE_SIZE));
 	} else {
 		if (plat_priv->qdss_mem.va) {
 			if (cnss_check_be_target(plat_priv)) {
@@ -450,9 +453,9 @@ static void cnss_ahb_free_qdss_mem(struct cnss_plat_data *plat_priv)
 				memset(plat_priv->qdss_mem.va, 0, SZ_1M);
 			} else {
 				cnss_pr_dbg("Freeing QDSS Memory\n");
-				iounmap(qdss_mem.va);
-				qdss_mem.va = NULL;
-				qdss_mem.size = 0;
+				iounmap(qdss_mem->va);
+				qdss_mem->va = NULL;
+				qdss_mem->size = 0;
 			}
 		}
 	}

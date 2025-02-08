@@ -233,6 +233,11 @@ struct qgic2_msi *cnss_qgic2_enable_msi(struct cnss_plat_data *plat_priv)
 #else
 	msi_desc = first_msi_entry(dev);
 #endif
+	if (!msi_desc) {
+		cnss_pr_err("msi_desc is NULL\n");
+		return NULL;
+	}
+
 	irq_data = irq_get_irq_data(msi_desc->irq);
 	if (!irq_data) {
 		cnss_pr_err("irq_desc_get_irq_data failed.\n");
