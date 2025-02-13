@@ -6038,7 +6038,7 @@ static u64 cnss_pci_get_q6_time_cb(struct device *dev)
 	}
 
 	if (!test_bit(CNSS_FW_READY, &plat_priv->driver_state)) {
-		cnss_pr_err("Invalid state to get the Q6 timestamp: 0x%lx\n",
+		cnss_pr_dbg("Invalid state to get the Q6 timestamp: 0x%lx\n",
 			    plat_priv->driver_state);
 		return 0;
 	}
