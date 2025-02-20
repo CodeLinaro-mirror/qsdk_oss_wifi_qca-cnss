@@ -774,7 +774,7 @@ static void cnss_hif_notifier(struct cnss_plat_data *plat_priv,
 					(struct pci_dev *)plat_priv->plat_dev,
 					(const struct pci_device_id *)
 					plat_priv->plat_dev_id,
-					(int)event_code);
+					(int)event_code, 0);
 	}
 }
 
@@ -2575,7 +2575,7 @@ static int cnss_qcn9000_notifier_nb(struct notifier_block *nb,
 			driver_ops->update_status(
 					(struct pci_dev *)plat_priv->plat_dev,
 					(const struct pci_device_id *)
-					plat_priv->plat_dev_id, event_code);
+					plat_priv->plat_dev_id, event_code, 0);
 	}
 
 	return NOTIFY_OK;
@@ -2634,7 +2634,7 @@ static int cnss_qca8074_notifier_nb(struct notifier_block *nb,
 			driver_ops->update_status(
 					(struct pci_dev *)plat_priv->plat_dev,
 					(const struct pci_device_id *)
-					plat_priv->plat_dev_id, event_code);
+					plat_priv->plat_dev_id, event_code, 0);
 		cnss_free_soc_info(plat_priv);
 	}
 

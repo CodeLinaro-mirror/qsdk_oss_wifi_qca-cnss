@@ -52,6 +52,7 @@ enum cnss_notif_type {
 	CNSS_SOC_RESET,
 	CNSS_PREPARE_FOR_FATAL_SHUTDOWN,
 	CNSS_RAMDUMP_DONE,
+	CNSS_SMMU_FAULT,
 	/* The below event should be the last event for all devices */
 	CNSS_NOTIF_TYPE_MAX
 };
@@ -120,10 +121,11 @@ struct cnss_wlan_driver {
 	int  (*suspend_noirq)(struct pci_dev *pdev);
 	int  (*resume_noirq)(struct pci_dev *pdev);
 	void (*modem_status)(struct pci_dev *, int state);
-	void (*update_status)(struct pci_dev *pdev, const struct pci_device_id *, int status);
+	void (*update_status)(struct pci_dev *pdev, const struct pci_device_id *, int status, unsigned long iova);
 	struct cnss_wlan_runtime_ops *runtime_ops;
 	const struct pci_device_id *id_table;
 	int  (*fatal)(struct pci_dev *pdev, const struct pci_device_id *id);
+	int  (*smmu_fault_cb)(struct pci_dev *pdev);
 };
 
 enum cnss_driver_status {

@@ -209,7 +209,7 @@ static void cnss_debug_shutdown(struct pci_dev *pdev)
 
 static void cnss_debug_update_status(struct pci_dev *pdev,
 				     const struct pci_device_id *id,
-				     int status)
+				     int status, unsigned long iova)
 {
 	struct platform_device *plat_dev = (struct platform_device *)pdev;
 	struct cnss_plat_data *plat_priv = cnss_get_plat_priv(plat_dev);
