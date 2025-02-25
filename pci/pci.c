@@ -5077,7 +5077,7 @@ static irqreturn_t qdss_irq_handler(int irq, void *context)
 
 static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 {
-	int ret = 0;
+	int ret = 0, idx = 0;
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 	struct pci_dev *pci_dev = pci_priv->pci_dev;
 	struct mhi_controller *mhi_ctrl;
@@ -5172,15 +5172,19 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 #else
 	dev_node = of_find_node_by_type(NULL, "memory");
 	if (dev_node) {
-		if (of_address_to_resource(dev_node, 0, &memory)) {
-			cnss_pr_err("%s: Unable to get resource: memory",
-				    __func__);
-			goto free_qdss_irq;
+
+		while (of_address_to_resource(dev_node, idx, &memory) == 0) {
+			if (!idx)
+				mhi_ctrl->iova_start = memory.start;
+			mhi_ctrl->iova_stop = memory.end;
+			idx++;
 		}
 
-		mhi_ctrl->iova_start = (dma_addr_t)memory.start;
-		mhi_ctrl->iova_stop = (dma_addr_t)(memory.start +
-						  (resource_size(&memory) - 1));
+		if (!mhi_ctrl->iova_start || !mhi_ctrl->iova_stop) {
+			cnss_pr_err("Unable to get resource: memory");
+			ret = -ENOMEM;
+			goto free_qdss_irq;
+		}
 	} else {
 		/* No Memory DT node, assign full 32-bit region as iova */
 		mhi_ctrl->iova_start = 0;
@@ -6034,7 +6038,7 @@ static u64 cnss_pci_get_q6_time_cb(struct device *dev)
 	}
 
 	if (!test_bit(CNSS_FW_READY, &plat_priv->driver_state)) {
-		cnss_pr_err("Invalid state to get the Q6 timestamp: 0x%lx\n",
+		cnss_pr_dbg("Invalid state to get the Q6 timestamp: 0x%lx\n",
 			    plat_priv->driver_state);
 		return 0;
 	}
