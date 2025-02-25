@@ -472,6 +472,10 @@ static inline bool cnss_get_mlo_capable(struct device *dev)
 {
 	return false;
 }
+static inline int cnss_get_mlo_support(void)
+{
+	return -EINVAL;
+}
 static inline bool cnss_is_mlo_default_cfg_enabled(struct device *dev)
 {
 	return false;
@@ -601,6 +605,14 @@ static inline int cnss_get_device_info(struct device *dev, char *dev_name, u8 *i
 {
 	return -EINVAL;
 }
+static inline int cnss_get_soc_id(struct device *dev)
+{
+	return 0;
+}
+static inline int cnss_get_radio_info(struct device *dev, bool wifi_idx_check, bool dual_mac_check)
+{
+	return 0;
+}
 #else
 extern int cnss_wlan_register_driver_ops(struct cnss_wlan_driver *driver);
 extern int cnss_wlan_probe_driver(void);
@@ -697,6 +709,7 @@ int cnss_send_buffer_to_afcmem(struct device *dev, char *afcdb, uint32_t len,
 int cnss_reset_afcmem(struct device *dev, uint8_t slotid);
 int cnss_get_mlo_chip_id(struct device *dev);
 bool cnss_get_mlo_capable(struct device *dev);
+int cnss_get_mlo_support(void);
 bool cnss_is_mlo_default_cfg_enabled(struct device *dev);
 int cnss_get_mlo_global_config_region_info(struct device *dev, void **bar,
 					   int *num_bytes);
@@ -735,5 +748,7 @@ void cnss_set_pci_link_speed_width(struct device *dev,
 int cnss_enable_dynamic_mode_switch(struct device *dev, bool disable_ramdump);
 int cnss_get_num_valid_mlo_links(struct device *dev);
 int cnss_get_device_info(struct device *dev, char *dev_name, u8 *instance_id);
+int cnss_get_soc_id(struct device *dev);
+int cnss_get_radio_info(struct device *dev, bool wifi_idx_check, bool dual_mac_check);
 #endif
 #endif /* _NET_CNSS2_H */

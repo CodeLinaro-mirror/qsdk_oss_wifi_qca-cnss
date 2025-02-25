@@ -572,6 +572,12 @@ struct qdss_stream_data {
 	atomic_t                completed_seq_no;
 };
 
+struct cnss_radio_info {
+	s8 soc_id;
+	s8 radio_id;
+	bool is_dual_phy;   /* indicates if radio is dual band support */
+};
+
 enum cnss_recovery_type {
 	CNSS_ASYNC_RECOVERY, /* asynchronous recovery */
 	CNSS_SYNC_RECOVERY, /* synchronous recovery */
@@ -667,6 +673,8 @@ struct cnss_plat_data {
 	struct workqueue_struct *event_wq;
 	struct workqueue_struct *recovery_wq;
 	struct work_struct cal_work;
+	/* mm_work - Mission Mode worker thread for parallel probe */
+	struct work_struct mm_work;
 	struct qmi_handle qmi_wlfw;
 	struct sockaddr_qrtr sq;
 	struct wlfw_rf_chip_info chip_info;
@@ -764,6 +772,8 @@ struct cnss_plat_data {
 	bool wsi_remap_state;
 	bool disable_ramdump;
 	u8 dynamic_mode_switch;
+	u8 mm_coldboot_cal;
+	struct cnss_radio_info radio_info;
 };
 
 #ifdef CONFIG_ARCH_QCOM
