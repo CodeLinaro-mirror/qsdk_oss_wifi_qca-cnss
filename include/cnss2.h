@@ -589,6 +589,10 @@ static inline void cnss_set_pci_link_speed_width(struct device *dev,
 {
 	return -EINVAL;
 }
+static inline int cnss_enable_dynamic_mode_switch(struct device *dev, bool disable_ramdump)
+{
+	return -EINVAL;
+}
 #else
 extern int cnss_wlan_register_driver_ops(struct cnss_wlan_driver *driver);
 extern int cnss_wlan_probe_driver(void);
@@ -718,7 +722,8 @@ void cnss_set_recovery_mode(struct device *dev, u8 recovery_mode);
 void cnss_set_standby_mode(struct device *dev, u8 standby_mode);
 int cnss_set_wsi_remap(struct device *dev);
 void cnss_set_wsi_remap_state(struct device *dev, bool state);
-void cnss_set_pci_link_speed_width(struct device *dev, u16 link_speed,
-					u16 link_width);
+void cnss_set_pci_link_speed_width(struct device *dev,
+					u16 link_speed, u16 link_width);
+int cnss_enable_dynamic_mode_switch(struct device *dev, bool disable_ramdump);
 #endif
 #endif /* _NET_CNSS2_H */

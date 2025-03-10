@@ -858,4 +858,5 @@ void cnss_modify_link_speed(struct cnss_plat_data *plat_priv);
 
 bool cnss_check_li_target(struct cnss_plat_data *plat_priv);
 bool cnss_check_be_target(struct cnss_plat_data *plat_priv);
+void cnss_set_board_id(struct cnss_plat_data *plat_priv);
 #endif /* _CNSS_MAIN_H */

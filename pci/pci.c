@@ -1853,6 +1853,9 @@ static int cnss_qcn9000_ramdump(struct cnss_pci_data *pci_priv)
 	struct cnss_dump_meta_info *meta_info;
 	int i, ret = 0, idx = 0;
 
+	if (pci_priv->disable_ramdump)
+		return 0;
+
 	if (!info_v2->dump_data_valid ||
 	    dump_data->nentries == 0)
 		return 0;
@@ -2125,6 +2128,9 @@ int cnss_qcn9000_ramdump(struct  cnss_pci_data *pci_priv)
 	struct cnss_dump_meta_info *meta_info;
 	struct list_head head;
 	int i, ret = 0, idx = 0;
+
+	if (pci_priv->disable_ramdump)
+		return 0;
 
 	if (!info_v2->dump_data_valid || dump_data->nentries == 0)
 		return ret;
@@ -5334,6 +5340,11 @@ void cnss_set_pci_link_speed_width(struct device *dev, u16 link_speed,
 {
 }
 EXPORT_SYMBOL(cnss_set_pci_link_speed_width);
+int cnss_enable_dynamic_mode_switch(struct device *dev, bool disable_ramdump)
+{
+	return 0;
+}
+EXPORT_SYMBOL(cnss_enable_dynamic_mode_switch);
 #else
 void cnss_set_pci_link_speed_width(struct device *dev, u16 link_speed,
 					u16 link_width)
@@ -5419,6 +5430,9 @@ int cnss_pci_probe(struct pci_dev *pci_dev,
 	pci_priv->driver_ops = plat_priv->driver_ops;
 	plat_priv->bus_priv = pci_priv;
 	reinit_completion(&plat_priv->soc_reset_request_complete);
+
+	if (pci_priv->disable_ramdump)
+		pci_priv->disable_ramdump = false;
 
 	ret = cnss_register_ramdump(plat_priv);
 	if (ret)

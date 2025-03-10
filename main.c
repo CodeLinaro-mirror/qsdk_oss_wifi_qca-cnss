@@ -970,6 +970,37 @@ static int cnss_hif_power_up(struct cnss_plat_data *plat_priv)
 	return ret;
 }
 
+static int cnss_update_board_info(struct cnss_plat_data *plat_priv)
+{
+	int ret = 0;
+
+	if (!plat_priv)
+		return ret;
+
+	cnss_set_board_id(plat_priv);
+
+	ret = cnss_set_fw_type_and_name(plat_priv);
+	if (ret)
+		return ret;
+
+	if (plat_priv->mlo_support) {
+		struct cnss_mlo_chip_info *ch_info = plat_priv->mlo_chip_info;
+		if (plat_priv->firmware_type == CNSS_FW_DUAL_MAC) {
+			ch_info->num_local_links = 2;
+			ch_info->valid_link_ids[0] = 1;
+			ch_info->valid_link_ids[1] = 1;
+		} else {
+			ch_info->num_local_links = 1;
+			ch_info->valid_link_ids[0] = 1;
+			ch_info->valid_link_ids[1] = 0;
+		}
+	}
+	cnss_pr_info("Updated firmware board id 0x%x and name %s for %s\n",
+			    plat_priv->board_info.board_id_override,
+			    plat_priv->firmware_name, plat_priv->device_name);
+
+	return ret;
+}
 
 static int cnss_hif_shutdown(struct cnss_plat_data *plat_priv)
 {
@@ -1005,6 +1036,7 @@ void *__cnss_hif_get(struct cnss_plat_data *plat_priv)
 		     plat_priv->driver_state);
 
 	clear_bit(CNSS_RECOVERY_WAIT_FOR_DRIVER, &plat_priv->driver_state);
+
 	ret = cnss_hif_power_up(plat_priv);
 	if (ret) {
 		cnss_pr_err("%s: cnss_hif_power_up failed %s\n", __func__,
@@ -7389,6 +7421,30 @@ static void cnss_get_legacy_intx_support(struct cnss_plat_data *plat_priv)
 	}
 }
 #endif
+int cnss_enable_dynamic_mode_switch(struct device *dev, bool disable_ramdump)
+{
+	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
+	struct cnss_pci_data *pci_priv;
+
+	if (!plat_priv) {
+		cnss_pr_err("plat_priv is NULL\n");
+		return -ENODEV;
+	}
+
+	pci_priv = plat_priv->bus_priv;
+	if (!pci_priv) {
+		cnss_pr_err("pci_priv is NULL\n");
+		return -ENODEV;
+	}
+
+	pci_priv->disable_ramdump = disable_ramdump;
+	cnss_pr_dbg("%s SSR ramdump collection\n", disable_ramdump ? "enable" : "disable");
+	cnss_update_board_info(plat_priv);
+
+	return 0;
+}
+EXPORT_SYMBOL(cnss_enable_dynamic_mode_switch);
+
 static u32 cnss_get_bdf_mod_param(int slot_id)
 {
 	u32 ret = 0;
@@ -7419,7 +7475,7 @@ static u32 cnss_get_bdf_mod_param(int slot_id)
  * If both these are not present, board_id_override would be 0 and board_id
  * from OTP register or target capabilities would be used.
  */
-static void cnss_set_board_id(struct cnss_plat_data *plat_priv)
+void cnss_set_board_id(struct cnss_plat_data *plat_priv)
 {
 	struct wlfw_rf_board_info *board_info = &plat_priv->board_info;
 	struct device *dev = &plat_priv->plat_dev->dev;

@@ -107,6 +107,7 @@ struct cnss_pci_data {
 	int os_legacy_irq;
 	u16 otp_board_id;
 	int qdss_irq;
+	bool disable_ramdump;
 };
 
 struct paging_header {
