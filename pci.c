@@ -4875,25 +4875,29 @@ static int cnss_pci_smmu_fault_handler(struct iommu_domain *domain,
 {
 	struct cnss_pci_data *pci_priv = handler_token;
 	struct cnss_plat_data *plat_priv;
+	struct cnss_wlan_driver *driver_ops = NULL;
+	enum cnss_notif_type event_code = CNSS_SMMU_FAULT;
 
 	if (!pci_priv)
 		return -ENODEV;
 
 	plat_priv = pci_priv->plat_priv;
+	driver_ops = plat_priv->driver_ops;
 
 	cnss_pr_err("SMMU fault happened with IOVA 0x%lx\n", iova);
-#ifdef CONFIG_CNSS2_PANIC_ON_SMMU_FAULT
-	/* we can't find clue in fw dump by forcing fw assert here,
-	 * make host system stop immediately to protect memory we want
-	 * to track instead.
-	 */
-	BUG();
+#ifdef CONFIG_CNSS2_DRIVER_HANDLE_SMMU_FAULT
+	if (driver_ops && driver_ops->update_status)
+		driver_ops->update_status(
+				(struct pci_dev *)plat_priv->plat_dev,
+				(const struct pci_device_id *)
+				plat_priv->plat_dev_id,
+				(int)event_code, iova);
 #else
 	cnss_force_fw_assert(&pci_priv->pci_dev->dev);
 #endif
 
 	/* IOMMU driver requires non-zero return value to print debug info. */
-	return -EINVAL;
+	return -ENOSYS;
 }
 
 static int cnss_pci_init_smmu(struct cnss_pci_data *pci_priv)
