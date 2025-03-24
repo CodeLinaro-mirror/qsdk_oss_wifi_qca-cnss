@@ -233,6 +233,11 @@ struct qgic2_msi *cnss_qgic2_enable_msi(struct cnss_plat_data *plat_priv)
 #else
 	msi_desc = first_msi_entry(dev);
 #endif
+	if (!msi_desc) {
+		cnss_pr_err("msi_desc is NULL\n");
+		return NULL;
+	}
+
 	irq_data = irq_get_irq_data(msi_desc->irq);
 	if (!irq_data) {
 		cnss_pr_err("irq_desc_get_irq_data failed.\n");
@@ -487,7 +492,7 @@ void cnss_override_msi_assignment(struct cnss_plat_data *plat_priv,
 			1U << get_count_order(msi_config->total_vectors);
 }
 
-#ifndef CONFIG_TARGET_SDX75
+#ifndef CONFIG_TARGET_SDX_WKK
 static int cnss_mlo_mem_get(struct cnss_plat_data *plat_priv, int group_id,
 			    phys_addr_t paddr, int idx, u32 mem_size)
 {
@@ -557,9 +562,15 @@ static int get_mlo_pa(struct cnss_plat_data *plat_priv, int group_id, int idx,
 
 	/*remap alocated mlo shared mem to pcie device*/
 	if (mlo_global_mem_phys[group_id] != iova_base) {
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
+		ret = iommu_map(pci_priv->iommu_domain, iova_base,
+				mlo_global_mem_phys[group_id],
+				fw_mem[idx].size, flag, GFP_KERNEL);
+#else
 		ret = iommu_map(pci_priv->iommu_domain, iova_base,
 				mlo_global_mem_phys[group_id],
 				fw_mem[idx].size, flag);
+#endif
 		if (ret < 0) {
 			cnss_pr_err("Error: MLO memory map failed.\n");
 			return -ENOMEM;
@@ -582,7 +593,7 @@ int cnss_mlo_mem_alloc(struct cnss_plat_data *plat_priv, int index)
 	struct reserved_mem *mlo_mem = NULL;
 	unsigned int mlo_global_mem_size;
 	int i = index;
-#ifdef CONFIG_TARGET_SDX75
+#ifdef CONFIG_TARGET_SDX_WKK
 	int flag = IOMMU_READ | IOMMU_WRITE;
 	bool dma_coherent = false;
 	static unsigned int mlo_iova_base[CNSS_MAX_MLO_GROUPS];
@@ -609,7 +620,7 @@ int cnss_mlo_mem_alloc(struct cnss_plat_data *plat_priv, int index)
 			return -ENOMEM;
 		}
 
-#ifdef CONFIG_TARGET_SDX75
+#ifdef CONFIG_TARGET_SDX_WKK
 		ret = of_property_read_u32(mlo_global_mem_node, "iova_base",
 					   &mlo_iova_base[group_id]);
 		if (ret)
@@ -651,7 +662,7 @@ int cnss_mlo_mem_alloc(struct cnss_plat_data *plat_priv, int index)
 	} else
 		fw_mem[i].va = mlo_global_mem[group_id];
 
-#ifdef CONFIG_TARGET_SDX75
+#ifdef CONFIG_TARGET_SDX_WKK
 	ret = get_mlo_pa(plat_priv, group_id, i, mlo_iova_base[group_id], flag);
 #else
 	ret = get_mlo_pa(plat_priv, group_id, i);
