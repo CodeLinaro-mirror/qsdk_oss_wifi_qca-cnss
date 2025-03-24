@@ -1853,7 +1853,7 @@ static int cnss_qcn9000_ramdump(struct cnss_pci_data *pci_priv)
 	struct cnss_dump_meta_info *meta_info;
 	int i, ret = 0, idx = 0;
 
-	if (pci_priv->disable_ramdump)
+	if (plat_priv->disable_ramdump)
 		return 0;
 
 	if (!info_v2->dump_data_valid ||
@@ -2129,7 +2129,7 @@ int cnss_qcn9000_ramdump(struct  cnss_pci_data *pci_priv)
 	struct list_head head;
 	int i, ret = 0, idx = 0;
 
-	if (pci_priv->disable_ramdump)
+	if (plat_priv->disable_ramdump)
 		return 0;
 
 	if (!info_v2->dump_data_valid || dump_data->nentries == 0)
@@ -5431,8 +5431,8 @@ int cnss_pci_probe(struct pci_dev *pci_dev,
 	plat_priv->bus_priv = pci_priv;
 	reinit_completion(&plat_priv->soc_reset_request_complete);
 
-	if (pci_priv->disable_ramdump)
-		pci_priv->disable_ramdump = false;
+	if (plat_priv->disable_ramdump)
+		plat_priv->disable_ramdump = false;
 
 	ret = cnss_register_ramdump(plat_priv);
 	if (ret)

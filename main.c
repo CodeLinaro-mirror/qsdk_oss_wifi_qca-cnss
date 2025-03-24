@@ -970,14 +970,74 @@ static int cnss_hif_power_up(struct cnss_plat_data *plat_priv)
 	return ret;
 }
 
-static int cnss_update_board_info(struct cnss_plat_data *plat_priv)
+static void cnss_set_bdf_mod_param(int slot_id, int value)
 {
+	switch (slot_id) {
+	case 0:
+		bdf_pci0 = value;
+		break;
+	case 1:
+		bdf_pci1 = value;
+		break;
+	case 2:
+		bdf_pci2 = value;
+		break;
+	case 3:
+		bdf_pci3 = value;
+		break;
+	default:
+		break;
+	}
+}
+
+static int cnss_reset_bdf_and_fw_name(struct cnss_plat_data *plat_priv)
+{
+	struct device *dev;
+	const char *board_id_str = "board_id";
 	int ret = 0;
 
 	if (!plat_priv)
 		return ret;
 
+	dev = &plat_priv->plat_dev->dev;
+	if (of_property_read_u32(dev->of_node, board_id_str,
+				 &plat_priv->board_info.board_id_override))
+		cnss_pr_info("No board_id in device tree for %s\n",
+				plat_priv->device_name);
+
+	cnss_set_bdf_mod_param(plat_priv->pci_slot_id, 0);
+
+	ret = cnss_set_fw_type_and_name(plat_priv);
+	if (ret)
+		return ret;
+
+	return ret;
+}
+
+static int cnss_update_board_info(struct cnss_plat_data *plat_priv)
+{
+	struct device *dev;
+	const char *board_id_str = "board_id";
+	int ret = 0;
+	u32 previous_board_id = 0;
+
+	if (!plat_priv)
+		return ret;
+
+	dev = &plat_priv->plat_dev->dev;
+	previous_board_id = plat_priv->board_info.board_id_override;
+
 	cnss_set_board_id(plat_priv);
+
+	if (!plat_priv->board_info.board_id_override) {
+		if (of_property_read_u32(dev->of_node, board_id_str,
+					 &plat_priv->board_info.board_id_override))
+			cnss_pr_info("No board_id in device tree for %s\n",
+					plat_priv->device_name);
+	}
+
+	if (previous_board_id == plat_priv->board_info.board_id_override)
+		return ret;
 
 	ret = cnss_set_fw_type_and_name(plat_priv);
 	if (ret)
@@ -999,6 +1059,19 @@ static int cnss_update_board_info(struct cnss_plat_data *plat_priv)
 			    plat_priv->board_info.board_id_override,
 			    plat_priv->firmware_name, plat_priv->device_name);
 
+	return ret;
+}
+
+int cnss_reset_board_info(struct cnss_plat_data *plat_priv)
+{
+	int ret = 0;
+
+	if (plat_priv->device_id == QCN9224_DEVICE_ID &&
+	    plat_priv->dynamic_mode_switch) {
+		cnss_reset_bdf_and_fw_name(plat_priv);
+		plat_priv->dynamic_mode_switch = 0;
+		plat_priv->disable_ramdump = false;
+	}
 	return ret;
 }
 
@@ -6055,6 +6128,7 @@ int cnss_register_subsys(struct cnss_plat_data *plat_priv)
 		break;
 	case CNSS_BUS_PCI:
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
+		cnss_reset_board_info(plat_priv);
 		ret = cnss_hif_power_up(plat_priv);
 		if (ret != 0) {
 			cnss_pr_err("%s: cnss_hif_power_up failed(%d)\n",
@@ -7437,9 +7511,12 @@ int cnss_enable_dynamic_mode_switch(struct device *dev, bool disable_ramdump)
 		return -ENODEV;
 	}
 
-	pci_priv->disable_ramdump = disable_ramdump;
-	cnss_pr_dbg("%s SSR ramdump collection\n", disable_ramdump ? "enable" : "disable");
-	cnss_update_board_info(plat_priv);
+	if (plat_priv->device_id == QCN9224_DEVICE_ID) {
+		plat_priv->disable_ramdump = disable_ramdump;
+		plat_priv->dynamic_mode_switch = 1;
+		cnss_pr_dbg("%s SSR ramdump collection\n", disable_ramdump ? "disable" : "enable");
+		cnss_update_board_info(plat_priv);
+	}
 
 	return 0;
 }
