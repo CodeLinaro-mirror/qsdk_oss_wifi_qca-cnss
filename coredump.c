@@ -113,10 +113,10 @@ void cnss_coredump_qdss_dump(struct cnss_plat_data *plat_priv,
 	struct cnss_fw_mem qdss_mem = plat_priv->qdss_mem;
 	struct cnss_dump_segment *segment;
 	int num_seg;
-	void *dump = NULL;
+	void *dump;
 
 	num_seg = event_data->mem_seg_len;
-	segment = kzalloc(sizeof(*segment), GFP_KERNEL);
+	segment = vzalloc(sizeof(*segment));
 	if (!segment) {
 		cnss_pr_err("fail to alloc memory for qdss\n");
 		return;
@@ -186,7 +186,14 @@ void cnss_coredump_m3_dump(struct cnss_plat_data *plat_priv,
 {
 	struct cnss_fw_mem *target_mem = plat_priv->fw_mem;
 	struct cnss_dump_segment *segment;
+	struct device *dev;
+	void *dump;
 	int i, ret = 0;
+
+	dump = vzalloc(event_data->size);
+	if (!dump) {
+		return;
+	}
 
 	for (i = 0; i < plat_priv->fw_mem_seg_len; i++) {
 		if (target_mem[i].pa == event_data->addr &&
@@ -200,7 +207,8 @@ void cnss_coredump_m3_dump(struct cnss_plat_data *plat_priv,
 		goto send_resp;
 	}
 
-	segment = kzalloc(sizeof(*segment), GFP_KERNEL);
+	dev = &plat_priv->plat_dev->dev;
+	segment = vzalloc(sizeof(*segment));
 	if (!segment) {
 		cnss_pr_err("fail to alloc memory for m3\n");
 		ret = -EINVAL;
@@ -213,6 +221,7 @@ void cnss_coredump_m3_dump(struct cnss_plat_data *plat_priv,
 	cnss_coredump_build_inline(plat_priv, segment, 1);
 
 send_resp:
+	vfree(dump);
 	ret = cnss_wlfw_m3_dump_upload_done_send_sync(plat_priv,
 						event_data->pdev_id,
 						ret);

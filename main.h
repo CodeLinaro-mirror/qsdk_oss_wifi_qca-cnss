@@ -846,7 +846,7 @@ const char *cnss_get_fw_path(struct cnss_plat_data *plat_priv);
 int cnss_cal_file_download_to_mem(struct cnss_plat_data *plat_priv,
 				  u32 *cal_file_size);
 struct cnss_plat_data *cnss_get_plat_priv_by_chip_id(int chip_id);
-#ifndef CONFIG_TARGET_SDX_WKK
+#ifndef CONFIG_TARGET_SDX75
 int cnss_free_qdss_mem(struct cnss_plat_data *plat_priv);
 #endif
 int cnss_set_fw_type_and_name(struct cnss_plat_data *plat_priv);
