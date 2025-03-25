@@ -7631,26 +7631,28 @@ cnss_check_skip_target_probe(const struct platform_device_id *device_id,
 static int cnss_panic_handler(struct notifier_block *this,
                                 unsigned long event, void *ptr)
 {
-	int i;
 	struct cnss_plat_data *plat_priv = NULL;
-
-	mutex_lock(&rproc_list_mutex);
-	for (i = 0; i < plat_env_index; i++) {
-		if ((plat_env[i]->target_asserted == 1) &&
-		!(test_bit(CNSS_DRIVER_UNLOADING, &plat_env[i]->driver_state) ||
-		test_bit(CNSS_DRIVER_IDLE_SHUTDOWN,
-			     &plat_env[i]->driver_state))){
-			mutex_unlock(&rproc_list_mutex);
-			return 0;
-		}
-	}
+	struct cnss_pci_data *pci_priv = NULL;
+	int timeout;
+	int i;
 
 	for (i = 0; i < plat_env_index; i++) {
-		cnss_pr_dbg("cnss_panic_handler for plat_env %d\n", i);
-		cnss_bus_dev_crash_shutdown(plat_env[i]);
+		plat_priv = plat_env[i];
+		if (!plat_priv || plat_priv->bus_type == CNSS_BUS_AHB)
+			continue;
+
+		cnss_pr_info("cnss_panic_handler for plat_env %d\n", i);
+		cnss_bus_dev_crash_shutdown(plat_priv);
+		pci_priv = plat_priv->bus_priv;
+		if (!pci_priv)
+			continue;
+		timeout = wait_event_timeout(plat_priv->panic_dump_waitq,
+					     test_bit(CNSS_MHI_RDDM_DONE, &pci_priv->mhi_state),
+					     (10 * HZ));
+		if (timeout <= 0)
+			cnss_pr_err("Panic FW dump collection timeout\n");
 	}
 
-	mutex_unlock(&rproc_list_mutex);
 	return 0;
 }
 
@@ -8307,6 +8309,7 @@ static int cnss_probe(struct platform_device *plat_dev)
 	cnss_soft_switch_work_init(plat_priv);
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
 	cnss_crash_work_init(plat_priv);
+	init_waitqueue_head(&plat_priv->panic_dump_waitq);
 #endif
 
 	spin_lock_irqsave(&plat_env_spinlock, flags);

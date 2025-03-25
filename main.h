@@ -777,6 +777,7 @@ struct cnss_plat_data {
 	struct completion phy_cap_complete;
 	bool mm_coldboot_cal_in_progress;
 	bool static_bypass_support;
+	wait_queue_head_t panic_dump_waitq;
 };
 
 #ifdef CONFIG_ARCH_QCOM
