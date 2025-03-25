@@ -1954,6 +1954,13 @@ int cnss_set_mlo_config(struct cnss_module_param *modparam,
 		return 0;
 	}
 
+	if (skip_radio_bmap || skip_cnss ||
+	    (mlo_chip_bitmask != CNSS_DEFAULT_MLO_CHIP_BITMASK)) {
+		cnss_pr_info("Skip radio is set, proceeding default MLO config.\n");
+		cnss_set_default_mlo_config();
+		return 0;
+	}
+
 	if (modparam->mlo_max_groups > CNSS_MAX_MLO_GROUPS) {
 		cnss_pr_err("%s: num_groups %d greater than max %d",
 			     __func__, modparam->mlo_max_groups,
@@ -2155,6 +2162,12 @@ int cnss_get_max_mlo_chips(struct device *dev)
 
 	if (!enable_mlo_support)
 		return -EINVAL;
+
+	if ((skip_radio_bmap || skip_cnss ||
+	    (mlo_chip_bitmask != CNSS_DEFAULT_MLO_CHIP_BITMASK))) {
+		cnss_pr_err("%s: Skip radio u-boot env is present\n", __func__);
+		return -EINVAL;
+	}
 
 	mlo = of_parse_phandle(dev->of_node, "qcom,wsi", 0);
 	if (!mlo) {
