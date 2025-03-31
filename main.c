@@ -164,7 +164,7 @@ static unsigned int driver_mode;
 module_param(driver_mode, uint, 0644);
 MODULE_PARM_DESC(driver_mode, "Global driver mode");
 
-int parallel_probe_enabled;
+int parallel_probe_enabled = 1;
 module_param(parallel_probe_enabled, int, 0644);
 MODULE_PARM_DESC(parallel_probe_enabled, "enable/disable parallel probing");
 
