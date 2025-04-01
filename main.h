@@ -579,6 +579,8 @@ enum cnss_recovery_type {
 
 extern unsigned int enable_mlo_support;
 extern int parallel_probe_enabled;
+extern unsigned int mlo_chip_bitmask;
+extern int plat_env_index;
 
 struct cnss_bus_ops {
 	int (*cnss_bus_init)(struct cnss_plat_data *plat_priv);

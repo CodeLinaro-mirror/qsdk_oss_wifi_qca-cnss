@@ -238,7 +238,7 @@ unsigned int enable_mlo_support = 1;
 module_param(enable_mlo_support, uint, 0600);
 MODULE_PARM_DESC(enable_mlo_support, "enable_mlo_support");
 
-static unsigned int mlo_chip_bitmask = CNSS_DEFAULT_MLO_CHIP_BITMASK;
+unsigned int mlo_chip_bitmask = CNSS_DEFAULT_MLO_CHIP_BITMASK;
 module_param(mlo_chip_bitmask, uint, 0600);
 MODULE_PARM_DESC(mlo_chip_bitmask, "mlo_chip_bitmask");
 
@@ -2053,6 +2053,7 @@ int cnss_set_mlo_group_config(struct cnss_mlo_group_info *src_mlo_config,
 		if (!(mlo_config->soc_chip_bitmap & (1 << i)))
 			continue;
 
+		mlo_chip_bitmask |= (1 << i);
 		chip_info = &mlo_group_info->chip_info[num_chip];
 		chip_info->group_id = group_id;
 		chip_info->soc_id = i;

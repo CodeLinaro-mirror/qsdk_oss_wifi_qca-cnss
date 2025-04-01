@@ -1933,6 +1933,89 @@ static const struct file_operations cnss_pci_switch_link_fops = {
 };
 #endif
 
+static int mlo_config_ini_add(u32 soc_id)
+{
+	struct cnss_plat_data *plat_priv = NULL;
+
+	if ((mlo_chip_bitmask & (1 << soc_id))) {
+		cnss_pr_err("Entries are already present for soc %u\n", soc_id);
+		return -EINVAL;
+	}
+	mlo_chip_bitmask |= (1 << soc_id);
+	cnss_set_default_mlo_config();
+	return 0;
+}
+
+static int mlo_config_ini_remove(u32 soc_id)
+{
+	struct cnss_plat_data *plat_priv = NULL;
+
+	if (!(mlo_chip_bitmask & (1 << soc_id))) {
+		cnss_pr_err("Entries are not present for soc %u\n", soc_id);
+		return -EINVAL;
+	}
+	mlo_chip_bitmask &= ~(1 << soc_id);
+	cnss_set_default_mlo_config();
+	return 0;
+}
+
+static ssize_t cnss_mlo_config_write(struct file *fp,
+				     const char __user *user_buf,
+				     size_t count, loff_t *ppos)
+{
+	struct cnss_plat_data *plat_priv = NULL;
+	char *sptr, *token;
+	int ret = count;
+	char *buf, *ptr;
+	ssize_t rc = 0;
+	u32 soc_id;
+	char *cmd;
+
+	if (!enable_mlo_support) {
+		pr_err("#MLO is disabled!\n");
+		return 0;
+	}
+
+	buf = vmalloc(count);
+	if (!buf)
+		return -ENOMEM;
+	ptr = buf;
+
+	rc = simple_write_to_buffer(buf, count, ppos, user_buf, count);
+	if (rc <= 0)
+		goto exit;
+
+	buf[count - 1] = '\0';
+	sptr = buf;
+	token = strsep(&sptr, " ");
+	if (!token || !sptr) {
+		ret = -EINVAL;
+		goto exit;
+	}
+	cmd = token;
+
+	token = strsep(&sptr, " ");
+	if (!token || kstrtou32(token, 0, &soc_id)) {
+		ret = -EINVAL;
+		goto exit;
+	}
+
+	if (soc_id >= plat_env_index || soc_id < 0) {
+		cnss_pr_err("Invalid soc_id : %u\n", soc_id);
+		ret = -EINVAL;
+		goto exit;
+	}
+	if (!strcmp(cmd, "add")) {
+		ret = mlo_config_ini_add(soc_id);
+	} else if (!strcmp(cmd, "remove")) {
+		ret = mlo_config_ini_remove(soc_id);
+	}
+
+exit:
+	vfree(ptr);
+	return ret;
+}
+
 static ssize_t cnss_mlo_config_read(struct file *file, char __user *user_buf,
 				    size_t count, loff_t *ppos)
 {
@@ -1994,7 +2077,7 @@ static ssize_t cnss_mlo_config_read(struct file *file, char __user *user_buf,
 					 chip_info->soc_id);
 			len += scnprintf(buf + len, size - len,
 					 "mlo_chip_idx=%u\n",
-					 chip_info->soc_id);
+					 chip_info->chip_id);
 			len += scnprintf(buf + len, size - len,
 					 "mlo_num_adj_chip=%u\n",
 					 chip_info->num_adj_chips);
@@ -2024,6 +2107,7 @@ static ssize_t cnss_mlo_config_read(struct file *file, char __user *user_buf,
 
 const struct file_operations cnss_mlo_config_ini_debug_fops = {
 	.read		= cnss_mlo_config_read,
+	.write		= cnss_mlo_config_write,
 	.open		= simple_open,
 	.owner		= THIS_MODULE,
 	.llseek		= default_llseek,
