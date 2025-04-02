@@ -795,11 +795,20 @@ static int cnss_wlfw_phy_cap_send_sync(struct cnss_plat_data *plat_priv)
 	qmi_record(plat_priv->wlfw_service_instance_id,
 		  (QMI_TYPE_RESP | QMI_WLFW_PHY_CAP_RESP_V01), ret,
 		  resp_error_msg);
-	if (resp->mm_coldboot_cal_valid)
+	if (resp->mm_coldboot_cal_valid && plat_priv->cold_boot_support &&
+	    !plat_priv->cal_done && driver_mode == CNSS_MISSION)
 		plat_priv->mm_coldboot_cal = resp->mm_coldboot_cal;
+	else
+		plat_priv->mm_coldboot_cal = false;
 
-	cnss_pr_info("PHY capability: mm_coldboot_cal: %u\n",
+	cnss_pr_info("PHY capability: Mission and Coldboot calibration mode: %u\n",
 		     plat_priv->mm_coldboot_cal);
+
+	if (plat_priv->cold_boot_support && plat_priv->mm_coldboot_cal &&
+	    !plat_priv->cal_done)
+		plat_priv->cal_in_progress = false;
+
+	complete(&plat_priv->phy_cap_complete);
 
 	kfree(req);
 	kfree(resp);
@@ -829,7 +838,8 @@ static int cnss_wlfw_host_cap_send_sync(struct cnss_plat_data *plat_priv)
 	const struct firmware *fw;
 	char filename[FW_INI_FILE_NAME_LEN] = {0};
 
-	if (parallel_probe_enabled && plat_priv->mlo_capable)
+	if (enable_mlo_support && plat_priv->mlo_capable &&
+	    (plat_priv->mm_coldboot_cal || !plat_priv->cal_in_progress))
 		cnss_wait_for_host_cap_ready(plat_priv);
 
 	cnss_pr_dbg("Sending host capability message, state: 0x%lx\n",
@@ -2107,6 +2117,14 @@ int cnss_wlfw_wlan_mode_send_sync(struct cnss_plat_data *plat_priv,
 	req->mode = (enum wlfw_driver_mode_enum_v01)mode;
 	req->hw_debug_valid = 1;
 	req->hw_debug = 0;
+	if (plat_priv->cold_boot_support && !plat_priv->cal_done &&
+			plat_priv->mm_coldboot_cal) {
+		req->do_coldboot_cal_valid = 1;
+		req->do_coldboot_cal = 1;
+		plat_priv->cal_time = jiffies;
+		set_bit(CNSS_COLD_BOOT_CAL, &plat_priv->driver_state);
+	}
+
 	qmi_record(plat_priv->wlfw_service_instance_id,
 		  (QMI_TYPE_REQ | QMI_WLFW_WLAN_MODE_REQ_V01), ret,
 		  resp_error_msg);
@@ -3531,7 +3549,6 @@ static void cnss_wlfw_fw_ready_ind_cb(struct qmi_handle *qmi_wlfw,
 {
 	struct cnss_plat_data *plat_priv =
 		container_of(qmi_wlfw, struct cnss_plat_data, qmi_wlfw);
-	struct cnss_cal_info *cal_info;
 
 	cnss_pr_dbg("Received QMI WLFW FW ready indication\n");
 
@@ -3540,21 +3557,7 @@ static void cnss_wlfw_fw_ready_ind_cb(struct qmi_handle *qmi_wlfw,
 		return;
 	}
 
-	/* Return here as FW sends a different cold boot cal done indication
-	 * in case of single QMI client.
-	 */
-	if (is_ipc_qmi_client_connected(CNSS_PLAT_IPC_DAEMON_QMI_CLIENT_V01, 0))
-		return;
-
-	cal_info = kzalloc(sizeof(*cal_info), GFP_KERNEL);
-	if (!cal_info)
-		return;
-
-	qmi_record(plat_priv->wlfw_service_instance_id,
-		   QMI_WLFW_FW_READY_IND_V01, 0, 0);
-	cal_info->cal_status = CNSS_CAL_DONE;
-	cnss_driver_event_post(plat_priv, CNSS_DRIVER_EVENT_COLD_BOOT_CAL_DONE,
-			       0, cal_info);
+	return;
 }
 
 static void cnss_wlfw_fw_init_done_ind_cb(struct qmi_handle *qmi_wlfw,

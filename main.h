@@ -52,6 +52,7 @@
 #define CNSS_DAEMON_CONNECT_TIMEOUT_MS  30000
 #define CNSS_CAL_DB_FILE_PREFIX "wlfw_cal_01"
 #define CNSS_CAL_DB_FILE_SUFFIX ".bin"
+#define CNSS_PHY_CAP_TIMEOUT_MS	10000
 
 /* FW type value is encoded in the most significant nibble of board_id
  * in DTS or in OTP register
@@ -578,8 +579,9 @@ enum cnss_recovery_type {
 };
 
 extern unsigned int enable_mlo_support;
-extern int parallel_probe_enabled;
 extern unsigned int mlo_chip_bitmask;
+extern int parallel_probe_enabled;
+extern unsigned int driver_mode;
 extern int plat_env_index;
 
 struct cnss_bus_ops {
@@ -769,8 +771,11 @@ struct cnss_plat_data {
 	bool wsi_remap_state;
 	bool disable_ramdump;
 	u8 dynamic_mode_switch;
-	u8 mm_coldboot_cal;
 	struct cnss_radio_info radio_info;
+	u8 mm_coldboot_cal;
+	struct work_struct soft_switch_work;
+	struct completion phy_cap_complete;
+	bool mm_coldboot_cal_in_progress;
 };
 
 #ifdef CONFIG_ARCH_QCOM

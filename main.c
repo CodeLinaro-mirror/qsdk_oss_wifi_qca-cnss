@@ -100,7 +100,6 @@
 #define CNSS_INTX_SUPPORT_MASK          0xF
 #define CNSS_INTX_SUPPORT_SHIFT         4
 
-#define MAX_NUMBER_OF_SOCS		5
 #define CNSS_PROBE_ORDER_MASK		0xF
 #define CNSS_PROBE_ORDER_DEFAULT	0xFF
 #define CNSS_DEFAULT_MLO_CHIP_BITMASK	0xFF
@@ -160,7 +159,7 @@ int timeout_factor = 1;
 module_param(timeout_factor, int, 0644);
 MODULE_PARM_DESC(timeout_factor, "timeout_factor");
 
-static unsigned int driver_mode;
+unsigned int driver_mode;
 module_param(driver_mode, uint, 0644);
 MODULE_PARM_DESC(driver_mode, "Global driver mode");
 
@@ -301,6 +300,7 @@ void *cnss_register_qca8074_cb(struct cnss_plat_data *plat_priv);
 int cnss_unregister_qca8074_cb(struct cnss_plat_data *plat_priv);
 void *cnss_register_qcn9000_cb(struct cnss_plat_data *plat_priv);
 int cnss_unregister_qcn9000_cb(struct cnss_plat_data *plat_priv);
+void cnss_wait_for_cold_boot_cal_done(struct cnss_plat_data *plat_priv);
 #ifndef CONFIG_CNSS2_KERNEL_5_15
 static int cnss_qca8074_notifier_nb(struct notifier_block *nb,
 				  unsigned long code,
@@ -688,6 +688,19 @@ static void cnss_set_plat_cap(void)
 	}
 }
 
+bool cnss_get_mm_coldboot_cal(struct device *dev)
+{
+	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
+
+	if (!plat_priv) {
+		cnss_pr_err("%s: plat_priv is NULL\n", __func__);
+		return false;
+	}
+
+	return plat_priv->mm_coldboot_cal;
+}
+EXPORT_SYMBOL(cnss_get_mm_coldboot_cal);
+
 const char *cnss_get_fw_path(struct cnss_plat_data *plat_priv)
 {
 	switch (plat_priv->device_id) {
@@ -978,7 +991,8 @@ static void cnss_hif_notifier(struct cnss_plat_data *plat_priv,
 	struct cnss_wlan_driver *driver_ops = NULL;
 	enum cnss_notif_type event_code = code;
 
-	if (!plat_priv->cal_in_progress)
+	if (!plat_priv->cal_in_progress &&
+	    !plat_priv->mm_coldboot_cal_in_progress)
 		driver_ops = plat_priv->driver_ops;
 
 	if (event_code == CNSS_AFTER_POWERUP) {
@@ -1187,7 +1201,6 @@ void *__cnss_hif_get(struct cnss_plat_data *plat_priv)
 		     plat_priv->driver_state);
 
 	clear_bit(CNSS_RECOVERY_WAIT_FOR_DRIVER, &plat_priv->driver_state);
-
 	ret = cnss_hif_power_up(plat_priv);
 	if (ret) {
 		cnss_pr_err("%s: cnss_hif_power_up failed %s\n", __func__,
@@ -1344,6 +1357,9 @@ skip_cfg:
 	}
 
 	ret = cnss_wlfw_wlan_mode_send_sync(plat_priv, mode);
+	if (plat_priv->cold_boot_support && !plat_priv->cal_done &&
+			plat_priv->mm_coldboot_cal)
+		cnss_wait_for_cold_boot_cal_done(plat_priv);
 
 	if (plat_priv->qdss_support & (1 << mode)) {
 		cnss_pr_info("Starting QDSS for %s\n", plat_priv->device_name);
@@ -3321,11 +3337,10 @@ int cnss_unregister_notifier_cb(struct cnss_plat_data *plat_priv)
 
 int cnss_wlan_probe_driver(void)
 {
+	struct cnss_plat_data *plat_priv = NULL;
+	int count = 0;
 	int ret;
 	int i;
-	int count = 0;
-	struct cnss_plat_data *plat_priv = NULL;
-	enum cnss_driver_mode cal_mode;
 
 	cnss_sort_probe_order();
 	cnss_set_plat_cap();
@@ -3358,6 +3373,8 @@ int cnss_wlan_probe_driver(void)
 			plat_priv->cal_in_progress = true;
 
 		cnss_mount_firmware(plat_priv);
+		reinit_completion(&plat_priv->phy_cap_complete);
+
 		/* Mission mode */
 		if (!plat_priv->cal_in_progress) {
 			if (!parallel_probe_enabled) {
@@ -3373,16 +3390,9 @@ int cnss_wlan_probe_driver(void)
 		}
 
 		/* Coldboot mode */
-		ret = cnss_register_subsys(plat_priv);
-		if (ret)
-			goto reset_ctx;
-		if (driver_mode == CNSS_FTM)
-			cal_mode = CNSS_FTM_CALIBRATION;
-		else
-			cal_mode = CNSS_CALIBRATION;
-		__cnss_wait_for_fw_ready(plat_priv);
-		__cnss_wlan_enable(plat_priv, NULL, cal_mode, "WIN");
-		schedule_work(&plat_priv->cal_work);
+		plat_priv->cal_in_progress = true;
+		plat_priv->mm_coldboot_cal_in_progress = true;
+		schedule_work(&plat_priv->soft_switch_work);
 		atomic_inc(&cal_in_progress_count);
 	}
 
@@ -3934,7 +3944,8 @@ static int cnss_qca8074_notifier_nb(struct notifier_block *nb,
 	struct cnss_wlan_driver *driver_ops = NULL;
 	int event_code = cnss_get_event(code);
 
-	if (!plat_priv->cal_in_progress)
+	if (!plat_priv->cal_in_progress &&
+	    !plat_priv->mm_coldboot_cal_in_progress)
 		driver_ops = plat_priv->driver_ops;
 
 	if (event_code < 0)
@@ -6990,32 +7001,29 @@ static void cnss_driver_mm_work(struct work_struct *work)
 
 void cnss_wait_for_host_cap_ready(struct cnss_plat_data *plat_priv)
 {
+	struct cnss_mlo_group_info *mlo_group_info;
 	struct cnss_plat_data *prev_plat_priv;
+	int master_chip_idx = 0, count = 0;
 	u64 probe_time = 0;
-	int count = 0;
-	int index;
 
-	if (!plat_priv) {
-		cnss_pr_err("plat_priv is NULL!\n");
-		return;
-	}
-	index = cnss_get_plat_env_index_from_plat_priv(plat_priv);
-	if (index < 0) {
-		cnss_pr_err("Invalid plat_env index for %s",
-			    plat_priv->device_name);
-		return;
-	}
-	if (!index)
+	if (!plat_priv->mlo_chip_info || !plat_priv->mlo_group_info)
 		return;
 
-	prev_plat_priv = plat_env[0];
+	mlo_group_info = plat_priv->mlo_group_info;
+	master_chip_idx = cnss_get_mlo_master_chip_id(mlo_group_info);
+
+	if (plat_priv->mlo_chip_info->chip_id ==
+	    mlo_group_info->chip_info[master_chip_idx].chip_id)
+		return;
+
+	prev_plat_priv = cnss_get_plat_priv_by_chip_id(
+			mlo_group_info->chip_info[master_chip_idx].chip_id);
 	probe_time = jiffies;
 	while (!test_bit(CNSS_FW_MEM_READY, &prev_plat_priv->driver_state)) {
 		msleep(FW_READY_DELAY);
 		if (count++ > probe_timeout * 10) {
 			cnss_pr_err("CNSS host cap timed out %u ms\n",
 			jiffies_to_msecs(jiffies - probe_time));
-			CNSS_ASSERT(0);
 		}
 	}
 	cnss_pr_info("Previous host cap took %u ms\n",
@@ -7084,6 +7092,54 @@ static void cnss_driver_cal_work(struct work_struct *work)
 	atomic_dec(&cal_in_progress_count);
 }
 
+static void cnss_driver_soft_switch_work(struct work_struct *work)
+{
+	enum cnss_driver_mode cal_mode;
+	struct cnss_plat_data *plat_priv =
+		container_of(work, struct cnss_plat_data, soft_switch_work);
+	int ret;
+
+	if (!plat_priv) {
+		cnss_pr_err("plat_priv is NULL!\n");
+		return;
+	}
+
+	ret = cnss_register_subsys(plat_priv);
+	if (ret)
+		return;
+
+	if (!wait_for_completion_timeout(&plat_priv->phy_cap_complete,
+				msecs_to_jiffies(CNSS_PHY_CAP_TIMEOUT_MS))) {
+		cnss_pr_err("Timeout waiting for PHY cap to complete\n");
+		return;
+	}
+
+	if (!plat_priv->mm_coldboot_cal) {
+		plat_priv->mm_coldboot_cal_in_progress = false;
+		if (driver_mode == CNSS_FTM)
+			cal_mode = CNSS_FTM_CALIBRATION;
+		else
+			cal_mode = CNSS_CALIBRATION;
+
+		__cnss_wait_for_fw_ready(plat_priv);
+		__cnss_wlan_enable(plat_priv, NULL, cal_mode, "WIN");
+
+		schedule_work(&plat_priv->cal_work);
+		return;
+	}
+
+	plat_priv->mm_coldboot_cal_in_progress = false;
+	/* assume earlier AFTER_POWERUP event missed. So, call explicitly. */
+	plat_priv->driver_ops->probe(
+				(struct pci_dev *)plat_priv->plat_dev,
+				(const struct pci_device_id *)
+				plat_priv->plat_dev_id);
+	clear_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state);
+	clear_bit(CNSS_DRIVER_LOADING, &plat_priv->driver_state);
+	plat_priv->driver_status = CNSS_INITIALIZED;
+	atomic_dec(&cal_in_progress_count);
+}
+
 static void cnss_cal_work_deinit(struct cnss_plat_data *plat_priv)
 {
 	cancel_work_sync(&plat_priv->cal_work);
@@ -7103,6 +7159,17 @@ static void cnss_mm_work_init(struct cnss_plat_data *plat_priv)
 {
 	INIT_WORK(&plat_priv->mm_work, cnss_driver_mm_work);
 }
+
+static void cnss_soft_switch_work_deinit(struct cnss_plat_data *plat_priv)
+{
+	cancel_work_sync(&plat_priv->soft_switch_work);
+}
+
+static void cnss_soft_switch_work_init(struct cnss_plat_data *plat_priv)
+{
+	INIT_WORK(&plat_priv->soft_switch_work, cnss_driver_soft_switch_work);
+}
+
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
 static void cnss_crash_work_deinit(struct cnss_plat_data *plat_priv)
 {
@@ -7135,6 +7202,7 @@ static int cnss_misc_init(struct cnss_plat_data *plat_priv)
 	init_completion(&plat_priv->rddm_complete);
 	init_completion(&plat_priv->recovery_complete);
 	init_completion(&plat_priv->soc_reset_request_complete);
+	init_completion(&plat_priv->phy_cap_complete);
 	mutex_init(&plat_priv->dev_lock);
 
 	return 0;
@@ -7142,6 +7210,7 @@ static int cnss_misc_init(struct cnss_plat_data *plat_priv)
 
 static void cnss_misc_deinit(struct cnss_plat_data *plat_priv)
 {
+	complete_all(&plat_priv->phy_cap_complete);
 	complete_all(&plat_priv->soc_reset_request_complete);
 	complete_all(&plat_priv->recovery_complete);
 	complete_all(&plat_priv->rddm_complete);
@@ -8204,6 +8273,7 @@ static int cnss_probe(struct platform_device *plat_dev)
 	if (parallel_probe_enabled)
 		cnss_mm_work_init(plat_priv);
 
+	cnss_soft_switch_work_init(plat_priv);
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
 	cnss_crash_work_init(plat_priv);
 #endif
@@ -8297,6 +8367,7 @@ static int cnss_remove(struct platform_device *plat_dev)
 		cnss_mm_work_deinit(plat_priv);
 
 	cnss_cal_work_deinit(plat_priv);
+	cnss_soft_switch_work_deinit(plat_priv);
 	cnss_recovery_work_deinit(plat_priv);
 	cnss_remove_sysfs(plat_priv);
 #ifndef CONFIG_TARGET_SDX_WKK
