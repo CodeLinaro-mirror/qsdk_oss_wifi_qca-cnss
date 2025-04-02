@@ -7012,12 +7012,12 @@ void cnss_wait_for_host_cap_ready(struct cnss_plat_data *plat_priv)
 	while (!test_bit(CNSS_FW_MEM_READY, &prev_plat_priv->driver_state)) {
 		msleep(FW_READY_DELAY);
 		if (count++ > probe_timeout * 10) {
-			cnss_pr_err("CNSS Driver probe timed out %u ms\n",
+			cnss_pr_err("CNSS host cap timed out %u ms\n",
 			jiffies_to_msecs(jiffies - probe_time));
 			CNSS_ASSERT(0);
 		}
 	}
-	cnss_pr_info("Previous target probe took %u ms\n",
+	cnss_pr_info("Previous host cap took %u ms\n",
 		     jiffies_to_msecs(jiffies - probe_time));
 }
 
