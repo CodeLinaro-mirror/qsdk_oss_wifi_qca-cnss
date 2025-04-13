@@ -81,6 +81,7 @@ MODULE_PARM_DESC(log_level, "CNSS2 Module Log Level");
 
 static void *mlo_global_mem[CNSS_MAX_MLO_GROUPS];
 phys_addr_t mlo_global_mem_phys[CNSS_MAX_MLO_GROUPS];
+int master_soc_id;
 
 void pci_update_msi_vectors(struct cnss_msi_config *msi_config,
 				   char *user_name, int num_vectors,
@@ -685,6 +686,12 @@ int cnss_mlo_mem_alloc(struct cnss_plat_data *plat_priv, int index)
 	return 0;
 }
 
+int cnss_get_master_soc_id(void)
+{
+	return master_soc_id;
+}
+EXPORT_SYMBOL(cnss_get_master_soc_id);
+
 static bool cnss_get_mlo_group_master_chip(struct cnss_plat_data *plat_priv)
 {
 	int master_chip_idx = 0;
@@ -717,6 +724,7 @@ void cnss_do_mlo_global_memset(struct cnss_plat_data *plat_priv, u64 mem_size)
 	if (!cnss_get_mlo_group_master_chip(plat_priv))
 		return;
 
+	master_soc_id = plat_priv->mlo_chip_info->soc_id;
 	cnss_pr_info("Resetting the MLO Global mem, memory size is %lld\n",
 		     mem_size);
 	/* Reset the Shared memory only for the first invocation */

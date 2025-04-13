@@ -615,6 +615,10 @@ static inline void *cnss_get_radio_info(struct device *dev)
 {
 	return -EINVAL;
 }
+static inline int cnss_get_master_soc_id(void)
+{
+	return 0;
+}
 #else
 extern int cnss_wlan_register_driver_ops(struct cnss_wlan_driver *driver);
 extern int cnss_wlan_probe_driver(void);
@@ -751,5 +755,6 @@ int cnss_get_num_valid_mlo_links(struct device *dev);
 int cnss_get_device_info(struct device *dev, char *dev_name, u8 *instance_id);
 int cnss_get_num_radios(void);
 void *cnss_get_radio_info(struct device *dev);
+int cnss_get_master_soc_id(void);
 #endif
 #endif /* _NET_CNSS2_H */
