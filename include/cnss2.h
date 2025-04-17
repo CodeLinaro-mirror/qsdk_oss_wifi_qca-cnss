@@ -767,5 +767,6 @@ void *cnss_get_radio_info(struct device *dev);
 int cnss_get_master_soc_id(void);
 bool cnss_get_mm_coldboot_cal(struct device *dev);
 bool cnss_get_static_bypass_enabled(struct device *dev);
+bool cnss_get_cal_done_status(struct device *dev);
 #endif
 #endif /* _NET_CNSS2_H */
