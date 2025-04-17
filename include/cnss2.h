@@ -593,6 +593,10 @@ static inline int cnss_enable_dynamic_mode_switch(struct device *dev, bool disab
 {
 	return -EINVAL;
 }
+static inline int cnss_get_num_valid_mlo_links(struct device *dev)
+{
+	return 0;
+}
 #else
 extern int cnss_wlan_register_driver_ops(struct cnss_wlan_driver *driver);
 extern int cnss_wlan_probe_driver(void);
@@ -725,5 +729,6 @@ void cnss_set_wsi_remap_state(struct device *dev, bool state);
 void cnss_set_pci_link_speed_width(struct device *dev,
 					u16 link_speed, u16 link_width);
 int cnss_enable_dynamic_mode_switch(struct device *dev, bool disable_ramdump);
+int cnss_get_num_valid_mlo_links(struct device *dev);
 #endif
 #endif /* _NET_CNSS2_H */

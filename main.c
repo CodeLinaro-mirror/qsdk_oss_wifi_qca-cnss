@@ -1046,11 +1046,9 @@ static int cnss_update_board_info(struct cnss_plat_data *plat_priv)
 	if (plat_priv->mlo_support) {
 		struct cnss_mlo_chip_info *ch_info = plat_priv->mlo_chip_info;
 		if (plat_priv->firmware_type == CNSS_FW_DUAL_MAC) {
-			ch_info->num_local_links = 2;
 			ch_info->valid_link_ids[0] = 1;
 			ch_info->valid_link_ids[1] = 1;
 		} else {
-			ch_info->num_local_links = 1;
 			ch_info->valid_link_ids[0] = 1;
 			ch_info->valid_link_ids[1] = 0;
 		}
@@ -2383,6 +2381,24 @@ int cnss_get_dev_link_ids(struct device *dev, u8 *link_ids, int max_elements)
 	return i;
 }
 EXPORT_SYMBOL(cnss_get_dev_link_ids);
+
+int cnss_get_num_valid_mlo_links(struct device *dev)
+{
+	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
+	int i, num_valid_links = 0;
+
+	if (!plat_priv || !plat_priv->mlo_support)
+		return -EINVAL;
+
+	if (!plat_priv->mlo_capable || !plat_priv->mlo_chip_info)
+		return -EINVAL;
+
+	for (i = 0; i < CNSS_MAX_LINKS_PER_CHIP; i++) {
+		num_valid_links += plat_priv->mlo_chip_info->valid_link_ids[i];
+	}
+	return num_valid_links;
+}
+EXPORT_SYMBOL(cnss_get_num_valid_mlo_links);
 
 static int cnss_get_group_id(struct cnss_plat_data *plat_priv)
 {
