@@ -608,6 +608,23 @@ int cnss_get_plat_env_index_from_plat_priv(struct cnss_plat_data *plat_priv)
 	return -EINVAL;
 }
 
+int cnss_get_device_info(struct device *dev, char *dev_name, u8 *instance_id)
+{
+	struct cnss_plat_data *plat_priv;
+
+	plat_priv = cnss_bus_dev_to_plat_priv(dev);
+	if (!plat_priv) {
+		cnss_pr_err("The plat_priv is NULL\n");
+		return -ENODEV;
+	}
+
+	strlcpy(dev_name, plat_priv->device_name, sizeof(plat_priv->device_name));
+	*instance_id = plat_priv->wlfw_service_instance_id;
+
+	return 0;
+}
+EXPORT_SYMBOL(cnss_get_device_info);
+
 const char *cnss_get_fw_path(struct cnss_plat_data *plat_priv)
 {
 	switch (plat_priv->device_id) {
