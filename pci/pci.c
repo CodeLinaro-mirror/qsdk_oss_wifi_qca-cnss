@@ -5572,6 +5572,10 @@ void cnss_pci_remove(struct pci_dev *pci_dev)
 		break;
 	}
 
+	if (plat_priv->partner_chip_state)
+		cnss_send_partner_chip_state_info(plat_priv,
+						  CNSS_WSI_LINK_DISABLE);
+
 	/* Call global reset here */
 	cnss_pci_global_reset(pci_priv);
 

@@ -201,6 +201,7 @@ static struct qmi_msg_string qmi_str_table[] = {
 	{ "QDSS_MEM_RDY_", QMI_WLFW_QDSS_MEM_READY_IND_V01 },
 	{ "MLO_WSI_REMAP_", QMI_WLFW_MLO_RECONFIG_INFO_REQ_V01 },
 	{ "DUMP_DRR_REGION_", QMI_WLFW_DUMP_DDR_REGION_IND_V01 },
+	{ "PARTNER_CHIP_STATE_", QMI_WLFW_PARTNER_CHIP_STATE_INFO_REQ_V01 },
 	{ "UNKNOWN_", 0 },
 };
 
@@ -4027,6 +4028,84 @@ static void cnss_wlfw_dump_ddr_region_ind_cb(struct qmi_handle *qmi_wlfw,
 
 free_event_data:
 	kfree(event_data);
+}
+
+int cnss_wlfw_partner_chip_state_info_send_sync(
+					struct cnss_plat_data *plat_priv,
+					u8 input)
+{
+	struct wlfw_partner_chip_state_info_req_msg_v01 *req;
+	struct wlfw_partner_chip_state_info_resp_msg_v01 *resp;
+	int resp_error_msg = 0;
+	struct qmi_txn txn;
+	int ret = 0;
+
+	req = kzalloc(sizeof(*req), GFP_KERNEL);
+	if (!req)
+		return -ENOMEM;
+
+	resp = kzalloc(sizeof(*resp), GFP_KERNEL);
+	if (!resp) {
+		kfree(req);
+		return -ENOMEM;
+	}
+
+	req->partner_chip_state_valid = 1;
+	req->partner_chip_state = input;
+
+	qmi_record(plat_priv->wlfw_service_instance_id,
+		  (QMI_TYPE_REQ | QMI_WLFW_PARTNER_CHIP_STATE_INFO_REQ_V01),
+		  ret, resp_error_msg);
+
+	ret = qmi_txn_init(&plat_priv->qmi_wlfw, &txn,
+		wlfw_partner_chip_state_info_resp_msg_v01_ei, resp);
+	if (ret < 0) {
+		cnss_pr_err("Failed to initialize txn for partner chip state info request, err: %d\n",
+			    ret);
+		goto out;
+	}
+
+	ret = qmi_send_request(&plat_priv->qmi_wlfw, NULL, &txn,
+			       QMI_WLFW_PARTNER_CHIP_STATE_INFO_REQ_V01,
+		WLFW_PARTNER_CHIP_STATE_INFO_REQ_MSG_V01_MAX_MSG_LEN,
+		wlfw_partner_chip_state_info_req_msg_v01_ei, req);
+	if (ret < 0) {
+		qmi_txn_cancel(&txn);
+		cnss_pr_err("Failed to send partner chip state info request, err: %d\n",
+			    ret);
+		goto out;
+	}
+
+	ret = qmi_txn_wait(&txn, QMI_WLFW_TIMEOUT_JF);
+	if (ret < 0) {
+		resp_error_msg = -QMI_RESULT_FAILURE_V01;
+		cnss_pr_err("Failed to wait for response of partner chip state info request, err: %d\n",
+			    ret);
+		goto out;
+	}
+
+	if (resp->resp.result != QMI_RESULT_SUCCESS_V01) {
+		cnss_pr_err("Partner chip state info request failed, result: %d, err: %d\n",
+			    resp->resp.result, resp->resp.error);
+		ret = -resp->resp.result;
+		resp_error_msg = resp->resp.error;
+		goto out;
+	}
+
+	qmi_record(plat_priv->wlfw_service_instance_id,
+		  (QMI_TYPE_RESP | QMI_WLFW_PARTNER_CHIP_STATE_INFO_REQ_V01),
+		  ret, resp_error_msg);
+	kfree(req);
+	kfree(resp);
+	return 0;
+
+out:
+	qmi_record(plat_priv->wlfw_service_instance_id,
+		  (QMI_WLFW_PARTNER_CHIP_STATE_INFO_REQ_V01),
+		  ret, resp_error_msg);
+	kfree(req);
+	kfree(resp);
+	return ret;
 }
 
 static struct qmi_msg_handler qmi_wlfw_msg_handlers[] = {

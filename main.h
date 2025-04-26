@@ -478,6 +478,12 @@ enum cnss_cal_status {
 	CNSS_CAL_TIMEOUT,
 };
 
+enum cnss_partner_chip_state {
+	CNSS_WSI_LINK_NONE,
+	CNSS_WSI_LINK_ENABLE,
+	CNSS_WSI_LINK_DISABLE,
+};
+
 struct cnss_cal_info {
 	enum cnss_cal_status cal_status;
 };
@@ -783,6 +789,7 @@ struct cnss_plat_data {
 	char dump_file_name[CNSS_GENL_STR_LEN_MAX];
 	struct completion early_cal_complete;
 	bool early_cal_support;
+	bool partner_chip_state;
 };
 
 #ifdef CONFIG_ARCH_QCOM
@@ -883,4 +890,6 @@ void cnss_set_board_id(struct cnss_plat_data *plat_priv);
 int cnss_reset_board_info(struct cnss_plat_data *plat_priv);
 void cnss_wait_for_host_cap_ready(struct cnss_plat_data *plat_priv);
 void cnss_get_early_cal_supported(struct cnss_plat_data *plat_priv);
+void cnss_send_partner_chip_state_info(struct cnss_plat_data *ssr_plat_priv,
+				       u8 input);
 #endif /* _CNSS_MAIN_H */
