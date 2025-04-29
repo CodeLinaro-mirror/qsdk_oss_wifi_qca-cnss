@@ -624,6 +624,10 @@ static inline bool cnss_get_mm_coldboot_cal(struct device *dev)
 {
 	return false;
 }
+bool cnss_get_static_bypass_enabled(struct device *dev)
+{
+	return false;
+}
 #else
 extern int cnss_wlan_register_driver_ops(struct cnss_wlan_driver *driver);
 extern int cnss_wlan_probe_driver(void);
@@ -762,5 +766,6 @@ int cnss_get_num_radios(void);
 void *cnss_get_radio_info(struct device *dev);
 int cnss_get_master_soc_id(void);
 bool cnss_get_mm_coldboot_cal(struct device *dev);
+bool cnss_get_static_bypass_enabled(struct device *dev);
 #endif
 #endif /* _NET_CNSS2_H */

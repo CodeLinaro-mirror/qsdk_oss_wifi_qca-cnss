@@ -639,6 +639,8 @@ int cnss_get_num_radios(void)
 		plat_priv = plat_env[i];
 		if (!plat_priv)
 			continue;
+		if (plat_priv->static_bypass_support)
+			continue;
 		if (plat_priv->firmware_type == CNSS_FW_DUAL_MAC)
 			radio_count += 2;
 		else
@@ -1359,6 +1361,9 @@ skip_cfg:
 	cnss_pr_info("Mission mode with Coldboot calibration operation: %u\n",
 		     plat_priv->mm_coldboot_cal);
 	ret = cnss_wlfw_wlan_mode_send_sync(plat_priv, mode);
+	if (plat_priv->static_bypass_support)
+		return ret;
+
 	if (plat_priv->cold_boot_support && !plat_priv->cal_done &&
 			plat_priv->mm_coldboot_cal)
 		cnss_wait_for_cold_boot_cal_done(plat_priv);
@@ -3337,6 +3342,29 @@ int cnss_unregister_notifier_cb(struct cnss_plat_data *plat_priv)
 	return 0;
 }
 
+bool cnss_get_static_bypass_enabled(struct device *dev)
+{
+	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
+
+	if (!plat_priv)
+		return false;
+
+	return plat_priv->static_bypass_support;
+}
+EXPORT_SYMBOL(cnss_get_static_bypass_enabled);
+
+static void cnss_set_static_bypass_support(struct cnss_plat_data *plat_priv)
+{
+	plat_priv->static_bypass_support = false;
+
+	if (cnss_get_global_mlo_support() && enable_mlo_support &&
+	    !plat_priv->mlo_capable) {
+		plat_priv->static_bypass_support = true;
+
+		parallel_probe_enabled = 0;
+	}
+}
+
 int cnss_wlan_probe_driver(void)
 {
 	struct cnss_plat_data *plat_priv = NULL;
@@ -3371,6 +3399,7 @@ int cnss_wlan_probe_driver(void)
 			set_bit(CNSS_DRIVER_LOADING, &plat_priv->driver_state);
 		}
 #endif
+		cnss_set_static_bypass_support(plat_priv);
 		if (plat_priv->cold_boot_support && !plat_priv->cal_done)
 			plat_priv->cal_in_progress = true;
 

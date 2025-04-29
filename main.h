@@ -776,6 +776,7 @@ struct cnss_plat_data {
 	struct work_struct soft_switch_work;
 	struct completion phy_cap_complete;
 	bool mm_coldboot_cal_in_progress;
+	bool static_bypass_support;
 };
 
 #ifdef CONFIG_ARCH_QCOM
