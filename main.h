@@ -54,6 +54,7 @@
 #define CNSS_CAL_DB_FILE_PREFIX "wlfw_cal_01"
 #define CNSS_CAL_DB_FILE_SUFFIX ".bin"
 #define CNSS_PHY_CAP_TIMEOUT_MS	10000
+#define CNSS_EARLY_CAL_TIMEOUT_MS 60000
 
 /* FW type value is encoded in the most significant nibble of board_id
  * in DTS or in OTP register
@@ -780,6 +781,8 @@ struct cnss_plat_data {
 	bool static_bypass_support;
 	wait_queue_head_t panic_dump_waitq;
 	char dump_file_name[CNSS_GENL_STR_LEN_MAX];
+	struct completion early_cal_complete;
+	bool early_cal_support;
 };
 
 #ifdef CONFIG_ARCH_QCOM
@@ -879,4 +882,5 @@ bool cnss_check_be_target(struct cnss_plat_data *plat_priv);
 void cnss_set_board_id(struct cnss_plat_data *plat_priv);
 int cnss_reset_board_info(struct cnss_plat_data *plat_priv);
 void cnss_wait_for_host_cap_ready(struct cnss_plat_data *plat_priv);
+void cnss_get_early_cal_supported(struct cnss_plat_data *plat_priv);
 #endif /* _CNSS_MAIN_H */

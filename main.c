@@ -253,7 +253,7 @@ static unsigned int soft_switch;
 module_param(soft_switch, uint, 0600);
 MODULE_PARM_DESC(soft_switch, "soft_switch");
 
-static unsigned int probe_timeout = 200;
+static unsigned int probe_timeout = 300;
 module_param(probe_timeout, uint, 0600);
 MODULE_PARM_DESC(probe_timeout, "Timeout for cnss_wlan_probe_driver");
 
@@ -2013,9 +2013,7 @@ struct cnss_plat_data *cnss_get_plat_priv_by_chip_id(int chip_id)
 			continue;
 		}
 
-		if (!plat_priv->mlo_support ||
-		    ((plat_priv->bus_type == CNSS_BUS_PCI) &&
-		     !plat_priv->pci_dev))
+		if (!plat_priv->mlo_support)
 			continue;
 
 		if (!plat_priv->mlo_capable || !plat_env[i]->mlo_chip_info)
@@ -2076,11 +2074,8 @@ int cnss_set_mlo_group_config(struct cnss_mlo_group_info *src_mlo_config,
 			return -EINVAL;
 		}
 
-		if (!plat_priv->mlo_support ||
-		    ((plat_priv->bus_type == CNSS_BUS_PCI) &&
-		     !plat_priv->pci_dev)) {
+		if (!plat_priv->mlo_support)
 			continue;
-		}
 
 		if (!(mlo_config->soc_chip_bitmap & (1 << i)))
 			continue;
@@ -2555,9 +2550,7 @@ void cnss_set_default_mlo_config(void)
 			return;
 		}
 
-		if (!plat_priv->mlo_support ||
-		    ((plat_priv->bus_type == CNSS_BUS_PCI) &&
-		     !plat_priv->pci_dev))
+		if (!plat_priv->mlo_support)
 			continue;
 
 		if (mlo_chip_bitmask == 0xFF) {
@@ -3373,6 +3366,37 @@ static void cnss_set_static_bypass_support(struct cnss_plat_data *plat_priv)
 	}
 }
 
+void cnss_get_early_cal_supported(struct cnss_plat_data *plat_priv)
+{
+	struct device *dev = &plat_priv->plat_dev->dev;
+	struct device_node *child_node = NULL;
+	struct device_node *early_cal = NULL;
+
+	plat_priv->early_cal_support = false;
+	if (plat_priv->bus_type == CNSS_BUS_AHB)
+		return;
+
+	early_cal = of_parse_phandle(dev->of_node, "early_cal", 0);
+	if (!early_cal) {
+		cnss_pr_info("Early cal not enabled in wifi nodes\n");
+		return;
+	}
+
+	of_node_put(early_cal);
+	child_node = of_get_next_child(early_cal, NULL);
+	if (!child_node) {
+		cnss_pr_info("Early cal not enabled in PCIe nodes\n");
+		return;
+	}
+
+	if (of_property_match_string(child_node->child,
+				     "qcom,early_cal_enabled", "okay") >= 0)
+		plat_priv->early_cal_support = true;
+
+	cnss_pr_info("Early coldobot calibration enabled: %d\n",
+		     plat_priv->early_cal_support);
+}
+
 int cnss_wlan_probe_driver(void)
 {
 	struct cnss_plat_data *plat_priv = NULL;
@@ -3392,8 +3416,14 @@ int cnss_wlan_probe_driver(void)
 		plat_priv->target_assert_timestamp = 0;
 		plat_priv->driver_status = CNSS_LOAD_UNLOAD;
 
+		cnss_get_early_cal_supported(plat_priv);
+		if (plat_priv->cold_boot_support && !plat_priv->cal_done &&
+		    !plat_priv->early_cal_support)
+			plat_priv->cal_in_progress = true;
+
 #if defined CNSS_PCI_SUPPORT
-		if (plat_priv->bus_type == CNSS_BUS_PCI) {
+		if (plat_priv->bus_type == CNSS_BUS_PCI &&
+		    !plat_priv->early_cal_support) {
 			/* If plat_priv->pci_dev is NULL, the PCI device is not
 			 * enumerated, set driver status and skip that device
 			 * so that other devices can continue to boot.
@@ -3408,9 +3438,6 @@ int cnss_wlan_probe_driver(void)
 		}
 #endif
 		cnss_set_static_bypass_support(plat_priv);
-		if (plat_priv->cold_boot_support && !plat_priv->cal_done)
-			plat_priv->cal_in_progress = true;
-
 		cnss_mount_firmware(plat_priv);
 		reinit_completion(&plat_priv->phy_cap_complete);
 
@@ -7081,6 +7108,32 @@ static void cnss_driver_mm_work(struct work_struct *work)
 		return;
 	}
 
+	if (plat_priv->cold_boot_support && !plat_priv->cal_done &&
+	    plat_priv->early_cal_support) {
+		cnss_pr_info("Waiting for early cal for device 0x%lx\n",
+			     plat_priv->device_id);
+		if (!wait_for_completion_timeout(&plat_priv->early_cal_complete,
+					msecs_to_jiffies(CNSS_EARLY_CAL_TIMEOUT_MS))) {
+			cnss_pr_err("Timeout waiting for Early cal to complete\n");
+			return;
+		}
+	}
+
+	if (plat_priv->bus_type == CNSS_BUS_PCI &&
+	    plat_priv->early_cal_support) {
+		/* If plat_priv->pci_dev is NULL, the PCI device is not
+		 * enumerated, set driver status and skip that device
+		 * so that other devices can continue to boot.
+		 */
+		if (!plat_priv->pci_dev) {
+			plat_priv->driver_status = CNSS_INITIALIZED;
+			return;
+		}
+		if (plat_priv->ops->cnss_bus_init)
+			plat_priv->ops->cnss_bus_init(plat_priv);
+		set_bit(CNSS_DRIVER_LOADING, &plat_priv->driver_state);
+	}
+
 	cnss_register_subsys(plat_priv);
 
 	plat_priv->driver_status = CNSS_INITIALIZED;
@@ -7107,7 +7160,10 @@ void cnss_wait_for_host_cap_ready(struct cnss_plat_data *plat_priv)
 	prev_plat_priv = cnss_get_plat_priv_by_chip_id(
 			mlo_group_info->chip_info[master_chip_idx].chip_id);
 	probe_time = jiffies;
-	while (!test_bit(CNSS_FW_MEM_READY, &prev_plat_priv->driver_state)) {
+
+	/* wait for the master chip to set FW ready in Mission mode */
+	while (prev_plat_priv->cal_in_progress ||
+	       !test_bit(CNSS_FW_MEM_READY, &prev_plat_priv->driver_state)) {
 		msleep(FW_READY_DELAY);
 		if (count++ > probe_timeout * 10) {
 			cnss_pr_err("CNSS host cap timed out %u ms\n",
@@ -7291,6 +7347,7 @@ static int cnss_misc_init(struct cnss_plat_data *plat_priv)
 	init_completion(&plat_priv->recovery_complete);
 	init_completion(&plat_priv->soc_reset_request_complete);
 	init_completion(&plat_priv->phy_cap_complete);
+	init_completion(&plat_priv->early_cal_complete);
 	mutex_init(&plat_priv->dev_lock);
 
 	return 0;
@@ -7298,6 +7355,7 @@ static int cnss_misc_init(struct cnss_plat_data *plat_priv)
 
 static void cnss_misc_deinit(struct cnss_plat_data *plat_priv)
 {
+	complete_all(&plat_priv->early_cal_complete);
 	complete_all(&plat_priv->phy_cap_complete);
 	complete_all(&plat_priv->soc_reset_request_complete);
 	complete_all(&plat_priv->recovery_complete);

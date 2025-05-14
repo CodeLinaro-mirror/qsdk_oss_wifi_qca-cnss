@@ -1139,6 +1139,19 @@ static int cnss_pci_set_qrtr_node_id(struct cnss_pci_data *pci_priv)
 	return ret;
 }
 
+#if defined(CONFIG_CNSS2_KERNEL_MSM) || \
+	(KERNEL_VERSION(5, 7, 0) <= LINUX_VERSION_CODE)
+static void cnss_reset_mhi_state(struct cnss_pci_data *pci_priv)
+{
+	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
+	u32 val = 0;
+
+	cnss_pci_reg_read(plat_priv, MHISTATUS, &val);
+	cnss_pr_info("Setting MHI State to reset, current state: 0x%x", val);
+	cnss_pci_reg_write(pci_priv, MHICTRL, MHICTRL_RESET_MASK);
+}
+#endif
+
 int cnss_pci_start_mhi(struct cnss_pci_data *pci_priv)
 {
 	int ret = 0;
@@ -1155,6 +1168,8 @@ int cnss_pci_start_mhi(struct cnss_pci_data *pci_priv)
 
 	if (MHI_TIMEOUT_OVERWRITE_MS)
 		pci_priv->mhi_ctrl->timeout_ms = MHI_TIMEOUT_OVERWRITE_MS * 1000;
+
+	cnss_reset_mhi_state(pci_priv);
 
 	ret = cnss_pci_set_mhi_state(pci_priv, CNSS_MHI_INIT);
 	if (ret)
@@ -4369,19 +4384,6 @@ void cnss_pci_global_reset(struct cnss_pci_data *pci_priv)
 }
 #endif
 
-#if defined(CONFIG_CNSS2_KERNEL_MSM) || \
-	(KERNEL_VERSION(5, 7, 0) <= LINUX_VERSION_CODE)
-static void cnss_reset_mhi_state(struct cnss_pci_data *pci_priv)
-{
-	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
-	u32 val = 0;
-
-	cnss_pci_reg_read(plat_priv, MHISTATUS, &val);
-	cnss_pr_info("Setting MHI State to reset, current state: 0x%x", val);
-	cnss_pci_reg_write(pci_priv, MHICTRL, MHICTRL_RESET_MASK);
-}
-#endif
-
 static void cnss_pci_disable_bus(struct cnss_pci_data *pci_priv)
 {
 	struct pci_dev *pci_dev = pci_priv->pci_dev;
@@ -5788,6 +5790,13 @@ int cnss_pci_probe_basic(struct pci_dev *pci_dev,
 		goto disable_bus;
 	}
 
+	cnss_get_early_cal_supported(plat_priv);
+	if (plat_priv->early_cal_support) {
+		cnss_pr_info("Early cal completed successfully for device 0x%lx\n",
+			     plat_priv->device_id);
+		plat_priv->cal_done = true;
+		complete(&plat_priv->early_cal_complete);
+	}
 	return 0;
 
 disable_bus:

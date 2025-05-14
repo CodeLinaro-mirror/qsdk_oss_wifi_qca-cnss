@@ -840,7 +840,8 @@ static int cnss_wlfw_host_cap_send_sync(struct cnss_plat_data *plat_priv)
 	char filename[FW_INI_FILE_NAME_LEN] = {0};
 
 	if (enable_mlo_support && plat_priv->mlo_capable &&
-	    (plat_priv->mm_coldboot_cal || !plat_priv->cal_in_progress))
+	    (plat_priv->mm_coldboot_cal || plat_priv->early_cal_support ||
+	    !plat_priv->cal_in_progress))
 		cnss_wait_for_host_cap_ready(plat_priv);
 
 	cnss_pr_dbg("Sending host capability message, state: 0x%lx\n",
