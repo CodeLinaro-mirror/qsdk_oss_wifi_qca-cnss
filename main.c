@@ -1356,6 +1356,8 @@ skip_cfg:
 #endif
 	}
 
+	cnss_pr_info("Mission mode with Coldboot calibration operation: %u\n",
+		     plat_priv->mm_coldboot_cal);
 	ret = cnss_wlfw_wlan_mode_send_sync(plat_priv, mode);
 	if (plat_priv->cold_boot_support && !plat_priv->cal_done &&
 			plat_priv->mm_coldboot_cal)

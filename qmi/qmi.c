@@ -795,14 +795,15 @@ static int cnss_wlfw_phy_cap_send_sync(struct cnss_plat_data *plat_priv)
 	qmi_record(plat_priv->wlfw_service_instance_id,
 		  (QMI_TYPE_RESP | QMI_WLFW_PHY_CAP_RESP_V01), ret,
 		  resp_error_msg);
+
+	cnss_pr_info("PHY capability mm_coldboot_cal: %u\n",
+		     resp->mm_coldboot_cal);
 	if (resp->mm_coldboot_cal_valid && plat_priv->cold_boot_support &&
-	    !plat_priv->cal_done && driver_mode == CNSS_MISSION)
+	    !plat_priv->cal_done && (driver_mode == CNSS_MISSION ||
+	    driver_mode == CNSS_FTM))
 		plat_priv->mm_coldboot_cal = resp->mm_coldboot_cal;
 	else
 		plat_priv->mm_coldboot_cal = false;
-
-	cnss_pr_info("PHY capability: Mission and Coldboot calibration mode: %u\n",
-		     plat_priv->mm_coldboot_cal);
 
 	if (plat_priv->cold_boot_support && plat_priv->mm_coldboot_cal &&
 	    !plat_priv->cal_done)
