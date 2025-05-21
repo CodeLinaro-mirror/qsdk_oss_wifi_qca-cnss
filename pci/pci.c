@@ -5396,6 +5396,15 @@ void cnss_set_pci_link_speed_width(struct device *dev, u16 link_speed,
 		cnss_pr_info("%s The PCI Generation is %d\n", __func__,
 				link_speed);
 
+	/* Check if the link width is supported, if not,
+	 * set the default link width.
+	 */
+	if (link_width > pci_priv->def_link_width) {
+		cnss_pr_dbg("%s: Selected link width %d is not supported, setting default link width %d\n",
+			    __func__, link_width, pci_priv->def_link_width);
+		link_width = pci_priv->def_link_width;
+	}
+
 	ret = pcie_set_link_width(root_port, link_width);
 	if (ret)
 		cnss_pr_err("%s Failed to set link width %d\n", __func__, ret);
