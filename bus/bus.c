@@ -13,12 +13,12 @@
 
 #include <linux/types.h>
 #if defined CNSS_PCI_SUPPORT
-#include <pci/pci.h>
+#include "pci/pci.h"
 #endif
-#include <cnss_common/cnss_common.h>
-#include <bus/bus.h>
+#include "cnss_common/cnss_common.h"
+#include "bus/bus.h"
 #ifdef CNSS_DEBUG_SUPPORT
-#include <debug/debug.h>
+#include "debug/debug.h"
 #endif
 #include <linux/of_address.h>
 

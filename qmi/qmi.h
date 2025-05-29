@@ -14,7 +14,7 @@
 #ifndef _CNSS_QMI_H
 #define _CNSS_QMI_H
 #define CONFIG_CNSS2_QMI 1
-#include <wlan_firmware_service_v01.h>
+#include "wlan_firmware_service_v01.h"
 
 #define WLFW_SERVICE_INS_ID_V01_QCA8074		2
 #define WLFW_SERVICE_INS_ID_V01_QCN6122		0x40
@@ -110,9 +110,9 @@ struct cnss_qmi_event_dump_ddr_region {
 };
 
 #ifdef CONFIG_CNSS2_QMI
-#include <wlan_firmware_service_v01.h>
-#include <coexistence_service_v01.h>
-#include <ip_multimedia_subsystem_private_service_v01.h>
+#include "wlan_firmware_service_v01.h"
+#include "coexistence_service_v01.h"
+#include "ip_multimedia_subsystem_private_service_v01.h"
 
 const char *get_device_name_from_instance_id(u8 instance_id);
 void cnss_dump_qmi_history(void);

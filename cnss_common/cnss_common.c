@@ -17,7 +17,7 @@
 #include <linux/of_reserved_mem.h>
 #include <linux/irq.h>
 #include <linux/module.h>
-#include <include/cnss2.h>
+#include "include/cnss2.h"
 #include <linux/debugfs.h>
 #ifdef CONFIG_CNSS2_DMA_ALLOC
 #include <linux/cma.h>
@@ -29,16 +29,16 @@
 #include <soc/qcom/qgic2m.h>
 #endif
 
-#include <cnss_common/cnss_common.h>
-#include <main.h>
+#include "cnss_common/cnss_common.h"
+#include "../main.h"
 #if defined CNSS_DEBUG_SUPPORT
-#include <debug/debug.h>
+#include "debug/debug.h"
 #endif
 #if defined CNSS_PCI_SUPPORT
-#include <pci/pci.h>
+#include "pci/pci.h"
 #endif
-#include <bus/bus.h>
-#include <legacyirq/legacyirq.h>
+#include "bus/bus.h"
+#include "legacyirq/legacyirq.h"
 #if (KERNEL_VERSION(5, 15, 0) <= LINUX_VERSION_CODE)
 #include <linux/devcoredump.h>
 #include <linux/elf.h>

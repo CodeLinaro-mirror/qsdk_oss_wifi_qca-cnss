@@ -24,13 +24,13 @@
 #include <soc/qcom/qgic2m.h>
 #endif
 
-#include <main.h>
+#include "../main.h"
 #ifdef CNSS_DEBUG_SUPPORT
-#include <debug/debug.h>
+#include "debug/debug.h"
 #endif
-#include <bus/bus.h>
-#include <cnss_common/cnss_common.h>
-#include <legacyirq/legacyirq.h>
+#include "bus/bus.h"
+#include "cnss_common/cnss_common.h"
+#include "legacyirq/legacyirq.h"
 #if (KERNEL_VERSION(5, 15, 0) <= LINUX_VERSION_CODE)
 #include <linux/devcoredump.h>
 #include <linux/elf.h>
