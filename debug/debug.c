@@ -16,10 +16,10 @@
 #include <linux/debugfs.h>
 #include <linux/module.h>
 #include <linux/sizes.h>
-#include <cnss_common/cnss_common.h>
-#include <main.h>
-#include <debug/debug.h>
-#include <pci/pci.h>
+#include "cnss_common/cnss_common.h"
+#include "../main.h"
+#include "debug/debug.h"
+#include "pci/pci.h"
 
 #define MAX_MLO_SOC_BITMASK	8
 

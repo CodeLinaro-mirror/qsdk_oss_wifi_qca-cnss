@@ -12,12 +12,12 @@
 #endif
 #include <linux/limits.h>
 #include <linux/slab.h>
-#include <qmi/cnss_plat_ipc_qmi.h>
-#include <cnss_plat_ipc_service_v01.h>
-#include <main.h>
-#include <cnss_common/cnss_common.h>
+#include "qmi/cnss_plat_ipc_qmi.h"
+#include "cnss_plat_ipc_service_v01.h"
+#include "../main.h"
+#include "cnss_common/cnss_common.h"
 #ifdef CNSS_DEBUG_SUPPORT
-#include <debug/debug.h>
+#include "debug/debug.h"
 #endif
 
 #define CNSS_MAX_FILE_SIZE (32 * 1024 * 1024)

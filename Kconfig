@@ -1,16 +1,16 @@
 config CNSS2
 	bool "CNSS2 Platform Driver for Wi-Fi Module"
 	depends on !(ARCH_IPQ40XX || ARCH_IPQ806x)
-	help
-	This module adds the support for Connectivity Subsystem (CNSS) used
-	for PCIe based Wi-Fi devices with QCA6174/QCN9000 chipsets.
-	This driver also adds support to integrate WLAN module to subsystem
-	restart framework.
+	---help---
+	  This module adds the support for Connectivity Subsystem (CNSS) used
+	  for PCIe based Wi-Fi devices with QCA6174/QCN9000 chipsets.
+	  This driver also adds support to integrate WLAN module to subsystem
+	  restart framework.
 
 config CNSS2_DEBUG
 	bool "CNSS2 Platform Driver Debug Support"
 	depends on CNSS2
-	help
+	---help---
 	  This option is to enable CNSS2 platform driver debug support which
 	  primarily includes providing additional verbose logs for certain
 	  features, enabling kernel panic for certain cases to aid the
@@ -19,87 +19,36 @@ config CNSS2_DEBUG
 config CNSS2_PM
 	bool "CNSS2 power save support"
 	depends on CNSS2
-	help
+	---help---
 	  This option is to enable power save support in cnss2
 
 config CNSS2_PCI_DRIVER
 	bool "CNSS2 pci driver support"
 	depends on CNSS2
-	help
+	---help---
 	  This option is to enable cnss2 to register the PCI driver and
 	  initialize the radios on its own
 
 config CNSS2_CALIBRATION_SUPPORT
 	bool "CNSS2 calibration support"
 	depends on CNSS2
-	help
+	---help---
 	  This option is to enable cnss2 calibration support
 
 config CNSS2_SMMU
 	bool "CNSS2 smmu support"
 	depends on CNSS2
-	help
+	---help---
 	  This option is to enable cnss2 smmu support
 
 config CNSS2_RAMDUMP
 	bool "CNSS2 ramdump support"
 	depends on CNSS2
-	help
+	---help---
 	  This option is to enable cnss2 ramdump support
 
 config CNSS2_GENL
 	bool "CNSS2 genl support"
 	depends on CNSS2
-	help
+	---help---
 	  This option is to enable cnss2 genl support
-
-config QCA_CNSS_PCI_SUPPORT
-	bool "QCA CNSS PCI SUPPORT"
-	default n
-
-config QCA_CNSS_DEBUG_SUPPORT
-	bool "QCA CNSS DEBUG SUPPORT"
-	default n
-
-config QCA_CNSS_STREAM_MOD
-	bool "QCA CNSS STREAM MOD"
-	default n
-
-config MHI_BUS_MISC
-	bool "MHI BUS MISC"
-	default n
-
-config CNSS_OUT_OF_TREE
-	bool "CNSS OUT OF TREE"
-	default n
-config BUILD_OWRT
-	bool "BUILD OWRT"
-	default n
-
-config TARGET_SDX75
-	bool "TARGET SDX75"
-	depends on CONFIG_TARGET_sdx75
-	default n
-
-config TARGET_SDX85
-	bool "TARGET SDX85"
-	default n
-
-config QCA_CNSS_LINUX_6_x_SUPPORT
-	bool "QCA CNSS LINUX 6 X SUPPORT"
-	default n
-
-config QCA_STREAM
-	bool "QCA STREAM support"
-	depends on QCA_CNSS_STREAM_MOD
-	depends on BUILD_OWRT
-	depends on QCA_CNSS_LINUX_6_x_SUPPORT
-	default n
-
-config TARGET_SDX_WKK
-	bool "TARGET SDX WKK"
-	default n
-
-config CNSS_PCI_SUPPORT
-	bool "CNSS PCI SUPPORT"
-	default n
