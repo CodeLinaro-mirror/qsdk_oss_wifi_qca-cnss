@@ -19,7 +19,7 @@
 #include <soc/qcom/cmd-db.h>
 #endif
 
-#include "../main.h"
+#include <main.h>
 #ifdef CNSS_DEBUG_SUPPORT
 #include "debug/debug.h"
 #endif
