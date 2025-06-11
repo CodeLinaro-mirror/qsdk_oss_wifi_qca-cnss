@@ -51,7 +51,7 @@ _fixed_copts = [
 ]
 
 def define_modules(target, variant):
-    _defconfig = ":configs/{}_defconfig".format(variant)
+    _defconfig = ":configs/defconfig"
 
     _name = "{}_{}_cnss_ko".format(target, variant)
     _out = "ipq_cnss2.ko"
