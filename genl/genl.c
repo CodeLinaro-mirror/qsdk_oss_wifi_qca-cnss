@@ -16,10 +16,10 @@
 #include <linux/err.h>
 #include <linux/module.h>
 
-#include "genl/genl.h"
-#include "../main.h"
+#include <genl/genl.h>
+#include <main.h>
 #ifdef CNSS_DEBUG_SUPPORT
-#include "debug/debug.h"
+#include <debug/debug.h>
 #endif
 
 #define CNSS_GENL_FAMILY_NAME "cnss-genl"

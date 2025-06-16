@@ -14,7 +14,7 @@
 #ifndef _CNSS_COMMON_H
 #define _CNSS_COMMON_H
 
-#include "include/cnss2.h"
+#include <include/cnss2.h>
 
  #define QCATHR_VENDOR_ID		0x168C
 #define QCN_VENDOR_ID			0x17CB

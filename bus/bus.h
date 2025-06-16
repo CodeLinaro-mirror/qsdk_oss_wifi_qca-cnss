@@ -14,7 +14,7 @@
 #ifndef _CNSS_BUS_H
 #define _CNSS_BUS_H
 
-#include "../main.h"
+#include <main.h>
 
 int cnss_bus_init(struct cnss_plat_data *plat_priv);
 void cnss_bus_deinit(struct cnss_plat_data *plat_priv);

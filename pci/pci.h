@@ -34,7 +34,7 @@
 #include <linux/mhi_misc.h>
 #endif
 
-#include "../main.h"
+#include <main.h>
 
 enum cnss_mhi_state {
 	CNSS_MHI_INIT,
