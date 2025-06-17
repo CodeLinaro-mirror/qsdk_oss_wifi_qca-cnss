@@ -7080,6 +7080,31 @@ int cnss_pci_of_reserved_mem_device_init(struct cnss_plat_data *plat_priv)
 }
 #endif
 
+void cnss_pci_disable_aspm(struct pci_dev *child, struct cnss_plat_data *plat_priv)
+{
+	u16 link_status;
+	unsigned long end_jiffies;
+	struct pci_dev *parent = pci_upstream_bridge(child);
+
+	if (!parent) {
+		cnss_pr_err("upstream dev is unavailable");
+		return;
+	}
+
+	pcie_capability_clear_word(child, PCI_EXP_LNKCTL, PCI_EXP_LNKCTL_ASPMC);
+	pcie_capability_clear_word(parent, PCI_EXP_LNKCTL, PCI_EXP_LNKCTL_ASPMC);
+
+	end_jiffies = jiffies + msecs_to_jiffies(1000);
+	do {
+		pcie_capability_read_word(parent, PCI_EXP_LNKSTA, &link_status);
+		if ((link_status & PCI_EXP_LNKSTA_DLLLA) == PCI_EXP_LNKSTA_DLLLA)
+			return;
+		msleep(1);
+	} while (time_before(jiffies, end_jiffies));
+
+	cnss_pr_err("Failed to wait link become L0");
+}
+
 void cnss_pci_bw_scaling(struct pci_dev *pci_dev, u16 link_speed,
 			 struct cnss_plat_data *plat_priv)
 {
@@ -7113,7 +7138,6 @@ int cnss_pci_probe(struct pci_dev *pci_dev,
 {
 	int ret = 0;
 	u32 val = 0;
-	u8 lcr = 0;
 	bool disable_l1 = false;
 	bool is_gen2 = false;
 	struct cnss_pci_data *pci_priv;
@@ -7130,16 +7154,8 @@ int cnss_pci_probe(struct pci_dev *pci_dev,
 	disable_l1 = of_property_read_bool(pci_dev->dev.of_node,
 					   "no-l1-supported");
 	if (disable_l1) {
-		/* Disable ASPM bits of Link Control Register(offset 0x10)
-		 * to prevent L1
-		 */
-		pci_read_config_byte(pci_dev, pci_dev->pcie_cap +
-				     PCI_EXP_LNKCTL, &lcr);
-		lcr &= ~PCI_EXP_LNKCTL_ASPMC;
-		pci_write_config_byte(pci_dev, pci_dev->pcie_cap +
-				      PCI_EXP_LNKCTL, lcr);
+		cnss_pci_disable_aspm(pci_dev, plat_priv);
 	}
-
 
 	cnss_pr_dbg("PCI is probing, vendor ID: 0x%x, device ID: 0x%x\n",
 		    id->vendor, pci_dev->device);
