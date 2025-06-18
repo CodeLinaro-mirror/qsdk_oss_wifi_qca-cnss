@@ -608,6 +608,23 @@ int cnss_get_plat_env_index_from_plat_priv(struct cnss_plat_data *plat_priv)
 	return -EINVAL;
 }
 
+int cnss_get_device_info(struct device *dev, char *dev_name, u8 *instance_id)
+{
+	struct cnss_plat_data *plat_priv;
+
+	plat_priv = cnss_bus_dev_to_plat_priv(dev);
+	if (!plat_priv) {
+		cnss_pr_err("The plat_priv is NULL\n");
+		return -ENODEV;
+	}
+
+	strlcpy(dev_name, plat_priv->device_name, sizeof(plat_priv->device_name));
+	*instance_id = plat_priv->wlfw_service_instance_id;
+
+	return 0;
+}
+EXPORT_SYMBOL(cnss_get_device_info);
+
 const char *cnss_get_fw_path(struct cnss_plat_data *plat_priv)
 {
 	switch (plat_priv->device_id) {
@@ -970,6 +987,108 @@ static int cnss_hif_power_up(struct cnss_plat_data *plat_priv)
 	return ret;
 }
 
+static void cnss_set_bdf_mod_param(int slot_id, int value)
+{
+	switch (slot_id) {
+	case 0:
+		bdf_pci0 = value;
+		break;
+	case 1:
+		bdf_pci1 = value;
+		break;
+	case 2:
+		bdf_pci2 = value;
+		break;
+	case 3:
+		bdf_pci3 = value;
+		break;
+	default:
+		break;
+	}
+}
+
+static int cnss_reset_bdf_and_fw_name(struct cnss_plat_data *plat_priv)
+{
+	struct device *dev;
+	const char *board_id_str = "board_id";
+	int ret = 0;
+
+	if (!plat_priv)
+		return ret;
+
+	dev = &plat_priv->plat_dev->dev;
+	if (of_property_read_u32(dev->of_node, board_id_str,
+				 &plat_priv->board_info.board_id_override))
+		cnss_pr_info("No board_id in device tree for %s\n",
+				plat_priv->device_name);
+
+	cnss_set_bdf_mod_param(plat_priv->pci_slot_id, 0);
+
+	ret = cnss_set_fw_type_and_name(plat_priv);
+	if (ret)
+		return ret;
+
+	return ret;
+}
+
+static int cnss_update_board_info(struct cnss_plat_data *plat_priv)
+{
+	struct device *dev;
+	const char *board_id_str = "board_id";
+	int ret = 0;
+	u32 previous_board_id = 0;
+
+	if (!plat_priv)
+		return ret;
+
+	dev = &plat_priv->plat_dev->dev;
+	previous_board_id = plat_priv->board_info.board_id_override;
+
+	cnss_set_board_id(plat_priv);
+
+	if (!plat_priv->board_info.board_id_override) {
+		if (of_property_read_u32(dev->of_node, board_id_str,
+					 &plat_priv->board_info.board_id_override))
+			cnss_pr_info("No board_id in device tree for %s\n",
+					plat_priv->device_name);
+	}
+
+	if (previous_board_id == plat_priv->board_info.board_id_override)
+		return ret;
+
+	ret = cnss_set_fw_type_and_name(plat_priv);
+	if (ret)
+		return ret;
+
+	if (plat_priv->mlo_support) {
+		struct cnss_mlo_chip_info *ch_info = plat_priv->mlo_chip_info;
+		if (plat_priv->firmware_type == CNSS_FW_DUAL_MAC) {
+			ch_info->valid_link_ids[0] = 1;
+			ch_info->valid_link_ids[1] = 1;
+		} else {
+			ch_info->valid_link_ids[0] = 1;
+			ch_info->valid_link_ids[1] = 0;
+		}
+	}
+	cnss_pr_info("Updated firmware board id 0x%x and name %s for %s\n",
+			    plat_priv->board_info.board_id_override,
+			    plat_priv->firmware_name, plat_priv->device_name);
+
+	return ret;
+}
+
+int cnss_reset_board_info(struct cnss_plat_data *plat_priv)
+{
+	int ret = 0;
+
+	if (plat_priv->device_id == QCN9224_DEVICE_ID &&
+	    plat_priv->dynamic_mode_switch) {
+		cnss_reset_bdf_and_fw_name(plat_priv);
+		plat_priv->dynamic_mode_switch = 0;
+		plat_priv->disable_ramdump = false;
+	}
+	return ret;
+}
 
 static int cnss_hif_shutdown(struct cnss_plat_data *plat_priv)
 {
@@ -1005,6 +1124,7 @@ void *__cnss_hif_get(struct cnss_plat_data *plat_priv)
 		     plat_priv->driver_state);
 
 	clear_bit(CNSS_RECOVERY_WAIT_FOR_DRIVER, &plat_priv->driver_state);
+
 	ret = cnss_hif_power_up(plat_priv);
 	if (ret) {
 		cnss_pr_err("%s: cnss_hif_power_up failed %s\n", __func__,
@@ -1954,6 +2074,13 @@ int cnss_set_mlo_config(struct cnss_module_param *modparam,
 		return 0;
 	}
 
+	if (skip_radio_bmap || skip_cnss ||
+	    (mlo_chip_bitmask != CNSS_DEFAULT_MLO_CHIP_BITMASK)) {
+		cnss_pr_info("Skip radio is set, proceeding default MLO config.\n");
+		cnss_set_default_mlo_config();
+		return 0;
+	}
+
 	if (modparam->mlo_max_groups > CNSS_MAX_MLO_GROUPS) {
 		cnss_pr_err("%s: num_groups %d greater than max %d",
 			     __func__, modparam->mlo_max_groups,
@@ -2156,6 +2283,12 @@ int cnss_get_max_mlo_chips(struct device *dev)
 	if (!enable_mlo_support)
 		return -EINVAL;
 
+	if ((skip_radio_bmap || skip_cnss ||
+	    (mlo_chip_bitmask != CNSS_DEFAULT_MLO_CHIP_BITMASK))) {
+		cnss_pr_err("%s: Skip radio u-boot env is present\n", __func__);
+		return -EINVAL;
+	}
+
 	mlo = of_parse_phandle(dev->of_node, "qcom,wsi", 0);
 	if (!mlo) {
 		cnss_pr_err("%s: WSI node is not present\n", __func__);
@@ -2265,6 +2398,24 @@ int cnss_get_dev_link_ids(struct device *dev, u8 *link_ids, int max_elements)
 	return i;
 }
 EXPORT_SYMBOL(cnss_get_dev_link_ids);
+
+int cnss_get_num_valid_mlo_links(struct device *dev)
+{
+	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
+	int i, num_valid_links = 0;
+
+	if (!plat_priv || !plat_priv->mlo_support)
+		return -EINVAL;
+
+	if (!plat_priv->mlo_capable || !plat_priv->mlo_chip_info)
+		return -EINVAL;
+
+	for (i = 0; i < CNSS_MAX_LINKS_PER_CHIP; i++) {
+		num_valid_links += plat_priv->mlo_chip_info->valid_link_ids[i];
+	}
+	return num_valid_links;
+}
+EXPORT_SYMBOL(cnss_get_num_valid_mlo_links);
 
 static int cnss_get_group_id(struct cnss_plat_data *plat_priv)
 {
@@ -6023,6 +6174,7 @@ int cnss_register_subsys(struct cnss_plat_data *plat_priv)
 		break;
 	case CNSS_BUS_PCI:
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
+		cnss_reset_board_info(plat_priv);
 		ret = cnss_hif_power_up(plat_priv);
 		if (ret != 0) {
 			cnss_pr_err("%s: cnss_hif_power_up failed(%d)\n",
@@ -7389,6 +7541,33 @@ static void cnss_get_legacy_intx_support(struct cnss_plat_data *plat_priv)
 	}
 }
 #endif
+int cnss_enable_dynamic_mode_switch(struct device *dev, bool disable_ramdump)
+{
+	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
+	struct cnss_pci_data *pci_priv;
+
+	if (!plat_priv) {
+		cnss_pr_err("plat_priv is NULL\n");
+		return -ENODEV;
+	}
+
+	pci_priv = plat_priv->bus_priv;
+	if (!pci_priv) {
+		cnss_pr_err("pci_priv is NULL\n");
+		return -ENODEV;
+	}
+
+	if (plat_priv->device_id == QCN9224_DEVICE_ID) {
+		plat_priv->disable_ramdump = disable_ramdump;
+		plat_priv->dynamic_mode_switch = 1;
+		cnss_pr_dbg("%s SSR ramdump collection\n", disable_ramdump ? "disable" : "enable");
+		cnss_update_board_info(plat_priv);
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL(cnss_enable_dynamic_mode_switch);
+
 static u32 cnss_get_bdf_mod_param(int slot_id)
 {
 	u32 ret = 0;
@@ -7419,7 +7598,7 @@ static u32 cnss_get_bdf_mod_param(int slot_id)
  * If both these are not present, board_id_override would be 0 and board_id
  * from OTP register or target capabilities would be used.
  */
-static void cnss_set_board_id(struct cnss_plat_data *plat_priv)
+void cnss_set_board_id(struct cnss_plat_data *plat_priv)
 {
 	struct wlfw_rf_board_info *board_info = &plat_priv->board_info;
 	struct device *dev = &plat_priv->plat_dev->dev;

@@ -762,6 +762,8 @@ struct cnss_plat_data {
 	struct completion soc_reset_request_complete;
 	struct cnss_bus_ops *ops;
 	bool wsi_remap_state;
+	bool disable_ramdump;
+	u8 dynamic_mode_switch;
 };
 
 #ifdef CONFIG_ARCH_QCOM
@@ -858,4 +860,6 @@ void cnss_modify_link_speed(struct cnss_plat_data *plat_priv);
 
 bool cnss_check_li_target(struct cnss_plat_data *plat_priv);
 bool cnss_check_be_target(struct cnss_plat_data *plat_priv);
+void cnss_set_board_id(struct cnss_plat_data *plat_priv);
+int cnss_reset_board_info(struct cnss_plat_data *plat_priv);
 #endif /* _CNSS_MAIN_H */
