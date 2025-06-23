@@ -1031,6 +1031,7 @@ static int cnss_reset_bdf_and_fw_name(struct cnss_plat_data *plat_priv)
 	return ret;
 }
 
+#ifndef CONFIG_CNSS2_KERNEL_5_15
 static int cnss_update_board_info(struct cnss_plat_data *plat_priv)
 {
 	struct device *dev;
@@ -1076,6 +1077,7 @@ static int cnss_update_board_info(struct cnss_plat_data *plat_priv)
 
 	return ret;
 }
+#endif
 
 int cnss_reset_board_info(struct cnss_plat_data *plat_priv)
 {
