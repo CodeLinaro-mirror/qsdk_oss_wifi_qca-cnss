@@ -5341,11 +5341,6 @@ void cnss_set_pci_link_speed_width(struct device *dev, u16 link_speed,
 {
 }
 EXPORT_SYMBOL(cnss_set_pci_link_speed_width);
-int cnss_enable_dynamic_mode_switch(struct device *dev, bool disable_ramdump)
-{
-	return 0;
-}
-EXPORT_SYMBOL(cnss_enable_dynamic_mode_switch);
 #else
 void cnss_set_pci_link_speed_width(struct device *dev, u16 link_speed,
 					u16 link_width)
