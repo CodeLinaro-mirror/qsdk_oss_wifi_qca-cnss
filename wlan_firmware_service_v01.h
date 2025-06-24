@@ -132,6 +132,9 @@
 #define QMI_WLFW_SOFT_SKU_INFO_RESP_V01 0x0060
 #define QMI_WLFW_DRIVER_ASYNC_DATA_IND_V01 0x0061
 #define QMI_WLFW_DUMP_DDR_REGION_IND_V01 0x0062
+#define QMI_WLFW_MISC_REQ_V01 0x0063
+#define QMI_WLFW_MISC_RESP_V01 0x0063
+#define QMI_WLFW_XO_TRIM_IND_V01 0x0064
 
 #define QMI_WLFW_MAX_NUM_CE_V01 12
 #define QMI_WLFW_MAX_NUM_SVC_V01 24
@@ -164,6 +167,13 @@
 #define QMI_WLFW_MAX_NUM_SHARE_MEM_V01 8
 #define QMI_WLFW_MAX_ADJ_CHIP_V01 2
 #define QMI_WLFW_MLO_V2_CHP_V01 4
+#define QMI_WLFW_MAX_NUM_CE_CMN_REG_V01 100
+#define QMI_WLFW_SHARED_MAX_CLIENT_SUPPORT_V01 5
+#define QMI_WLFW_LPASS_CLIENT_ID_V01 0x555e455c
+#define QMI_WLFW_CNSS_PLATFORM_CLIENT_ID_V01 0x4b4e454c
+#define QMI_WLFW_CNSS_DAEMON_CLIENT_ID_V01 0x444d4f4e
+#define QMI_WLFW_TOTAL_GPIO_CONFIG_V01 15
+#define QMI_INVALID_GPIO_NUM_V01 0xffff
 
 enum wlfw_driver_mode_enum_v01 {
 	WLFW_DRIVER_MODE_ENUM_MIN_VAL_V01 = INT_MIN,
@@ -344,7 +354,8 @@ enum wlfw_gpio_info_type_v01 {
 	HOST_SOL_GPIO_V01 = 2,
 	TARGET_SOL_GPIO_V01 = 3,
 	WLAN_SW_CTRL_GPIO_V01 = 4,
-	GPIO_TYPE_MAX_V01 = 5,
+	RESET_B_GPIO_V01 = 5,
+	GPIO_TYPE_MAX_V01 = 6,
 	WLFW_GPIO_INFO_TYPE_MAX_VAL_V01 = INT_MAX,
 };
 
@@ -399,6 +410,84 @@ enum wlfw_lpass_ssr_reason_v01 {
 	WLFW_LPASS_SSR_REASON_MAX_VAL_V01 = INT_MAX,
 };
 
+enum wlfw_shared_mem_client_name_v01 {
+	WLFW_SHARED_MEM_CLIENT_NAME_MIN_VAL_V01 = INT_MIN,
+	WLFW_SHARED_MEM_CLIENT_XPAN_V01 = 0,
+	WLFW_SHARED_MEM_CLIENT_MAX_V01 = 1,
+	WLFW_SHARED_MEM_CLIENT_NAME_MAX_VAL_V01 = INT_MAX,
+};
+
+enum wlfw_gpio_type_v01 {
+	WLFW_GPIO_TYPE_MIN_VAL_V01 = INT_MIN,
+	WLFW_GPIO_TYPE_TLMM_V01 = 0,
+	WLFW_GPIO_TYPE_PMIC_V01 = 1,
+	WLFW_GPIO_TYPE_MAX_V01 = 2,
+	WLFW_GPIO_TYPE_MAX_VAL_V01 = INT_MAX,
+};
+
+enum wlfw_gpio_intr_trigger_type_v01 {
+	WLFW_GPIO_INTR_TRIGGER_TYPE_MIN_VAL_V01 = INT_MIN,
+	WLFW_GPIO_INTR_TRIGGER_HIGH_V01 = 0,
+	WLFW_GPIO_INTR_TRIGGER_LOW_V01 = 1,
+	WLFW_GPIO_INTR_TRIGGER_RISING_V01 = 2,
+	WLFW_GPIO_INTR_TRIGGER_FALLING_V01 = 3,
+	WLFW_GPIO_INTR_TRIGGER_DUAL_EDGE_V01 = 4,
+	WLFW_GPIO_INTR_TRIGGER_TYPE_MAX_VAL_V01 = INT_MAX,
+};
+
+enum wlfw_gpio_direction_type_v01 {
+	WLFW_GPIO_DIRECTION_TYPE_MIN_VAL_V01 = INT_MIN,
+	WLFW_GPIO_INPUT_V01 = 0,
+	WLFW_GPIO_OUTPUT_V01 = 1,
+	WLFW_GPIO_BI_DIRECTIONAL_V01 = 2,
+	WLFW_GPIO_DIRECTION_TYPE_MAX_VAL_V01 = INT_MAX,
+};
+
+enum wlfw_gpio_bias_type_v01 {
+	WLFW_GPIO_BIAS_TYPE_MIN_VAL_V01 = INT_MIN,
+	WLFW_GPIO_NO_PULL_V01 = 0,
+	WLFW_GPIO_PULL_DOWN_V01 = 1,
+	WLFW_GPIO_KEEPER_V01 = 2,
+	WLFW_GPIO_PULL_UP_V01 = 3,
+	WLFW_GPIO_BIAS_TYPE_MAX_VAL_V01 = INT_MAX,
+};
+
+enum wlfw_gpio_drive_strength_v01 {
+	WLFW_GPIO_DRIVE_STRENGTH_MIN_VAL_V01 = INT_MIN,
+	WLFW_GPIO_2MA_V01 = 0,
+	WLFW_GPIO_4MA_V01 = 1,
+	WLFW_GPIO_6MA_V01 = 2,
+	WLFW_GPIO_8MA_V01 = 3,
+	WLFW_GPIO_10MA_V01 = 4,
+	WLFW_GPIO_12MA_V01 = 5,
+	WLFW_GPIO_14MA_V01 = 6,
+	WLFW_GPIO_16MA_V01 = 7,
+	WLFW_GPIO_DRIVE_STRENGTH_MAX_VAL_V01 = INT_MAX,
+};
+
+enum wlfw_gpio_output_value_type_v01 {
+	WLFW_GPIO_OUTPUT_VALUE_TYPE_MIN_VAL_V01 = INT_MIN,
+	WLFW_GPIO_LOW_VALUE_V01 = 0,
+	WLFW_GPIO_HIGH_VALUE_V01 = 1,
+	WLFW_GPIO_OUTPUT_VALUE_TYPE_MAX_VAL_V01 = INT_MAX,
+};
+
+enum wlfw_misc_req_enum_v01 {
+	WLFW_MISC_REQ_ENUM_MIN_VAL_V01 = INT_MIN,
+	WLFW_REQ_BT_DUMP_V01 = 0,
+	WLFW_REQ_XO_TRIM_SUCCESS_V01 = 1,
+	WLFW_REQ_XO_TRIM_FAIL_V01 = 2,
+	WLFW_MISC_REQ_ENUM_MAX_VAL_V01 = INT_MAX,
+};
+
+enum wlfw_target_attachment_v01 {
+	WLFW_TARGET_ATTACHMENT_MIN_VAL_V01 = INT_MIN,
+	WLFW_THIRD_PARTY_V01 = 0,
+	WLFW_PDC_V01 = 1,
+	WLFW_PMIC_V01 = 2,
+	WLFW_TARGET_ATTACHMENT_MAX_VAL_V01 = INT_MAX,
+};
+
 #define QMI_WLFW_CE_ATTR_FLAGS_V01 ((u32)0x00)
 #define QMI_WLFW_CE_ATTR_NO_SNOOP_V01 ((u32)0x01)
 #define QMI_WLFW_CE_ATTR_BYTE_SWAP_DATA_V01 ((u32)0x02)
@@ -421,6 +510,9 @@ enum wlfw_lpass_ssr_reason_v01 {
 #define QMI_WLFW_DIRECT_LINK_SUPPORT_V01 ((u64)0x02ULL)
 #define QMI_WLFW_AUX_UC_SUPPORT_V01 ((u64)0x04ULL)
 #define QMI_WLFW_CALDB_SEG_DDR_SUPPORT_V01 ((u64)0x08ULL)
+#define QMI_WLFW_CE_CMN_CFG_SUPPORT_V01 ((u64)0x10ULL)
+#define QMI_WLFW_WLAN_DUMP_OVER_BT_SUPPORT_V01 ((u64)0x20ULL)
+#define QMI_WLFW_BT_DUMP_OVER_WLAN_SUPPORT_V01 ((u64)0x40ULL)
 
 #define QMI_WLFW_DIRECT_LINK_SKU_SUPPORT_V01 ((u64)0x01ULL)
 
@@ -539,13 +631,38 @@ struct wlfw_pmu_param_v01 {
 	u32 sleep_volt;
 };
 
+struct wlfw_pmu_param_ext_v01 {
+	u8 pin_name[QMI_WLFW_PMU_PIN_NAME_MAX_LEN_V01];
+	u8 wake_volt_valid;
+	u32 wake_volt;
+	u8 sleep_volt_valid;
+	u32 sleep_volt;
+	u8 svs_v_valid;
+	u32 svs_v;
+	u8 lsvs_valid;
+	u32 lsvs;
+	u8 svsL1_valid;
+	u32 svsL1_v;
+};
+
 struct wlfw_pmu_cfg_v01 {
 	u32 pmu_param_len;
 	struct wlfw_pmu_param_v01 pmu_param[QMI_WLFW_PMU_PARAMS_MAX_V01];
 };
 
+struct wlfw_pmu_cfg_ext_v01 {
+	u32 pmu_param_ext_len;
+	struct wlfw_pmu_param_ext_v01 pmu_param_ext[QMI_WLFW_PMU_PARAMS_MAX_V01];
+};
+
 struct wlfw_shadow_reg_v3_cfg_s_v01 {
 	u32 addr;
+};
+
+struct wlfw_ce_cmn_register_config_v01 {
+	u32 offset_addr;
+	u32 reg_mask;
+	u32 reg_value;
 };
 
 struct wlfw_share_mem_info_s_v01 {
@@ -562,6 +679,29 @@ struct wlfw_host_pcie_link_info_s_v01 {
 struct wlchip_serial_id_v01 {
 	u32 serial_id_msb;
 	u32 serial_id_lsb;
+};
+
+struct wlfw_shared_mem_client_info_v01 {
+	u64 pa_addr;
+	u32 mem_client_id;
+	u32 size;
+};
+
+struct wlfw_gpio_config_v01 {
+	u32 gpio_num;
+	u32 gpio_name;
+	u32 pmic_index;
+	u8 gpio_type;
+	u8 output_value;
+	u8 func;
+	u8 direction;
+	u8 drive_strength;
+	u8 bias;
+	u8 is_clk;
+	u8 is_wake;
+	u8 intrpt_trigger_type;
+	u8 priority;
+	u32 gpio_bitreserved;
 };
 
 struct wlfw_ind_register_req_msg_v01 {
@@ -611,8 +751,10 @@ struct wlfw_ind_register_req_msg_v01 {
 	u8 async_data_enable;
 	u8 dump_ddr_region_enable_valid;
 	u8 dump_ddr_region_enable;
+	u8 xo_trim_enable_valid;
+	u8 xo_trim_enable;
 };
-#define WLFW_IND_REGISTER_REQ_MSG_V01_MAX_MSG_LEN 98
+#define WLFW_IND_REGISTER_REQ_MSG_V01_MAX_MSG_LEN 102
 extern struct qmi_elem_info wlfw_ind_register_req_msg_v01_ei[];
 
 struct wlfw_ind_register_resp_msg_v01 {
@@ -657,8 +799,10 @@ struct wlfw_wlan_mode_req_msg_v01 {
 	u8 xo_cal_data;
 	u8 wlan_en_delay_valid;
 	u32 wlan_en_delay;
+	u8 do_coldboot_cal_valid;
+	u8 do_coldboot_cal;
 };
-#define WLFW_WLAN_MODE_REQ_MSG_V01_MAX_MSG_LEN 22
+#define WLFW_WLAN_MODE_REQ_MSG_V01_MAX_MSG_LEN 26
 extern struct qmi_elem_info wlfw_wlan_mode_req_msg_v01_ei[];
 
 struct wlfw_wlan_mode_resp_msg_v01 {
@@ -690,8 +834,11 @@ struct wlfw_wlan_cfg_req_msg_v01 {
 	u8 shadow_reg_v3_valid;
 	u32 shadow_reg_v3_len;
 	struct wlfw_shadow_reg_v3_cfg_s_v01 shadow_reg_v3[QMI_WLFW_MAX_NUM_SHADOW_REG_V3_V01];
+	u8 ce_cmn_reg_valid;
+	u32 ce_cmn_reg_len;
+	struct wlfw_ce_cmn_register_config_v01 ce_cmn_reg[QMI_WLFW_MAX_NUM_CE_CMN_REG_V01];
 };
-#define WLFW_WLAN_CFG_REQ_MSG_V01_MAX_MSG_LEN 1110
+#define WLFW_WLAN_CFG_REQ_MSG_V01_MAX_MSG_LEN 2314
 extern struct qmi_elem_info wlfw_wlan_cfg_req_msg_v01_ei[];
 
 struct wlfw_wlan_cfg_resp_msg_v01 {
@@ -758,8 +905,12 @@ struct wlfw_cap_resp_msg_v01 {
 	enum wlfw_phy_qam_cap_v01 phy_qam_cap;
 	u8 serial_id_valid;
 	struct wlchip_serial_id_v01 serial_id;
+	u8 direct_cx_data_pin_mode_valid;
+	u8 direct_cx_data_pin_mode;
+	u8 ol_cpr_cfg_ext_valid;
+	struct wlfw_pmu_cfg_ext_v01 ol_cpr_cfg_ext;
 };
-#define WLFW_CAP_RESP_MSG_V01_MAX_MSG_LEN 1171
+#define WLFW_CAP_RESP_MSG_V01_MAX_MSG_LEN 2091
 extern struct qmi_elem_info wlfw_cap_resp_msg_v01_ei[];
 
 struct wlfw_bdf_download_req_msg_v01 {
@@ -1044,8 +1195,13 @@ struct wlfw_host_cap_req_msg_v01 {
 	struct mlo_chip_v2_info_s_v01 mlo_chip_v2_info[QMI_WLFW_MLO_V2_CHP_V01];
 	u8 pcie_link_info_valid;
 	struct wlfw_host_pcie_link_info_s_v01 pcie_link_info;
+	u8 gpio_config_valid;
+	u32 gpio_config_len;
+	struct wlfw_gpio_config_v01 gpio_config[QMI_WLFW_TOTAL_GPIO_CONFIG_V01];
+	u8 target_attachment_valid;
+	enum wlfw_target_attachment_v01 target_attachment;
 };
-#define WLFW_HOST_CAP_REQ_MSG_V01_MAX_MSG_LEN 581
+#define WLFW_HOST_CAP_REQ_MSG_V01_MAX_MSG_LEN 982
 extern struct qmi_elem_info wlfw_host_cap_req_msg_v01_ei[];
 
 struct wlfw_host_cap_resp_msg_v01 {
@@ -1370,8 +1526,11 @@ struct wlfw_device_info_resp_msg_v01 {
 	u64 mhi_state_info_addr;
 	u8 mhi_state_info_size_valid;
 	u32 mhi_state_info_size;
+	u8 shared_mem_valid;
+	u32 shared_mem_len;
+	struct wlfw_shared_mem_client_info_v01 shared_mem[QMI_WLFW_SHARED_MAX_CLIENT_SUPPORT_V01];
 };
-#define WLFW_DEVICE_INFO_RESP_MSG_V01_MAX_MSG_LEN 43
+#define WLFW_DEVICE_INFO_RESP_MSG_V01_MAX_MSG_LEN 127
 extern struct qmi_elem_info wlfw_device_info_resp_msg_v01_ei[];
 
 struct wlfw_m3_dump_upload_req_ind_msg_v01 {
@@ -1515,8 +1674,10 @@ struct wlfw_phy_cap_resp_msg_v01 {
 	u32 mlo_cap_v2_support;
 	u8 single_chip_mlo_support_valid;
 	u8 single_chip_mlo_support;
+	u8 mm_coldboot_cal_valid;
+	u8 mm_coldboot_cal;
 };
-#define WLFW_PHY_CAP_RESP_MSG_V01_MAX_MSG_LEN 29
+#define WLFW_PHY_CAP_RESP_MSG_V01_MAX_MSG_LEN 33
 extern struct qmi_elem_info wlfw_phy_cap_resp_msg_v01_ei[];
 
 struct wlfw_wlan_hw_init_cfg_req_msg_v01 {
@@ -1655,5 +1816,23 @@ struct wlfw_dump_ddr_region_ind_msg_v01 {
 };
 #define WLFW_DUMP_DDR_REGION_IND_MSG_V01_MAX_MSG_LEN 907
 extern struct qmi_elem_info wlfw_dump_ddr_region_ind_msg_v01_ei[];
+
+struct wlfw_misc_req_msg_v01 {
+	enum wlfw_misc_req_enum_v01 type;
+};
+#define WLFW_MISC_REQ_MSG_V01_MAX_MSG_LEN 7
+extern struct qmi_elem_info wlfw_misc_req_msg_v01_ei[];
+
+struct wlfw_misc_resp_msg_v01 {
+	struct qmi_response_type_v01 resp;
+};
+#define WLFW_MISC_RESP_MSG_V01_MAX_MSG_LEN 7
+extern struct qmi_elem_info wlfw_misc_resp_msg_v01_ei[];
+
+struct wlfw_xo_trim_ind_msg_v01 {
+	u8 trim_val;
+};
+#define WLFW_XO_TRIM_IND_MSG_V01_MAX_MSG_LEN 4
+extern struct qmi_elem_info wlfw_xo_trim_ind_msg_v01_ei[];
 
 #endif

@@ -732,6 +732,89 @@ out:
 	return ret;
 }
 
+static int cnss_wlfw_phy_cap_send_sync(struct cnss_plat_data *plat_priv)
+{
+	struct wlfw_phy_cap_req_msg_v01 *req;
+	struct wlfw_phy_cap_resp_msg_v01 *resp;
+	struct qmi_txn txn;
+	int ret = 0;
+	int resp_error_msg = 0;
+
+	cnss_pr_dbg("Sending PHY capability message, state: 0x%lx\n",
+		    plat_priv->driver_state);
+
+	req = kzalloc(sizeof(*req), GFP_KERNEL);
+	if (!req)
+		return -ENOMEM;
+
+	resp = kzalloc(sizeof(*resp), GFP_KERNEL);
+	if (!resp) {
+		kfree(req);
+		return -ENOMEM;
+	}
+
+	qmi_record(plat_priv->wlfw_service_instance_id,
+		  (QMI_TYPE_REQ | QMI_WLFW_PHY_CAP_REQ_V01), ret,
+		  resp_error_msg);
+
+	ret = qmi_txn_init(&plat_priv->qmi_wlfw, &txn,
+			   wlfw_phy_cap_resp_msg_v01_ei, resp);
+	if (ret < 0) {
+		cnss_pr_err("Failed to initialize txn for PHY capability request, err: %d\n",
+			    ret);
+		goto out;
+	}
+
+	ret = qmi_send_request(&plat_priv->qmi_wlfw, NULL, &txn,
+			       QMI_WLFW_PHY_CAP_REQ_V01,
+			       WLFW_PHY_CAP_REQ_MSG_V01_MAX_MSG_LEN,
+			       wlfw_phy_cap_req_msg_v01_ei, req);
+	if (ret < 0) {
+		qmi_txn_cancel(&txn);
+		cnss_pr_err("Failed to send respond PHY capability request, err: %d\n",
+			    ret);
+		goto out;
+	}
+
+	ret = qmi_txn_wait(&txn, QMI_WLFW_TIMEOUT_JF);
+	if (ret < 0) {
+		resp_error_msg = -QMI_RESULT_FAILURE_V01;
+		cnss_pr_err("Failed to wait for response of PHY capability request, err: %d\n",
+			    ret);
+		goto out;
+	}
+
+	if (resp->resp.result != QMI_RESULT_SUCCESS_V01) {
+		cnss_pr_err("PHY capability request failed, result: %d, err: %d\n",
+			    resp->resp.result, resp->resp.error);
+		ret = -resp->resp.result;
+		resp_error_msg = resp->resp.error;
+		goto out;
+	}
+
+	qmi_record(plat_priv->wlfw_service_instance_id,
+		  (QMI_TYPE_RESP | QMI_WLFW_PHY_CAP_RESP_V01), ret,
+		  resp_error_msg);
+	if (resp->mm_coldboot_cal_valid)
+		plat_priv->mm_coldboot_cal = resp->mm_coldboot_cal;
+
+	cnss_pr_info("PHY capability: mm_coldboot_cal: %u\n",
+		     plat_priv->mm_coldboot_cal);
+
+	kfree(req);
+	kfree(resp);
+	return 0;
+
+out:
+	qmi_record(plat_priv->wlfw_service_instance_id,
+		  (QMI_WLFW_PHY_CAP_REQ_V01), ret,
+		  resp_error_msg);
+	CNSS_ASSERT(0);
+	kfree(req);
+	kfree(resp);
+	return ret;
+}
+
 static int cnss_wlfw_host_cap_send_sync(struct cnss_plat_data *plat_priv)
 {
 	struct wlfw_host_cap_req_msg_v01 *req;
@@ -4076,6 +4159,13 @@ int cnss_wlfw_server_arrive(struct cnss_plat_data *plat_priv, void *data)
 		goto out;
 
 	ret = cnss_wlfw_ind_register_send_sync(plat_priv);
+	if (ret < 0) {
+		if (ret == -EALREADY)
+			ret = 0;
+		goto out;
+	}
+
+	ret = cnss_wlfw_phy_cap_send_sync(plat_priv);
 	if (ret < 0) {
 		if (ret == -EALREADY)
 			ret = 0;
