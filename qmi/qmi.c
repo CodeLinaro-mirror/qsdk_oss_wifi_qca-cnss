@@ -829,6 +829,9 @@ static int cnss_wlfw_host_cap_send_sync(struct cnss_plat_data *plat_priv)
 	const struct firmware *fw;
 	char filename[FW_INI_FILE_NAME_LEN] = {0};
 
+	if (parallel_probe_enabled)
+		cnss_wait_for_host_cap_ready(plat_priv);
+
 	cnss_pr_dbg("Sending host capability message, state: 0x%lx\n",
 		    plat_priv->driver_state);
 

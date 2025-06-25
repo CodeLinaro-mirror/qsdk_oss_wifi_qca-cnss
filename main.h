@@ -572,18 +572,13 @@ struct qdss_stream_data {
 	atomic_t                completed_seq_no;
 };
 
-struct cnss_radio_info {
-	s8 soc_id;
-	s8 radio_id;
-	bool is_dual_phy;   /* indicates if radio is dual band support */
-};
-
 enum cnss_recovery_type {
 	CNSS_ASYNC_RECOVERY, /* asynchronous recovery */
 	CNSS_SYNC_RECOVERY, /* synchronous recovery */
 };
 
 extern unsigned int enable_mlo_support;
+extern int parallel_probe_enabled;
 
 struct cnss_bus_ops {
 	int (*cnss_bus_init)(struct cnss_plat_data *plat_priv);
@@ -872,4 +867,5 @@ bool cnss_check_li_target(struct cnss_plat_data *plat_priv);
 bool cnss_check_be_target(struct cnss_plat_data *plat_priv);
 void cnss_set_board_id(struct cnss_plat_data *plat_priv);
 int cnss_reset_board_info(struct cnss_plat_data *plat_priv);
+void cnss_wait_for_host_cap_ready(struct cnss_plat_data *plat_priv);
 #endif /* _CNSS_MAIN_H */

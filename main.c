@@ -164,7 +164,7 @@ static unsigned int driver_mode;
 module_param(driver_mode, uint, 0644);
 MODULE_PARM_DESC(driver_mode, "Global driver mode");
 
-int parallel_probe_enabled = 0;
+int parallel_probe_enabled;
 module_param(parallel_probe_enabled, int, 0644);
 MODULE_PARM_DESC(parallel_probe_enabled, "enable/disable parallel probing");
 
@@ -200,14 +200,6 @@ MODULE_PARM_DESC(probe_order, "Probe order");
 static int enable_intx_bmap;
 module_param(enable_intx_bmap, int, 0644);
 MODULE_PARM_DESC(enable_intx_bmap, "enable_intx_bmap");
-
-static unsigned int cnss_max_soc;
-module_param(cnss_max_soc, uint, 0600);
-MODULE_PARM_DESC(cnss_max_soc, "Max soc");
-
-static unsigned int cnss_max_radio;
-module_param(cnss_max_radio, uint, 0600);
-MODULE_PARM_DESC(cnss_max_radio, "Max radio");
 
 static unsigned int mlo_max_peer;
 module_param(mlo_max_peer, uint, 0600);
@@ -637,37 +629,64 @@ int cnss_get_device_info(struct device *dev, char *dev_name, u8 *instance_id)
 }
 EXPORT_SYMBOL(cnss_get_device_info);
 
-int cnss_get_soc_id (struct device *dev)
+int cnss_get_num_radios(void)
 {
-    struct cnss_plat_data *plat_priv;
+	struct cnss_plat_data *plat_priv;
+	int radio_count = 0;
+	int i;
 
-    plat_priv = cnss_bus_dev_to_plat_priv(dev);
-    if (!plat_priv) {
-        cnss_pr_err("The plat_priv is NULL\n");
-        return -1;
-    }
-    return cnss_get_plat_env_index_from_plat_priv(plat_priv);
+	for (i = 0; i < plat_env_index; i++) {
+		plat_priv = plat_env[i];
+		if (!plat_priv)
+			continue;
+		if (plat_priv->firmware_type == CNSS_FW_DUAL_MAC)
+			radio_count += 2;
+		else
+			radio_count++;
+	}
+
+	return radio_count;
 }
-EXPORT_SYMBOL(cnss_get_soc_id);
+EXPORT_SYMBOL(cnss_get_num_radios);
 
-int cnss_get_radio_info (struct device *dev, bool wifi_idx_check, bool dual_mac_check)
+void *cnss_get_radio_info(struct device *dev)
 {
-    struct cnss_plat_data *plat_priv;
-    struct cnss_radio_info *radio_info;
+	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
 
-    plat_priv = cnss_bus_dev_to_plat_priv(dev);
-    if (!plat_priv) {
-        cnss_pr_err("The plat_priv is NULL\n");
-        return -1;
-    }
-    radio_info = &plat_priv->radio_info;
+	if (!plat_priv)
+		return NULL;
 
-    if (wifi_idx_check)
-        return radio_info->radio_id;
-    else
-        return radio_info->is_dual_phy? 1:0;
+	return &plat_priv->radio_info;
 }
 EXPORT_SYMBOL(cnss_get_radio_info);
+
+static void cnss_set_plat_cap(void)
+{
+	struct cnss_radio_info *radio_info;
+	struct cnss_plat_data *plat_priv;
+	int radio_count = 0;
+	int i;
+
+	for (i = 0; i < plat_env_index; i++) {
+		plat_priv = plat_env[i];
+		if (!plat_priv)
+			continue;
+
+		radio_info = &plat_priv->radio_info;
+		radio_info->soc_id = i;
+		radio_info->radio_idx = radio_count;
+		radio_info->dual_mac = false;
+		if (plat_priv->firmware_type == CNSS_FW_DUAL_MAC) {
+			radio_info->dual_mac = true;
+			radio_count += 2;
+		} else {
+			radio_count++;
+		}
+		cnss_pr_dbg("soc_id: %d, radio_idx: %d, dual_mac: %d\n",
+			    radio_info->soc_id, radio_info->radio_idx,
+			    radio_info->dual_mac);
+	}
+}
 
 const char *cnss_get_fw_path(struct cnss_plat_data *plat_priv)
 {
@@ -2218,12 +2237,6 @@ bool cnss_get_mlo_capable(struct device *dev)
 }
 EXPORT_SYMBOL(cnss_get_mlo_capable);
 
-int cnss_get_mlo_support(void)
-{
-	return enable_mlo_support;
-}
-EXPORT_SYMBOL(cnss_get_mlo_support);
-
 bool cnss_is_mlo_default_cfg_enabled(struct device *dev)
 {
 	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
@@ -3314,6 +3327,7 @@ int cnss_wlan_probe_driver(void)
 	enum cnss_driver_mode cal_mode;
 
 	cnss_sort_probe_order();
+	cnss_set_plat_cap();
 	for (i = 0; i < plat_env_index; i++) {
 		plat_priv = plat_env[i];
 
@@ -3343,36 +3357,33 @@ int cnss_wlan_probe_driver(void)
 			plat_priv->cal_in_progress = true;
 
 		cnss_mount_firmware(plat_priv);
-		if (!parallel_probe_enabled) {
-			ret = cnss_register_subsys(plat_priv);
-			if (ret)
-				goto reset_ctx;
-		}
-		if (plat_priv->cal_in_progress) {
-			if (parallel_probe_enabled) {
+		/* Mission mode */
+		if (!plat_priv->cal_in_progress) {
+			if (!parallel_probe_enabled) {
 				ret = cnss_register_subsys(plat_priv);
 				if (ret)
 					goto reset_ctx;
-			}
-			if (driver_mode == CNSS_FTM)
-				cal_mode = CNSS_FTM_CALIBRATION;
-			else
-				cal_mode = CNSS_CALIBRATION;
-
-			__cnss_wait_for_fw_ready(plat_priv);
-			__cnss_wlan_enable(plat_priv, NULL, cal_mode, "WIN");
-
-			schedule_work(&plat_priv->cal_work);
-			atomic_inc(&cal_in_progress_count);
-		} else {
-			if (parallel_probe_enabled) {
-				schedule_work(&plat_priv->mm_work);
-				__cnss_wait_for_fw_ready(plat_priv);
-			} else
 				plat_priv->driver_status = CNSS_INITIALIZED;
+			} else {
+				schedule_work(&plat_priv->mm_work);
+				atomic_inc(&cal_in_progress_count);
+			}
+			continue;
 		}
-	}
 
+		/* Coldboot mode */
+		ret = cnss_register_subsys(plat_priv);
+		if (ret)
+			goto reset_ctx;
+		if (driver_mode == CNSS_FTM)
+			cal_mode = CNSS_FTM_CALIBRATION;
+		else
+			cal_mode = CNSS_CALIBRATION;
+		__cnss_wait_for_fw_ready(plat_priv);
+		__cnss_wlan_enable(plat_priv, NULL, cal_mode, "WIN");
+		schedule_work(&plat_priv->cal_work);
+		atomic_inc(&cal_in_progress_count);
+	}
 
 	while (atomic_read(&cal_in_progress_count)) {
 		msleep(FW_READY_DELAY);
@@ -6954,11 +6965,9 @@ static void __cnss_subsystem_put_wrapper(struct cnss_plat_data *plat_priv)
 
 static void cnss_driver_mm_work(struct work_struct *work)
 {
-	int index=0, count=0;
-	u64 probe_time = 0;
 	struct cnss_plat_data *plat_priv =
 		container_of(work, struct cnss_plat_data, mm_work);
-	struct cnss_plat_data *prev_plat_priv;
+	int index = 0;
 
 	if (!plat_priv) {
 		cnss_pr_err("%s: plat_priv is NULL!\n", __func__);
@@ -6973,24 +6982,43 @@ static void cnss_driver_mm_work(struct work_struct *work)
 	}
 
 	cnss_register_subsys(plat_priv);
-	if (index > 0) {
-		prev_plat_priv = plat_env[index - 1];
-		probe_time = jiffies;
-		while (prev_plat_priv->driver_status !=
-						CNSS_INITIALIZED) {
-			msleep(FW_READY_DELAY);
-			if (count++ > probe_timeout * 10) {
-				cnss_pr_err("CNSS Driver probe timed out %u ms\n",
-				jiffies_to_msecs(jiffies - probe_time));
-				CNSS_ASSERT(0);
-			}
-		}
-		cnss_pr_info("Previous target probe took %u ms\n",
-			jiffies_to_msecs(jiffies - probe_time));
-	}
 
 	plat_priv->driver_status = CNSS_INITIALIZED;
+	atomic_dec(&cal_in_progress_count);
+}
 
+void cnss_wait_for_host_cap_ready(struct cnss_plat_data *plat_priv)
+{
+	struct cnss_plat_data *prev_plat_priv;
+	u64 probe_time = 0;
+	int count = 0;
+	int index;
+
+	if (!plat_priv) {
+		cnss_pr_err("plat_priv is NULL!\n");
+		return;
+	}
+	index = cnss_get_plat_env_index_from_plat_priv(plat_priv);
+	if (index < 0) {
+		cnss_pr_err("Invalid plat_env index for %s",
+			    plat_priv->device_name);
+		return;
+	}
+	if (!index)
+		return;
+
+	prev_plat_priv = plat_env[0];
+	probe_time = jiffies;
+	while (!test_bit(CNSS_FW_MEM_READY, &prev_plat_priv->driver_state)) {
+		msleep(FW_READY_DELAY);
+		if (count++ > probe_timeout * 10) {
+			cnss_pr_err("CNSS Driver probe timed out %u ms\n",
+			jiffies_to_msecs(jiffies - probe_time));
+			CNSS_ASSERT(0);
+		}
+	}
+	cnss_pr_info("Previous target probe took %u ms\n",
+		     jiffies_to_msecs(jiffies - probe_time));
 }
 
 static void cnss_driver_cal_work(struct work_struct *work)
@@ -7862,36 +7890,6 @@ static int cnss_update_pci_slot(const struct platform_device_id *device_id,
 	return pci_slot_id;
 }
 
-u32 prev_radio_idx;
-void set_radio_info(struct cnss_plat_data *plat_priv)
-{
-	struct cnss_radio_info *radio_info;
-
-	if (plat_priv == NULL) {
-		cnss_pr_err("%s : plat_priv is NULL!\n", __func__);
-		return;
-	}
-
-	radio_info = &plat_priv->radio_info;
-	radio_info->soc_id = plat_env_index;
-	if (plat_priv->firmware_type == CNSS_FW_DUAL_MAC) {
-		radio_info->is_dual_phy = true;
-		if (plat_env_index == 0) {
-			radio_info->radio_id = 0;
-			prev_radio_idx = radio_info->radio_id + 2;
-		} else {
-			radio_info->radio_id = prev_radio_idx;
-			prev_radio_idx = radio_info->radio_id + 2;
-		}
-	} else {
-		radio_info->is_dual_phy = false;
-		radio_info->radio_id = prev_radio_idx;
-		prev_radio_idx = radio_info->radio_id + 1;
-	}
-
-	return;
-}
-
 static int cnss_probe(struct platform_device *plat_dev)
 {
 	int ret = 0;
@@ -8201,29 +8199,15 @@ static int cnss_probe(struct platform_device *plat_dev)
 	if (ret)
 		goto deinit_genl;
 	cnss_cal_work_init(plat_priv);
-	cnss_mm_work_init(plat_priv);
+
+	if (parallel_probe_enabled)
+		cnss_mm_work_init(plat_priv);
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
 	cnss_crash_work_init(plat_priv);
 #endif
 
-	/* Incrementing plat_env_index only after the probe for the device
-	 * is completed
-	 */
-	if (parallel_probe_enabled)
-	{
-		set_radio_info(plat_priv);
-	}
-
 	spin_lock_irqsave(&plat_env_spinlock, flags);
-	if (parallel_probe_enabled)
-	{
-		cnss_max_soc = plat_env_index;
-		if ((&plat_priv->radio_info)->is_dual_phy == true)
-			cnss_max_radio = (&plat_priv->radio_info)->soc_id +1;
-		else
-			cnss_max_radio = (&plat_priv->radio_info)->soc_id;
-	}
 	plat_env[plat_env_index++] = plat_priv;
 	spin_unlock_irqrestore(&plat_env_spinlock, flags);
 	cnss_pr_info("Platform driver probed successfully. plat 0x%pK tgt 0x%lx\n",
@@ -8309,9 +8293,8 @@ static int cnss_remove(struct platform_device *plat_dev)
 	cnss_crash_work_deinit(plat_priv);
 #endif
 	if (parallel_probe_enabled)
-	{
 		cnss_mm_work_deinit(plat_priv);
-	}
+
 	cnss_cal_work_deinit(plat_priv);
 	cnss_recovery_work_deinit(plat_priv);
 	cnss_remove_sysfs(plat_priv);
