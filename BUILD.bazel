@@ -35,3 +35,5 @@ ddk_headers(
 )
 define_modules("sdxkova","debug")
 define_modules("sdxkova","perf")
+define_modules("sdxkova.cpe.wkk", "debug")
+define_modules("sdxkova.cpe.wkk", "perf")
