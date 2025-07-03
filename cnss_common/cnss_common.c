@@ -686,6 +686,19 @@ int cnss_mlo_mem_alloc(struct cnss_plat_data *plat_priv, int index)
 	return 0;
 }
 
+bool cnss_get_cal_done_status(struct device *dev)
+{
+	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
+
+	if (!plat_priv) {
+		cnss_pr_err("%s: plat_priv is NULL\n", __func__);
+		return false;
+	}
+
+	return plat_priv->cal_done ? true : false;
+}
+EXPORT_SYMBOL(cnss_get_cal_done_status);
+
 int cnss_get_master_soc_id(void)
 {
 	return master_soc_id;
