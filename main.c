@@ -1816,22 +1816,13 @@ static int cnss_set_adj_chip_ids(struct cnss_mlo_group_info *mlo_group_info)
 		chip_info->num_adj_chips = num_adj_chips;
 		memset(chip_info->adj_chip_ids, 0,
 				sizeof(uint8_t) * CNSS_MAX_LINKS_PER_CHIP);
-		if (num_chips == 4 && (chip_info->soc_id == 1 ||
-					chip_info->soc_id == 3)) {
-			chip_info->adj_chip_ids[1] = (chip_info->chip_id + 1) %
+
+		chip_info->adj_chip_ids[0] = (chip_info->chip_id + 1) %
 								num_chips;
-			if (num_adj_chips >= 2)
-				chip_info->adj_chip_ids[0] =
-						((chip_info->chip_id - 1) +
-						num_chips) % num_chips;
-		} else {
-			chip_info->adj_chip_ids[0] = (chip_info->chip_id + 1) %
-								num_chips;
-			if (num_adj_chips >= 2)
-				chip_info->adj_chip_ids[1] =
-						((chip_info->chip_id - 1) +
-						num_chips) % num_chips;
-		}
+		if (num_adj_chips >= 2)
+			chip_info->adj_chip_ids[1] = ((chip_info->chip_id - 1) +
+						     num_chips) % num_chips;
+
 		cnss_pr_dbg("Adjacent chip IDs (%u, %u) for chip %u\n",
 				chip_info->adj_chip_ids[0],
 				chip_info->adj_chip_ids[1], chip_info->chip_id);
