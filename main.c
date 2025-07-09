@@ -1733,6 +1733,24 @@ void cnss_get_ramdump_device_name(struct device *dev,
 }
 EXPORT_SYMBOL(cnss_get_ramdump_device_name);
 
+static bool cnss_get_mlo_support(struct cnss_plat_data *plat_priv)
+{
+	if (!plat_priv) {
+		cnss_pr_err("%s: plat_priv is NULL\n", __func__);
+		return -EINVAL;
+	}
+
+	switch (plat_priv->device_id) {
+	case QCN9224_DEVICE_ID:
+	case QCA5332_DEVICE_ID:
+	case QCN6432_DEVICE_ID:
+	case QCA5424_DEVICE_ID:
+		return true;
+	}
+
+	return false;
+}
+
 bool cnss_get_global_mlo_support(void)
 {
 	struct cnss_plat_data *plat_priv = NULL;
@@ -3347,7 +3365,7 @@ static void cnss_set_static_bypass_support(struct cnss_plat_data *plat_priv)
 {
 	plat_priv->static_bypass_support = false;
 
-	if (cnss_get_global_mlo_support() && enable_mlo_support &&
+	if (cnss_get_mlo_support(plat_priv) && enable_mlo_support &&
 	    !plat_priv->mlo_capable) {
 		plat_priv->static_bypass_support = true;
 
