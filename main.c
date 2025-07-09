@@ -5394,6 +5394,9 @@ static void get_updated_qdss_trace_filename(struct cnss_plat_data *plat_priv,
 		snprintf(file_name, size, "%s_%s",
 			 raw_file_name, plat_priv->device_name);
 	}
+	memset(plat_priv->dump_file_name, '\0',
+		sizeof(plat_priv->dump_file_name));
+	strlcpy(plat_priv->dump_file_name, file_name, size);
 }
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
@@ -6873,7 +6876,44 @@ static ssize_t fs_ready_store(struct device *dev,
 	return count;
 }
 
+static ssize_t dump_filename_store(struct device *dev,
+			      struct device_attribute *attr,
+			      const char *buf, size_t count)
+{
+	struct cnss_plat_data *plat_priv = dev_get_drvdata(dev);
+	int dump_file = 0;
+
+	if (!plat_priv) {
+		cnss_pr_err("plat_priv is NULL!\n");
+		return 0;
+	}
+
+	if (sscanf(buf, "%du", &dump_file) != 1)
+		return -EINVAL;
+
+	if(dump_file)
+		memset(plat_priv->dump_file_name, '\0',
+			sizeof(plat_priv->dump_file_name));
+
+	return count;
+}
+static ssize_t dump_filename_show(struct device *dev,
+			      struct device_attribute *attr,
+			      char *buf)
+{
+	struct cnss_plat_data *plat_priv = dev_get_drvdata(dev);
+
+	if (!plat_priv) {
+		cnss_pr_err("plat_priv is NULL!\n");
+		return 0;
+	}
+	return snprintf(buf, sizeof(plat_priv->dump_file_name), "%s",
+				plat_priv->dump_file_name);
+
+}
+
 static DEVICE_ATTR_WO(fs_ready);
+static DEVICE_ATTR_RW(dump_filename);
 
 static int cnss_create_sysfs(struct cnss_plat_data *plat_priv)
 {
@@ -6882,6 +6922,11 @@ static int cnss_create_sysfs(struct cnss_plat_data *plat_priv)
 	ret = device_create_file(&plat_priv->plat_dev->dev, &dev_attr_fs_ready);
 	if (ret) {
 		cnss_pr_err("Failed to create device file, err = %d\n", ret);
+		goto out;
+	}
+	ret = device_create_file(&plat_priv->plat_dev->dev, &dev_attr_dump_filename);
+	if (ret) {
+		cnss_pr_err("Failed to create dump_filename device file, err = %d\n", ret);
 		goto out;
 	}
 
@@ -6893,6 +6938,7 @@ out:
 static void cnss_remove_sysfs(struct cnss_plat_data *plat_priv)
 {
 	device_remove_file(&plat_priv->plat_dev->dev, &dev_attr_fs_ready);
+	device_remove_file(&plat_priv->plat_dev->dev, &dev_attr_dump_filename);
 }
 
 static int cnss_event_work_init(struct cnss_plat_data *plat_priv)

@@ -46,6 +46,7 @@
 #define CNSS_RAMDUMP_VERSION		0
 #define CNSS_RAMDUMP_VERSION_V2		2
 #define CNSS_RAMDUMP_FILE_NAME_MAX_LEN	(2 * CNSS_DEVICE_NAME_MAX_LEN)
+#define CNSS_GENL_STR_LEN_MAX 32
 
 #define CNSS_DMS_QMI_CONNECTION_WAIT_MS 50
 #define CNSS_DMS_QMI_CONNECTION_WAIT_RETRY 200
@@ -778,6 +779,7 @@ struct cnss_plat_data {
 	bool mm_coldboot_cal_in_progress;
 	bool static_bypass_support;
 	wait_queue_head_t panic_dump_waitq;
+	char dump_file_name[CNSS_GENL_STR_LEN_MAX];
 };
 
 #ifdef CONFIG_ARCH_QCOM
