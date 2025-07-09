@@ -3297,9 +3297,8 @@ static int cnss_qca8074_notifier_atomic_nb(struct notifier_block *nb,
 				}
 			}
 		} else {
-			driver_ops->fatal((struct pci_dev *)plat_priv->plat_dev,
-					  (const struct pci_device_id *)
-					  plat_priv->plat_dev_id);
+			cnss_schedule_recovery(&plat_priv->plat_dev->dev,
+						cnss_reason);
 		}
 	}
 
@@ -4941,6 +4940,9 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 	case CNSS_REASON_FATAL_SHUTDOWN:
 		if (plat_priv->bus_type == CNSS_BUS_PCI)
 			cnss_bus_collect_dump_info(plat_priv, false);
+		if(plat_priv->recovery_type != CNSS_SYNC_RECOVERY &&
+		  !plat_priv->mlo_support)
+			cnss_bus_update_status(plat_priv, CNSS_FW_DOWN);
 		if (plat_priv->mlo_support && !plat_priv->recovery_enabled &&
 				group_info != NULL &&
 				plat_priv->crash_type != CNSS_ROOTPD_CRASH) {
