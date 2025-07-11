@@ -18,7 +18,7 @@
 #include <linux/etherdevice.h>
 #include <linux/pm_qos.h>
 #include <linux/platform_device.h>
-#include <cnss2.h>
+#include <include/cnss2.h>
 #ifdef CONFIG_QTI_MEMORY_DUMP_V2
 #include <soc/qcom/memory_dump.h>
 #endif
