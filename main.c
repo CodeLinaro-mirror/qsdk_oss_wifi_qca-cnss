@@ -3393,7 +3393,7 @@ void cnss_get_early_cal_supported(struct cnss_plat_data *plat_priv)
 				     "qcom,early_cal_enabled", "okay") >= 0)
 		plat_priv->early_cal_support = true;
 
-	cnss_pr_info("Early coldobot calibration enabled: %d\n",
+	cnss_pr_info("Early coldboot calibration enabled: %d\n",
 		     plat_priv->early_cal_support);
 }
 
