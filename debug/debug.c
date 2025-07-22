@@ -16,10 +16,10 @@
 #include <linux/debugfs.h>
 #include <linux/module.h>
 #include <linux/sizes.h>
-#include "cnss_common/cnss_common.h"
-#include "../main.h"
-#include "debug/debug.h"
-#include "pci/pci.h"
+#include <cnss_common/cnss_common.h>
+#include <main.h>
+#include <debug/debug.h>
+#include <pci/pci.h>
 
 #define MAX_MLO_SOC_BITMASK	8
 
@@ -401,11 +401,11 @@ static int cnss_debug_read_pbl_data(struct cnss_pci_data *pci_priv,
 	if (in_interrupt() || irqs_disabled())
 		gfp = GFP_ATOMIC;
 
-	buf = kzalloc(total_size, gfp);
+	buf = kcalloc(total_size, sizeof(u32), gfp);
 	if (!buf)
 		return -ENOMEM;
 
-	mem_addr = kzalloc(total_size, gfp);
+	mem_addr = kcalloc(total_size, sizeof(u32), gfp);
 	if (!mem_addr) {
 		kfree(buf);
 		return -ENOMEM;
@@ -452,7 +452,7 @@ static int cnss_debug_read_sbl_data(struct cnss_pci_data *pci_priv,
 	if (in_interrupt() || irqs_disabled())
 		gfp = GFP_ATOMIC;
 
-	buf = kzalloc(log_size, gfp);
+	buf = kcalloc(log_size, sizeof(u32), gfp);
 	if (!buf)
 		return -ENOMEM;
 
@@ -486,7 +486,7 @@ static int cnss_debug_read_noc_errors(struct cnss_pci_data *pci_priv,
 	if (in_interrupt() || irqs_disabled())
 		gfp = GFP_ATOMIC;
 
-	buf = kzalloc(len, gfp);
+	buf = kcalloc(len, sizeof(u32), gfp);
 	if (!buf)
 		return -ENOMEM;
 

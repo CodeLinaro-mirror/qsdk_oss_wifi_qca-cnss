@@ -1,0 +1,39 @@
+load("//build/kernel/kleaf:kernel.bzl", "ddk_headers")
+load(":wlan_qca_cnss.bzl", "define_modules")
+
+package(
+    default_visibility = [
+        "//visibility:public",
+    ],
+)
+
+ddk_headers(
+    name = "cnss_headers",
+    hdrs = glob(["**/*.h"]),
+    linux_includes = [
+        ".",
+        "ahb",
+        "cnss_common",
+        "debug",
+        "bus",
+        "genl",
+        "legacyirq",
+        "include",
+        "qmi",
+        "pci",
+        "configs",
+    ],
+)
+ddk_headers(
+    name = "cnss_config_headers",
+    hdrs = glob([
+        "configs/*.h",
+    ]),
+    includes = [
+        "configs",
+    ],
+)
+define_modules("sdxkova","debug")
+define_modules("sdxkova","perf")
+define_modules("sdxkova.cpe.wkk", "debug")
+define_modules("sdxkova.cpe.wkk", "perf")

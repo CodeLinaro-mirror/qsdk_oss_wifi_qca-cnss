@@ -31,12 +31,12 @@
 #include <soc/qcom/qgic2m.h>
 #endif
 
-#include "../main.h"
-#include "cnss_common/cnss_common.h"
-#include "debug/debug.h"
-#include "pci/pci.h"
-#include "bus/bus.h"
-#include "legacyirq/legacyirq.h"
+#include <main.h>
+#include <cnss_common/cnss_common.h>
+#include <debug/debug.h>
+#include <pci/pci.h>
+#include <bus/bus.h>
+#include <legacyirq/legacyirq.h>
 #if (KERNEL_VERSION(5, 15, 0) <= LINUX_VERSION_CODE)
 #include <linux/devcoredump.h>
 #include <linux/elf.h>
@@ -1853,6 +1853,9 @@ static int cnss_qcn9000_ramdump(struct cnss_pci_data *pci_priv)
 	struct cnss_dump_meta_info *meta_info;
 	int i, ret = 0, idx = 0;
 
+	if (plat_priv->disable_ramdump)
+		return 0;
+
 	if (!info_v2->dump_data_valid ||
 	    dump_data->nentries == 0)
 		return 0;
@@ -2125,6 +2128,9 @@ int cnss_qcn9000_ramdump(struct  cnss_pci_data *pci_priv)
 	struct cnss_dump_meta_info *meta_info;
 	struct list_head head;
 	int i, ret = 0, idx = 0;
+
+	if (plat_priv->disable_ramdump)
+		return 0;
 
 	if (!info_v2->dump_data_valid || dump_data->nentries == 0)
 		return ret;
@@ -5420,6 +5426,9 @@ int cnss_pci_probe(struct pci_dev *pci_dev,
 	pci_priv->driver_ops = plat_priv->driver_ops;
 	plat_priv->bus_priv = pci_priv;
 	reinit_completion(&plat_priv->soc_reset_request_complete);
+
+	if (plat_priv->disable_ramdump)
+		plat_priv->disable_ramdump = false;
 
 	ret = cnss_register_ramdump(plat_priv);
 	if (ret)
