@@ -624,6 +624,10 @@ static inline bool cnss_get_mm_coldboot_cal(struct device *dev)
 {
 	return false;
 }
+void cnss_set_static_bypass_support(void)
+{
+	return;
+}
 bool cnss_get_static_bypass_enabled(struct device *dev)
 {
 	return false;
@@ -766,6 +770,7 @@ int cnss_get_num_radios(void);
 void *cnss_get_radio_info(struct device *dev);
 int cnss_get_master_soc_id(void);
 bool cnss_get_mm_coldboot_cal(struct device *dev);
+void cnss_set_static_bypass_support(void);
 bool cnss_get_static_bypass_enabled(struct device *dev);
 bool cnss_get_cal_done_status(struct device *dev);
 #endif
