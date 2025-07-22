@@ -799,8 +799,8 @@ static int cnss_wlfw_phy_cap_send_sync(struct cnss_plat_data *plat_priv)
 	cnss_pr_info("PHY capability mm_coldboot_cal: %u\n",
 		     resp->mm_coldboot_cal);
 	if (resp->mm_coldboot_cal_valid && plat_priv->cold_boot_support &&
-	    !plat_priv->cal_done && (driver_mode == CNSS_MISSION ||
-	    driver_mode == CNSS_FTM))
+	    !plat_priv->cal_done && parallel_probe_enabled &&
+	    (driver_mode == CNSS_MISSION || driver_mode == CNSS_FTM))
 		plat_priv->mm_coldboot_cal = resp->mm_coldboot_cal;
 	else
 		plat_priv->mm_coldboot_cal = false;
