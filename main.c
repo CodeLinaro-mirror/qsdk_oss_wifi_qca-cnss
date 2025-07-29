@@ -167,6 +167,10 @@ int parallel_probe_enabled = 1;
 module_param(parallel_probe_enabled, int, 0644);
 MODULE_PARM_DESC(parallel_probe_enabled, "enable/disable parallel probing");
 
+int static_bypass_support = 1;
+module_param(static_bypass_support, int, 0644);
+MODULE_PARM_DESC(static_bypass_support, "Static bypass support");
+
 static int skip_cnss;
 module_param(skip_cnss, int, 0644);
 MODULE_PARM_DESC(skip_cnss, "skip_cnss");
@@ -294,6 +298,7 @@ static int m3_dump_major;
 static struct class *m3_dump_class;
 struct rproc *rproc_rootpd, *rproc_textpd;
 
+static bool static_bypass_enabled;
 atomic_t cal_in_progress_count;
 bool g_driver_mode;
 void *cnss_register_qca8074_cb(struct cnss_plat_data *plat_priv);
@@ -1363,21 +1368,23 @@ skip_cfg:
 	cnss_pr_info("Mission mode with Coldboot calibration operation: %u\n",
 		     plat_priv->mm_coldboot_cal);
 	ret = cnss_wlfw_wlan_mode_send_sync(plat_priv, mode);
-	if (plat_priv->static_bypass_support)
-		return ret;
 
 	if (plat_priv->cold_boot_support && !plat_priv->cal_done &&
 			plat_priv->mm_coldboot_cal)
 		cnss_wait_for_cold_boot_cal_done(plat_priv);
+
+	if (!plat_priv->cal_in_progress)
+		if ((ret = cnss_configure_io_coherency_regs(plat_priv, false)))
+			cnss_pr_err("Failed to set io coherency regs");
+
+	if (plat_priv->static_bypass_support)
+		return ret;
 
 	if (plat_priv->qdss_support & (1 << mode)) {
 		cnss_pr_info("Starting QDSS for %s\n", plat_priv->device_name);
 		cnss_wlfw_qdss_dnld_send_sync(plat_priv);
 	}
 
-	if (!plat_priv->cal_in_progress)
-		if ((ret = cnss_configure_io_coherency_regs(plat_priv, false)))
-			cnss_pr_err("Failed to set io coherency regs");
 out:
 	return ret;
 }
@@ -3347,8 +3354,12 @@ int cnss_unregister_notifier_cb(struct cnss_plat_data *plat_priv)
 
 bool cnss_get_static_bypass_enabled(struct device *dev)
 {
-	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
+	struct cnss_plat_data *plat_priv;
 
+	if (!dev)
+		return static_bypass_enabled;
+
+	plat_priv = cnss_bus_dev_to_plat_priv(dev);
 	if (!plat_priv)
 		return false;
 
@@ -3356,17 +3367,33 @@ bool cnss_get_static_bypass_enabled(struct device *dev)
 }
 EXPORT_SYMBOL(cnss_get_static_bypass_enabled);
 
-static void cnss_set_static_bypass_support(struct cnss_plat_data *plat_priv)
+void cnss_set_static_bypass_support(void)
 {
-	plat_priv->static_bypass_support = false;
+	struct cnss_plat_data *plat_priv;
+	int i;
 
-	if (cnss_get_mlo_support(plat_priv) && enable_mlo_support &&
-	    !plat_priv->mlo_capable) {
-		plat_priv->static_bypass_support = true;
+	if (!static_bypass_support) {
+		cnss_pr_dbg("Static bypass disabled\n");
+		return;
+	}
 
-		parallel_probe_enabled = 0;
+	for (i = 0; i < plat_env_index; i++) {
+		plat_priv = plat_env[i];
+
+		if (!plat_priv)
+			continue;
+
+		plat_priv->static_bypass_support = false;
+		if (cnss_get_mlo_support(plat_priv) && enable_mlo_support &&
+		    !plat_priv->mlo_capable) {
+			plat_priv->static_bypass_support = true;
+			static_bypass_enabled = true;
+		}
+		cnss_pr_dbg("Static bypass enabled: %d\n",
+				plat_priv->static_bypass_support ? 1 : 0);
 	}
 }
+EXPORT_SYMBOL(cnss_set_static_bypass_support);
 
 void cnss_get_early_cal_supported(struct cnss_plat_data *plat_priv)
 {
@@ -3406,6 +3433,7 @@ int cnss_wlan_probe_driver(void)
 	int ret;
 	int i;
 
+	static_bypass_enabled = false;
 	cnss_sort_probe_order();
 	cnss_set_plat_cap();
 	for (i = 0; i < plat_env_index; i++) {
@@ -3439,7 +3467,6 @@ int cnss_wlan_probe_driver(void)
 			set_bit(CNSS_DRIVER_LOADING, &plat_priv->driver_state);
 		}
 #endif
-		cnss_set_static_bypass_support(plat_priv);
 		cnss_mount_firmware(plat_priv);
 		reinit_completion(&plat_priv->phy_cap_complete);
 
