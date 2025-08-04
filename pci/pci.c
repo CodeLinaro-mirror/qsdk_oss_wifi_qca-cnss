@@ -4187,6 +4187,26 @@ void *cnss_get_pci_mem(struct pci_dev *pci_dev)
 }
 EXPORT_SYMBOL(cnss_get_pci_mem);
 
+int cnss_pci_get_iova(struct cnss_pci_data *pci_priv, u64 *addr, u64 *size)
+{
+	struct mhi_controller *mhi_ctrl;
+	struct cnss_plat_data *plat_priv = NULL;
+
+	if (!pci_priv)
+		return -ENODEV;
+
+	mhi_ctrl =  pci_priv->mhi_ctrl;
+	plat_priv = pci_priv->plat_priv;
+	if (!mhi_ctrl) {
+		cnss_pr_err("Invalid MHI controller context\n");
+		return -EINVAL;
+	}
+	*addr = mhi_ctrl->iova_start;
+	*size = mhi_ctrl->iova_stop - mhi_ctrl->iova_start;
+
+	return 0;
+}
+
 static int cnss_pci_enable_bus(struct cnss_pci_data *pci_priv)
 {
 	int ret = 0;

@@ -838,6 +838,7 @@ static int cnss_wlfw_host_cap_send_sync(struct cnss_plat_data *plat_priv)
 	struct device *dev = &plat_priv->plat_dev->dev;
 	const struct firmware *fw;
 	char filename[FW_INI_FILE_NAME_LEN] = {0};
+	u64 iova_start = 0, iova_size = 0;
 
 	if (enable_mlo_support && plat_priv->mlo_capable &&
 	    (plat_priv->mm_coldboot_cal || plat_priv->early_cal_support ||
@@ -927,6 +928,14 @@ static int cnss_wlfw_host_cap_send_sync(struct cnss_plat_data *plat_priv)
 		req->gpios_valid = 1;
 		cnss_pr_info("Sending %d GPIO entries in Host Capabilities\n",
 			     req->gpios_len);
+	}
+
+	if (!cnss_bus_get_iova(plat_priv, &iova_start, &iova_size)) {
+		req->ddr_range_valid = 1;
+		req->ddr_range[0].start = iova_start;
+		req->ddr_range[0].size = iova_size;
+		cnss_pr_dbg("Sending iova starting 0x%llx with size 0x%llx\n",
+			    req->ddr_range[0].start, req->ddr_range[0].size);
 	}
 
 	/* update MLO configuration

@@ -2800,7 +2800,7 @@ void cnss_wait_for_cold_boot_cal_done(struct cnss_plat_data *plat_priv)
 			return;
 		}
 
-		cnss_pr_info("Coldboot Calbration wait started for Device: 0x%lx, timeout: %d seconds\n",
+		cnss_pr_info("Coldboot Calibration wait started for Device: 0x%lx, timeout: %d seconds\n",
 			     plat_priv->device_id, cold_boot_cal_timeout);
 		while (test_bit(CNSS_COLD_BOOT_CAL, &plat_priv->driver_state)) {
 			msleep(FW_READY_DELAY);
