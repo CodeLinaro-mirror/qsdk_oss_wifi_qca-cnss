@@ -2587,6 +2587,10 @@ void cnss_set_default_mlo_config(void)
 		}
 
 		mlo_group_info[group_id].group_id = group_id;
+
+		if ((mlo_max_peer == 0) && IS_ENABLED(CONFIG_WLAN_LITE))
+			mlo_max_peer = 64;
+
 		if (mlo_max_peer == 0)
 			mlo_group_info[group_id].max_num_peers = 256;
 		else
