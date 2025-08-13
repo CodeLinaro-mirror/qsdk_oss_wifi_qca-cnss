@@ -3402,10 +3402,6 @@ void cnss_get_early_cal_supported(struct cnss_plat_data *plat_priv)
 	struct device_node *early_cal = NULL;
 
 	plat_priv->early_cal_support = false;
-
-	if (!plat_priv->cold_boot_support)
-		return;
-
 	if (plat_priv->bus_type == CNSS_BUS_AHB)
 		return;
 
