@@ -48,5 +48,6 @@ void cnss_bus_get_msi_address(struct device *dev, u32 *msi_addr_low,
 int cnss_bus_get_user_msi_assignment(struct device *dev, char *user_name,
 				 int *num_vectors, u32 *user_base_data,
 				 u32 *base_vector);
+int cnss_bus_get_iova(struct cnss_plat_data *plat_priv, u64 *addr, u64 *size);
 
 #endif /* _CNSS_BUS_H */

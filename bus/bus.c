@@ -555,3 +555,19 @@ int cnss_bus_get_user_msi_assignment(struct device *dev, char *user_name,
 	return 0;
 }
 EXPORT_SYMBOL(cnss_bus_get_user_msi_assignment);
+
+int cnss_bus_get_iova(struct cnss_plat_data *plat_priv, u64 *addr, u64 *size)
+{
+	if (!plat_priv)
+		return -ENODEV;
+
+	switch (plat_priv->bus_type) {
+	case CNSS_BUS_PCI:
+		return cnss_pci_get_iova(plat_priv->bus_priv, addr, size);
+	default:
+		cnss_pr_err("Unsupported bus type: %d\n",
+			    plat_priv->bus_type);
+		return -EINVAL;
+	}
+}
+EXPORT_SYMBOL(cnss_bus_get_iova);
