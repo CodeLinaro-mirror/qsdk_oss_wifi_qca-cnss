@@ -3369,7 +3369,7 @@ EXPORT_SYMBOL(cnss_get_static_bypass_enabled);
 
 void cnss_set_static_bypass_support(void)
 {
-	struct cnss_plat_data *plat_priv;
+	struct cnss_plat_data *plat_priv = NULL;
 	int i;
 
 	if (!static_bypass_support) {
