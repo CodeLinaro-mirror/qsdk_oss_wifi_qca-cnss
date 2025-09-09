@@ -163,7 +163,11 @@ unsigned int driver_mode;
 module_param(driver_mode, uint, 0644);
 MODULE_PARM_DESC(driver_mode, "Global driver mode");
 
+#ifdef CONFIG_TARGET_SDX_WKK
+int parallel_probe_enabled;
+#else
 int parallel_probe_enabled = 1;
+#endif
 module_param(parallel_probe_enabled, int, 0644);
 MODULE_PARM_DESC(parallel_probe_enabled, "enable/disable parallel probing");
 
