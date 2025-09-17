@@ -163,7 +163,11 @@ unsigned int driver_mode;
 module_param(driver_mode, uint, 0644);
 MODULE_PARM_DESC(driver_mode, "Global driver mode");
 
+#ifdef CONFIG_TARGET_SDX_WKK
+int parallel_probe_enabled;
+#else
 int parallel_probe_enabled = 1;
+#endif
 module_param(parallel_probe_enabled, int, 0644);
 MODULE_PARM_DESC(parallel_probe_enabled, "enable/disable parallel probing");
 
@@ -2800,7 +2804,7 @@ void cnss_wait_for_cold_boot_cal_done(struct cnss_plat_data *plat_priv)
 			return;
 		}
 
-		cnss_pr_info("Coldboot Calbration wait started for Device: 0x%lx, timeout: %d seconds\n",
+		cnss_pr_info("Coldboot Calibration wait started for Device: 0x%lx, timeout: %d seconds\n",
 			     plat_priv->device_id, cold_boot_cal_timeout);
 		while (test_bit(CNSS_COLD_BOOT_CAL, &plat_priv->driver_state)) {
 			msleep(FW_READY_DELAY);
@@ -3369,7 +3373,7 @@ EXPORT_SYMBOL(cnss_get_static_bypass_enabled);
 
 void cnss_set_static_bypass_support(void)
 {
-	struct cnss_plat_data *plat_priv;
+	struct cnss_plat_data *plat_priv = NULL;
 	int i;
 
 	if (!static_bypass_support) {

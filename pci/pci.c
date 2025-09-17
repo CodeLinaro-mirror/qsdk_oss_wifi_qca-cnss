@@ -4187,6 +4187,26 @@ void *cnss_get_pci_mem(struct pci_dev *pci_dev)
 }
 EXPORT_SYMBOL(cnss_get_pci_mem);
 
+int cnss_pci_get_iova(struct cnss_pci_data *pci_priv, u64 *addr, u64 *size)
+{
+	struct mhi_controller *mhi_ctrl;
+	struct cnss_plat_data *plat_priv = NULL;
+
+	if (!pci_priv)
+		return -ENODEV;
+
+	mhi_ctrl =  pci_priv->mhi_ctrl;
+	plat_priv = pci_priv->plat_priv;
+	if (!mhi_ctrl) {
+		cnss_pr_err("Invalid MHI controller context\n");
+		return -EINVAL;
+	}
+	*addr = mhi_ctrl->iova_start;
+	*size = mhi_ctrl->iova_stop - mhi_ctrl->iova_start;
+
+	return 0;
+}
+
 static int cnss_pci_enable_bus(struct cnss_pci_data *pci_priv)
 {
 	int ret = 0;
@@ -5086,7 +5106,7 @@ static irqreturn_t qdss_irq_handler(int irq, void *context)
 
 static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 {
-	int ret = 0, idx = 0;
+	int ret = 0;
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 	struct pci_dev *pci_dev = pci_priv->pci_dev;
 	struct mhi_controller *mhi_ctrl;
@@ -5179,6 +5199,7 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 		mhi_ctrl->iova_stop = pci_priv->dma_bit_mask;
 	}
 #else
+	int idx = 0;
 	dev_node = of_find_node_by_type(NULL, "memory");
 	if (dev_node) {
 
@@ -5395,6 +5416,15 @@ void cnss_set_pci_link_speed_width(struct device *dev, u16 link_speed,
 	else
 		cnss_pr_info("%s The PCI Generation is %d\n", __func__,
 				link_speed);
+
+	/* Check if the link width is supported, if not,
+	 * set the default link width.
+	 */
+	if (link_width > pci_priv->def_link_width) {
+		cnss_pr_dbg("%s: Selected link width %d is not supported, setting default link width %d\n",
+			    __func__, link_width, pci_priv->def_link_width);
+		link_width = pci_priv->def_link_width;
+	}
 
 	ret = pcie_set_link_width(root_port, link_width);
 	if (ret)
