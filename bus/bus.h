@@ -42,6 +42,7 @@ int cnss_bus_update_status(struct cnss_plat_data *plat_priv,
 u64 cnss_bus_get_q6_time(struct device *dev);
 void cnss_bus_fw_boot_timeout_hdlr(struct timer_list *timer);
 int cnss_bus_get_msi_irq(struct device *dev, unsigned int vector);
+int cnss_bus_get_msi_data(struct device *dev, unsigned int vector);
 int cnss_bus_get_soc_info(struct device *dev, struct cnss_soc_info *info);
 void cnss_bus_get_msi_address(struct device *dev, u32 *msi_addr_low,
 			  u32 *msi_addr_high);

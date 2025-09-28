@@ -629,6 +629,7 @@ struct cnss_bus_ops {
 			(struct device *dev, struct cnss_soc_info *info);
 	u64 (*cnss_bus_get_q6_time)(struct device *dev);
 	int (*cnss_bus_get_msi_irq)(struct device *dev, unsigned int vector);
+	int (*cnss_bus_get_msi_data)(struct device *dev, unsigned int vector);
 	void (*cnss_bus_get_msi_address)(struct device *dev, u32 *msi_addr_low,
 				u32 *msi_addr_high);
 	int (*cnss_bus_get_user_msi_assignment)(struct device *dev,
