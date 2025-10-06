@@ -4202,7 +4202,7 @@ int cnss_pci_get_iova(struct cnss_pci_data *pci_priv, u64 *addr, u64 *size)
 		return -EINVAL;
 	}
 	*addr = mhi_ctrl->iova_start;
-	*size = mhi_ctrl->iova_stop - mhi_ctrl->iova_start;
+	*size = mhi_ctrl->iova_stop - mhi_ctrl->iova_start + 1;
 
 	return 0;
 }
@@ -5209,6 +5209,8 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 			mhi_ctrl->iova_stop = memory.end;
 			idx++;
 		}
+		cnss_pr_dbg("%s: iova start:%pa iova stop: %pa\n", __func__,
+			    &mhi_ctrl->iova_start, &mhi_ctrl->iova_stop);
 
 		if (!mhi_ctrl->iova_start || !mhi_ctrl->iova_stop) {
 			cnss_pr_err("Unable to get resource: memory");
