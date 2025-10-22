@@ -166,6 +166,7 @@ int cnss_wlfw_mlo_wsi_remap_send_sync(struct cnss_plat_data *plat_priv);
 int cnss_wlfw_partner_chip_state_info_send_sync(
 					struct cnss_plat_data *plat_priv,
 					u8 input);
+void cnss_send_qmi_crash_shutdown(struct cnss_plat_data *plat_priv);
 #else
 #define QMI_WLFW_TIMEOUT_MS		10000
 

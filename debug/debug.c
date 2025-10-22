@@ -2113,6 +2113,34 @@ const struct file_operations cnss_mlo_config_ini_debug_fops = {
 	.llseek		= default_llseek,
 };
 
+static ssize_t cnss_qmi_trigger_assert(struct file *fp,
+					   const char __user *user_buf,
+					   size_t count, loff_t *off)
+{
+	struct cnss_plat_data *plat_priv = fp->private_data;
+	u16 trigger_qmi_assert = 0;
+
+	if (kstrtou16_from_user(user_buf, count, 0, &trigger_qmi_assert))
+		return -EFAULT;
+
+	if (!plat_priv)
+		return -ENODEV;
+
+	if (trigger_qmi_assert)
+		cnss_device_crashed(&plat_priv->plat_dev->dev);
+
+	return count;
+}
+
+static const struct file_operations cnss_trigger_qmi_assert_fops = {
+	.read		= seq_read,
+	.write		= cnss_qmi_trigger_assert,
+	.open		= simple_open,
+	.owner		= THIS_MODULE,
+	.llseek		= seq_lseek,
+
+};
+
 int cnss_create_debug_only_node(struct cnss_plat_data *plat_priv)
 {
 	struct dentry *root_dentry = plat_priv->root_dentry;
@@ -2147,6 +2175,9 @@ int cnss_create_debug_only_node(struct cnss_plat_data *plat_priv)
 			    &cnss_pin_connect_fops);
 	debugfs_create_file("stats", 0644, root_dentry, plat_priv,
 			    &cnss_stats_fops);
+
+	debugfs_create_file("trigger_qmi_assert", 0644, root_dentry, plat_priv,
+			    &cnss_trigger_qmi_assert_fops);
 	return 0;
 }
 
