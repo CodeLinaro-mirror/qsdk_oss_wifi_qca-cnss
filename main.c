@@ -1296,6 +1296,44 @@ int cnss_configure_io_coherency_regs(struct cnss_plat_data *plat_priv,
 }
 #endif
 
+void cnss_send_partner_chip_state_info(struct cnss_plat_data *ssr_plat_priv,
+				       u8 input)
+{
+	struct cnss_mlo_group_info *group_info = NULL;
+	struct cnss_plat_data *plat_priv = NULL;
+	int i;
+
+	if (!ssr_plat_priv || !ssr_plat_priv->recovery_enabled ||
+	    ssr_plat_priv->recovery_mode == MODE_0_RECOVERY_MODE)
+		return;
+
+	if (!enable_mlo_support || !ssr_plat_priv->mlo_support ||
+	    !ssr_plat_priv->mlo_capable)
+		return;
+
+	if (!ssr_plat_priv->mlo_group_info || !ssr_plat_priv->mlo_chip_info)
+		return;
+
+	group_info = ssr_plat_priv->mlo_group_info;
+	for (i = 0; i < group_info->num_chips; i++) {
+		plat_priv =
+		cnss_get_plat_priv_by_soc_id(group_info->chip_info[i].soc_id);
+		if (!plat_priv)
+			continue;
+
+		if (plat_priv->partner_chip_state)
+			continue;
+
+		if (!test_bit(CNSS_FW_READY, &plat_priv->driver_state)) {
+			cnss_pr_err("Invalid state to send partner chip state info: 0x%lx\n",
+				    plat_priv->driver_state);
+			continue;
+		}
+
+		cnss_wlfw_partner_chip_state_info_send_sync(plat_priv, input);
+	}
+}
+
 int __cnss_wlan_enable(struct cnss_plat_data *plat_priv,
 		       struct cnss_wlan_enable_cfg *config,
 		       enum cnss_driver_mode mode,
@@ -1383,6 +1421,10 @@ skip_cfg:
 
 	if (plat_priv->static_bypass_support)
 		return ret;
+
+	if (plat_priv->partner_chip_state)
+		cnss_send_partner_chip_state_info(plat_priv, CNSS_WSI_LINK_ENABLE);
+	plat_priv->partner_chip_state = false;
 
 	if (plat_priv->qdss_support & (1 << mode)) {
 		cnss_pr_info("Starting QDSS for %s\n", plat_priv->device_name);
@@ -4060,9 +4102,12 @@ static int cnss_qca8074_notifier_nb(struct notifier_block *nb,
 					  (const struct pci_device_id *)
 					  plat_priv->plat_dev_id);
 	} else if (event_code == CNSS_BEFORE_SHUTDOWN) {
-		if (driver_ops)
+		if (driver_ops) {
 			driver_ops->remove(
 					(struct pci_dev *)plat_priv->plat_dev);
+			cnss_send_partner_chip_state_info(plat_priv,
+							  CNSS_WSI_LINK_DISABLE);
+		}
 	} else if (event_code == CNSS_RAMDUMP_NOTIFICATION) {
 #ifdef CONFIG_CNSS2_KERNEL_IPQ
 #if IS_ENABLED(CONFIG_CORESIGHT)
@@ -5111,6 +5156,7 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 		 * multiple targets in the MLO group are all powered up in the
 		 * correct sequence
 		 */
+		plat_priv->partner_chip_state = true;
 		if (plat_priv->bus_type == CNSS_BUS_PCI) {
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
 			cnss_hif_shutdown(plat_priv);
