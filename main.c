@@ -3968,6 +3968,10 @@ void  *__cnss_subsystem_get(struct cnss_plat_data *plat_priv)
 	cnss_pr_info("%s: driver_state: 0x%lx\n", __func__,
 		     plat_priv->driver_state);
 
+	//Clear QMI assert timer if its already running since recover is done.
+	if (timer_pending(&plat_priv->qmi_crash_wait_timer))
+		del_timer(&plat_priv->qmi_crash_wait_timer);
+
 	if (test_bit(CNSS_RECOVERY_WAIT_FOR_DRIVER, &plat_priv->driver_state))
 		boot_after_recovery = true;
 
@@ -4879,26 +4883,24 @@ static int cnss_subsys_dummy_load(struct rproc *subsys_desc,
 
 void cnss_device_crashed(struct device *dev)
 {
-	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
-	struct cnss_subsys_info *subsys_info;
+	struct cnss_plat_data *plat_priv = NULL; 
 
-	if (!plat_priv)
+	if (!dev) {
+		cnss_pr_err("%s: Invalid device\n",__func__);
 		return;
+	}
 
-	subsys_info = &plat_priv->subsys_info;
-#ifdef CONFIG_CNSS2_KERNEL_SSR_FRAMEWORK
-	if (subsys_info->subsys_device) {
-		set_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state);
-		subsys_set_crash_status(subsys_info->subsys_device, true);
-		subsystem_restart_dev(subsys_info->subsys_device);
+	plat_priv = cnss_bus_dev_to_plat_priv(dev);
+
+	if (!plat_priv) {
+		cnss_pr_err("%s: Failed to get plat_priv", __func__);
+		return;
 	}
-#else /* CONFIG_CNSS2_KERNEL_RPROC_FRAMEWORK */
-	if (subsys_info->subsys_handle) {
-		set_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state);
-		rproc_report_crash(subsys_info->subsys_handle,
-						RPROC_FATAL_ERROR);
-	}
-#endif
+
+	cnss_pr_info("Trigger QMI restart sequence for %s",
+		     plat_priv->device_name);
+
+	cnss_send_qmi_crash_shutdown(plat_priv);
 }
 EXPORT_SYMBOL(cnss_device_crashed);
 
@@ -7946,6 +7948,23 @@ static void cnss_rproc_unregister(struct cnss_plat_data *plat_priv)
 	}
 }
 #endif
+
+void cnss_qmi_crash_wait_timeout_hdlr(struct timer_list *timer)
+{
+	struct cnss_plat_data *plat_priv = from_timer(plat_priv, timer,
+						qmi_crash_wait_timer);
+
+	if (plat_priv) {
+		cnss_pr_info("QMI timer handler, target asserted state %d\n",
+				plat_priv->target_asserted);
+
+		if (plat_priv->target_asserted) {
+			del_timer(&plat_priv->qmi_crash_wait_timer);
+			return;
+		}
+		CNSS_ASSERT(0);
+	}
+}
 
 static void cnss_fill_probe_order(struct cnss_plat_data *plat_priv)
 {

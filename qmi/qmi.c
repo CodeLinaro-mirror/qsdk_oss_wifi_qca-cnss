@@ -98,6 +98,10 @@ unsigned int num_wlan_vaps;
 module_param(num_wlan_vaps, uint, 0600);
 MODULE_PARM_DESC(num_wlan_vaps, "num_wlan_vaps");
 
+unsigned int qmi_assert_timeout = 10;
+module_param(qmi_assert_timeout, int, 0644);
+MODULE_PARM_DESC(qmi_assert_timeout, "qmi_assert_timeout");
+
 struct qmi_history qmi_log[QMI_HISTORY_SIZE];
 int qmi_history_index;
 DEFINE_SPINLOCK(qmi_log_spinlock);
@@ -4598,6 +4602,73 @@ void cnss_unregister_coex_service(struct cnss_plat_data *plat_priv)
 	qmi_handle_release(&plat_priv->coex_qmi);
 }
 #endif
+
+void cnss_send_qmi_crash_shutdown(struct cnss_plat_data *plat_priv)
+{
+	struct wlfw_shutdown_req_msg_v01 *req = NULL;
+	struct wlfw_shutdown_resp_msg_v01 *resp = NULL;
+	struct qmi_txn txn;
+	int ret = 0, resp_error_msg = 0;
+
+	if (!plat_priv) {
+		cnss_pr_err("%s: Failed to get plat_priv", __func__);
+		return;
+	}
+
+	if (!timer_pending(&plat_priv->qmi_crash_wait_timer)) {
+		req = kzalloc(sizeof(*req), GFP_KERNEL);
+		resp = kzalloc(sizeof(*resp), GFP_KERNEL);
+		if (!req || !resp) {
+			cnss_pr_err("Failed to alloc mem for QMI message\n");
+			goto out;
+		}
+
+		req->shutdown_valid = 1;
+		req->shutdown = 1;
+		cnss_pr_info("Sending QMI Crash Shutdown for %s\n", plat_priv->device_name);
+
+
+		qmi_record(plat_priv->wlfw_service_instance_id,
+			  (QMI_TYPE_REQ | QMI_WLFW_SHUTDOWN_REQ_V01), ret,
+			  resp_error_msg);
+		ret = qmi_txn_init(&plat_priv->qmi_wlfw, &txn,
+				   wlfw_shutdown_resp_msg_v01_ei, resp);
+		if (ret < 0) {
+			cnss_pr_err("Failed to initialize txn for sending force crash, err: %d\n",
+				    ret);
+			goto out;
+		}
+
+		ret = qmi_send_request(&plat_priv->qmi_wlfw, NULL, &txn,
+				       QMI_WLFW_SHUTDOWN_REQ_V01,
+				       WLFW_SHUTDOWN_REQ_MSG_V01_MAX_MSG_LEN,
+				       wlfw_shutdown_req_msg_v01_ei, req);
+
+		if (ret) {
+			qmi_txn_cancel(&txn);
+			cnss_pr_err("Failed to send QMI shutdown request, err: %d\n", ret);
+			goto out;
+		}
+
+		/* Start timer to trigger force crash if assert didnt happen
+		 * after qmi_assert_timeout seconds
+		 */
+		timer_setup(&plat_priv->qmi_crash_wait_timer,
+			cnss_qmi_crash_wait_timeout_hdlr, 0);
+
+		mod_timer(&plat_priv->qmi_crash_wait_timer, jiffies +
+			msecs_to_jiffies(qmi_assert_timeout *
+			WLAN_RECOVERY_DELAY));
+	}
+	kfree(req);
+	kfree(resp);
+	return;
+out:
+	kfree(req);
+	kfree(resp);
+	cnss_pr_err("QMI crash shutdown failed, triggering kernel panic\n");
+	CNSS_ASSERT(0);
+}
 
 #ifdef CNSS2_IMS
 /* IMS Service */

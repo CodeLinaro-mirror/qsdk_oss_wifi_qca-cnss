@@ -61,6 +61,7 @@
  */
 #define CNSS_FW_TYPE_MASK		0xF000
 #define CNSS_FW_TYPE_SHIFT		12
+#define WLAN_RECOVERY_DELAY		1000
 
 #define CNSS_PCI_SWITCH_LINK_MASK      GENMASK(1, 0)
 
@@ -790,6 +791,7 @@ struct cnss_plat_data {
 	struct completion early_cal_complete;
 	bool early_cal_support;
 	bool partner_chip_state;
+	struct timer_list qmi_crash_wait_timer;
 };
 
 #ifdef CONFIG_ARCH_QCOM
@@ -880,6 +882,7 @@ int cnss_free_qdss_mem(struct cnss_plat_data *plat_priv);
 int cnss_set_fw_type_and_name(struct cnss_plat_data *plat_priv);
 struct cnss_plat_data *cnss_get_plat_priv_by_soc_id(int soc_id);
 int cnss_get_mlo_master_chip_id(struct cnss_mlo_group_info *mlo_group_info);
+void cnss_qmi_crash_wait_timeout_hdlr(struct timer_list *timer);
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0))
 void cnss_modify_link_speed(struct cnss_plat_data *plat_priv);
 #endif
