@@ -4546,16 +4546,24 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 	struct cnss_fw_mem qdss_mem = plat_priv->qdss_mem;
 	int ret, i, skip_count = 0;
 
-	if (test_bit(CNSS_RDDM_DUMP_IN_PROGRESS, &plat_priv->driver_state)) {
-		cnss_pr_info("RAM dump is in progress for PCI%d, skip\n",
-			    plat_priv->pci_slot_id);
-		return;
-	}
-	set_bit(CNSS_RDDM_DUMP_IN_PROGRESS, &plat_priv->driver_state);
-
+	/*
+	 * If RDDM is already collected, skip early without toggling
+	 * CNSS_RDDM_DUMP_IN_PROGRESS.
+	 */
 	if (test_bit(CNSS_MHI_RDDM_DONE, &pci_priv->mhi_state)) {
 		cnss_pr_info("RAM dump is already collected, skip\n");
-		clear_bit(CNSS_RDDM_DUMP_IN_PROGRESS, &plat_priv->driver_state);
+		return;
+	}
+
+	/*
+	 * Serialize dump collection across panic handler and MHI callback.
+	 * Use atomic test_and_set to avoid races where two contexts see the
+	 * bit as clear and both proceed to set it and collect concurrently.
+	 */
+	if (test_and_set_bit(CNSS_RDDM_DUMP_IN_PROGRESS,
+	    &plat_priv->driver_state)) {
+		cnss_pr_info("RAM dump is in progress for PCI%d, skip\n",
+			     plat_priv->pci_slot_id);
 		return;
 	}
 
