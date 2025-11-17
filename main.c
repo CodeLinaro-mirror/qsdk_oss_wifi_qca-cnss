@@ -1296,6 +1296,44 @@ int cnss_configure_io_coherency_regs(struct cnss_plat_data *plat_priv,
 }
 #endif
 
+void cnss_send_partner_chip_state_info(struct cnss_plat_data *ssr_plat_priv,
+				       u8 input)
+{
+	struct cnss_mlo_group_info *group_info = NULL;
+	struct cnss_plat_data *plat_priv = NULL;
+	int i;
+
+	if (!ssr_plat_priv || !ssr_plat_priv->recovery_enabled ||
+	    ssr_plat_priv->recovery_mode == MODE_0_RECOVERY_MODE)
+		return;
+
+	if (!enable_mlo_support || !ssr_plat_priv->mlo_support ||
+	    !ssr_plat_priv->mlo_capable)
+		return;
+
+	if (!ssr_plat_priv->mlo_group_info || !ssr_plat_priv->mlo_chip_info)
+		return;
+
+	group_info = ssr_plat_priv->mlo_group_info;
+	for (i = 0; i < group_info->num_chips; i++) {
+		plat_priv =
+		cnss_get_plat_priv_by_soc_id(group_info->chip_info[i].soc_id);
+		if (!plat_priv)
+			continue;
+
+		if (plat_priv->partner_chip_state)
+			continue;
+
+		if (!test_bit(CNSS_FW_READY, &plat_priv->driver_state)) {
+			cnss_pr_err("Invalid state to send partner chip state info: 0x%lx\n",
+				    plat_priv->driver_state);
+			continue;
+		}
+
+		cnss_wlfw_partner_chip_state_info_send_sync(plat_priv, input);
+	}
+}
+
 int __cnss_wlan_enable(struct cnss_plat_data *plat_priv,
 		       struct cnss_wlan_enable_cfg *config,
 		       enum cnss_driver_mode mode,
@@ -1383,6 +1421,10 @@ skip_cfg:
 
 	if (plat_priv->static_bypass_support)
 		return ret;
+
+	if (plat_priv->partner_chip_state)
+		cnss_send_partner_chip_state_info(plat_priv, CNSS_WSI_LINK_ENABLE);
+	plat_priv->partner_chip_state = false;
 
 	if (plat_priv->qdss_support & (1 << mode)) {
 		cnss_pr_info("Starting QDSS for %s\n", plat_priv->device_name);
@@ -3926,6 +3968,10 @@ void  *__cnss_subsystem_get(struct cnss_plat_data *plat_priv)
 	cnss_pr_info("%s: driver_state: 0x%lx\n", __func__,
 		     plat_priv->driver_state);
 
+	//Clear QMI assert timer if its already running since recover is done.
+	if (timer_pending(&plat_priv->qmi_crash_wait_timer))
+		del_timer(&plat_priv->qmi_crash_wait_timer);
+
 	if (test_bit(CNSS_RECOVERY_WAIT_FOR_DRIVER, &plat_priv->driver_state))
 		boot_after_recovery = true;
 
@@ -4060,9 +4106,12 @@ static int cnss_qca8074_notifier_nb(struct notifier_block *nb,
 					  (const struct pci_device_id *)
 					  plat_priv->plat_dev_id);
 	} else if (event_code == CNSS_BEFORE_SHUTDOWN) {
-		if (driver_ops)
+		if (driver_ops) {
 			driver_ops->remove(
 					(struct pci_dev *)plat_priv->plat_dev);
+			cnss_send_partner_chip_state_info(plat_priv,
+							  CNSS_WSI_LINK_DISABLE);
+		}
 	} else if (event_code == CNSS_RAMDUMP_NOTIFICATION) {
 #ifdef CONFIG_CNSS2_KERNEL_IPQ
 #if IS_ENABLED(CONFIG_CORESIGHT)
@@ -4834,26 +4883,24 @@ static int cnss_subsys_dummy_load(struct rproc *subsys_desc,
 
 void cnss_device_crashed(struct device *dev)
 {
-	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
-	struct cnss_subsys_info *subsys_info;
+	struct cnss_plat_data *plat_priv = NULL; 
 
-	if (!plat_priv)
+	if (!dev) {
+		cnss_pr_err("%s: Invalid device\n",__func__);
 		return;
+	}
 
-	subsys_info = &plat_priv->subsys_info;
-#ifdef CONFIG_CNSS2_KERNEL_SSR_FRAMEWORK
-	if (subsys_info->subsys_device) {
-		set_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state);
-		subsys_set_crash_status(subsys_info->subsys_device, true);
-		subsystem_restart_dev(subsys_info->subsys_device);
+	plat_priv = cnss_bus_dev_to_plat_priv(dev);
+
+	if (!plat_priv) {
+		cnss_pr_err("%s: Failed to get plat_priv", __func__);
+		return;
 	}
-#else /* CONFIG_CNSS2_KERNEL_RPROC_FRAMEWORK */
-	if (subsys_info->subsys_handle) {
-		set_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state);
-		rproc_report_crash(subsys_info->subsys_handle,
-						RPROC_FATAL_ERROR);
-	}
-#endif
+
+	cnss_pr_info("Trigger QMI restart sequence for %s",
+		     plat_priv->device_name);
+
+	cnss_send_qmi_crash_shutdown(plat_priv);
 }
 EXPORT_SYMBOL(cnss_device_crashed);
 
@@ -5111,6 +5158,7 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 		 * multiple targets in the MLO group are all powered up in the
 		 * correct sequence
 		 */
+		plat_priv->partner_chip_state = true;
 		if (plat_priv->bus_type == CNSS_BUS_PCI) {
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
 			cnss_hif_shutdown(plat_priv);
@@ -7900,6 +7948,23 @@ static void cnss_rproc_unregister(struct cnss_plat_data *plat_priv)
 	}
 }
 #endif
+
+void cnss_qmi_crash_wait_timeout_hdlr(struct timer_list *timer)
+{
+	struct cnss_plat_data *plat_priv = from_timer(plat_priv, timer,
+						qmi_crash_wait_timer);
+
+	if (plat_priv) {
+		cnss_pr_info("QMI timer handler, target asserted state %d\n",
+				plat_priv->target_asserted);
+
+		if (plat_priv->target_asserted) {
+			del_timer(&plat_priv->qmi_crash_wait_timer);
+			return;
+		}
+		CNSS_ASSERT(0);
+	}
+}
 
 static void cnss_fill_probe_order(struct cnss_plat_data *plat_priv)
 {
