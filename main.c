@@ -1303,6 +1303,9 @@ void cnss_send_partner_chip_state_info(struct cnss_plat_data *ssr_plat_priv,
 	struct cnss_plat_data *plat_priv = NULL;
 	int i;
 
+	if (ssr_plat_priv->bus_type == CNSS_BUS_AHB)
+		return;
+
 	if (!ssr_plat_priv || !ssr_plat_priv->recovery_enabled ||
 	    ssr_plat_priv->recovery_mode == MODE_0_RECOVERY_MODE)
 		return;
@@ -3540,6 +3543,9 @@ int cnss_wlan_probe_driver(void)
 		schedule_work(&plat_priv->soft_switch_work);
 		atomic_inc(&cal_in_progress_count);
 	}
+
+	if (parallel_probe_enabled)
+		return 0;
 
 	while (atomic_read(&cal_in_progress_count)) {
 		msleep(FW_READY_DELAY);
