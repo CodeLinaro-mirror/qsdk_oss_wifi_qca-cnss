@@ -3541,9 +3541,6 @@ int cnss_wlan_probe_driver(void)
 		atomic_inc(&cal_in_progress_count);
 	}
 
-	if (parallel_probe_enabled)
-		return 0;
-
 	while (atomic_read(&cal_in_progress_count)) {
 		msleep(FW_READY_DELAY);
 		if (count++ > probe_timeout * 10) {
