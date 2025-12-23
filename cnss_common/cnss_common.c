@@ -194,7 +194,7 @@ static irqreturn_t dummy_irq_handler(int irq, void *context)
 
 struct qgic2_msi *cnss_qgic2_enable_msi(struct cnss_plat_data *plat_priv)
 {
-	int ret;
+	int ret, i = 0;
 	struct qgic2_msi *qgic;
 	struct msi_desc *msi_desc;
 	struct cnss_msi_config *msi_config;
@@ -251,24 +251,32 @@ struct qgic2_msi *cnss_qgic2_enable_msi(struct cnss_plat_data *plat_priv)
 	 * private to provide the required base address/data info in
 	 * cnss_get_msi_address and cnss_get_user_msi_assignment API calls.
 	 */
-	ret = request_irq(msi_desc->irq, dummy_irq_handler,
-			  IRQF_SHARED, "dummy", qgic);
-	if (ret) {
-		cnss_pr_err("dummy request_irq fails %d\n", ret);
-		return NULL;
+	msi_lock_descs(dev);
+	msi_for_each_desc(msi_desc, dev, MSI_DESC_ASSOCIATED) {
+		ret = request_irq(msi_desc->irq, dummy_irq_handler,
+				  IRQF_SHARED, "dummy", qgic);
+		if (ret) {
+			cnss_pr_err("dummy request_irq fails %d\n", ret);
+			return NULL;
+		}
+
+		if (i == 0) {
+			qgic->irq_num = msi_desc->irq;
+			qgic->msi_gicm_base_data = msi_desc->msg.data;
+			qgic->msi_gicm_addr_lo = msi_desc->msg.address_lo;
+			qgic->msi_gicm_addr_hi = msi_desc->msg.address_hi;
+		}
+
+		msi_config->msi_data[i] = msi_desc->msg.data;
+		cnss_pr_dbg("%s: vector %d msi_data %d\n", __func__, i, msi_config->msi_data[i]);
+		free_irq(msi_desc->irq, qgic);
+		i++;
 	}
-
-	qgic->irq_num = msi_desc->irq;
-	qgic->msi_gicm_base_data = msi_desc->msg.data;
-	qgic->msi_gicm_addr_lo = msi_desc->msg.address_lo;
-	qgic->msi_gicm_addr_hi = msi_desc->msg.address_hi;
-
-	cnss_pr_dbg("irq %d msi addr lo 0x%x addr hi 0x%x msi data %d",
-		    qgic->irq_num, qgic->msi_gicm_addr_lo,
-		    qgic->msi_gicm_addr_hi, qgic->msi_gicm_base_data);
-
-	free_irq(msi_desc->irq, qgic);
-
+	msi_unlock_descs(dev);
+	cnss_pr_info("irq %d msi addr lo 0x%x addr hi 0x%x msi data %d",
+		     qgic->irq_num, qgic->msi_gicm_addr_lo,
+		     qgic->msi_gicm_addr_hi,
+		     qgic->msi_gicm_base_data);
 	return qgic;
 }
 #endif

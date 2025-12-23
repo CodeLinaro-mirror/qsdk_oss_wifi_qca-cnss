@@ -510,6 +510,27 @@ int cnss_bus_get_msi_irq(struct device *dev, unsigned int vector)
 }
 EXPORT_SYMBOL(cnss_bus_get_msi_irq);
 
+int cnss_bus_get_msi_data(struct device *dev, unsigned int vector)
+{
+	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
+
+	if (!plat_priv) {
+		cnss_pr_err("%s: plat_priv is null", __func__);
+		return -EINVAL;
+	}
+
+	if (!plat_priv->ops) {
+		cnss_pr_err("%s: callback is not registered", __func__);
+		return -EINVAL;
+	}
+
+	if (plat_priv->ops->cnss_bus_get_msi_data)
+		return plat_priv->ops->cnss_bus_get_msi_data(dev, vector);
+
+	return -EINVAL;
+}
+EXPORT_SYMBOL(cnss_bus_get_msi_data);
+
 void cnss_bus_get_msi_address(struct device *dev, u32 *msi_addr_low,
 			  u32 *msi_addr_high)
 {

@@ -295,6 +295,7 @@ struct cnss_msi_user {
 struct cnss_msi_config {
 	int total_vectors;
 	int total_users;
+	int msi_data[MAX_MSI_INTR];
 	struct cnss_msi_user *users;
 };
 

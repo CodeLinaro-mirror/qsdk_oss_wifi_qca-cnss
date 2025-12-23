@@ -32,6 +32,7 @@
 #define CNSS_MAX_MLO_CHIPS		4
 #define CNSS_MAX_MLO_GROUPS		2
 #define CNSS_MAX_ADJ_CHIPS		2
+#define MAX_MSI_INTR			32
 
 enum cnss_bus_width_type {
 	CNSS_BUS_WIDTH_NONE,
@@ -338,6 +339,11 @@ static inline int cnss_bus_get_user_msi_assignment(struct device *dev,
 }
 
 static inline int cnss_bus_get_msi_irq(struct device *dev, unsigned int vector)
+{
+	return -EINVAL;
+}
+
+static inline int cnss_bus_get_msi_data(struct device *dev, unsigned int vector)
 {
 	return -EINVAL;
 }
@@ -686,6 +692,7 @@ extern int cnss_bus_get_user_msi_assignment(struct device *dev, char *user_name,
 					uint32_t *user_base_data,
 					uint32_t *base_vector);
 extern int cnss_bus_get_msi_irq(struct device *dev, unsigned int vector);
+extern int cnss_bus_get_msi_data(struct device *dev, unsigned int vector);
 extern int cnss_get_pci_slot(struct device *dev);
 extern void cnss_bus_get_msi_address(struct device *dev, uint32_t *msi_addr_low,
 				 uint32_t *msi_addr_high);
