@@ -3215,6 +3215,18 @@ static int cnss_pci_get_msi_irq(struct device *dev, unsigned int vector)
 	return irq_num;
 }
 
+static int cnss_pci_get_msi_data(struct device *dev, unsigned int vector)
+{
+	/* MSI interrupts for PCI radios are always allocated
+	 * in a contiguous manner. So there will not be a need
+	 * to get the HW IRQ from the corresponding MSI descriptor.
+	 * Have this function as a placeholder for any future
+	 * requirement when there is any change in the way
+	 * MSI interrupts are allocated.
+	 */
+        return -EINVAL;
+}
+
 int cnss_pci_is_device_awake(struct device *dev)
 {
 	struct pci_dev *pci_dev = to_pci_dev(dev);
@@ -6366,6 +6378,7 @@ static struct cnss_bus_ops pci_ops = {
 	.cnss_bus_get_msi_irq = cnss_pci_get_msi_irq,
 	.cnss_bus_get_msi_address = cnss_pci_get_msi_address,
 	.cnss_bus_get_user_msi_assignment = cnss_pci_get_user_msi_assignment,
+	.cnss_bus_get_msi_data = cnss_pci_get_msi_data,
 };
 
 struct cnss_bus_ops *cnss_pci_get_ops(void)

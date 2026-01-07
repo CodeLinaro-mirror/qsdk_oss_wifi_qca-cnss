@@ -707,6 +707,38 @@ static int cnss_ahb_get_msi_irq(struct device *dev, unsigned int vector)
 	return irq_num;
 }
 
+static int cnss_ahb_get_msi_data(struct device *dev, unsigned int vector)
+{
+	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
+	int msi_data = -EINVAL;
+	struct cnss_msi_config *msi_config = NULL;
+
+	if (!plat_priv) {
+		pr_err("plat_priv NULL");
+		return -ENODEV;
+	}
+
+	/* Get HW IRQ from the corresponding MSI descriptor
+	 * only for multi-pd devices as the MSI interrupts
+	 * allocated could potentially be non-contiguous
+	 * only in such cases.
+	 */
+
+	if (plat_priv->device_id != QCN6122_DEVICE_ID &&
+	    plat_priv->device_id != QCN9160_DEVICE_ID &&
+	    plat_priv->device_id != QCN6432_DEVICE_ID) {
+		return -EINVAL;
+	}
+#ifdef CONFIG_CNSS2_QGIC2M
+	msi_config = cnss_get_msi_config(plat_priv);
+	if (vector < MAX_MSI_INTR) {
+		msi_data = msi_config->msi_data[vector];
+		return msi_data;
+	}
+#endif
+	return -EINVAL;
+}
+
 static void cnss_ahb_get_msi_address(struct device *dev, u32 *msi_addr_low,
 			  u32 *msi_addr_high)
 {
@@ -821,6 +853,7 @@ static struct cnss_bus_ops ahb_ops = {
 	.cnss_bus_get_msi_irq = cnss_ahb_get_msi_irq,
 	.cnss_bus_get_msi_address = cnss_ahb_get_msi_address,
 	.cnss_bus_get_user_msi_assignment = cnss_ahb_get_user_msi_assignment,
+	.cnss_bus_get_msi_data = cnss_ahb_get_msi_data,
 };
 
 struct cnss_bus_ops *cnss_ahb_get_ops(void)
