@@ -710,9 +710,10 @@ static int cnss_ahb_get_msi_irq(struct device *dev, unsigned int vector)
 static int cnss_ahb_get_msi_data(struct device *dev, unsigned int vector)
 {
 	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
+#ifdef CONFIG_CNSS2_QGIC2M
 	int msi_data = -EINVAL;
 	struct cnss_msi_config *msi_config = NULL;
-
+#endif
 	if (!plat_priv) {
 		pr_err("plat_priv NULL");
 		return -ENODEV;
