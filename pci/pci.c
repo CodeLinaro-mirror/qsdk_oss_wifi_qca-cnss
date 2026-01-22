@@ -281,9 +281,7 @@ static struct mhi_controller_config cnss_pci_mhi_config = {
 	.num_events = ARRAY_SIZE(cnss_pci_mhi_events),
 	.event_cfg = cnss_pci_mhi_events,
 #ifdef CONFIG_TARGET_SDX_WKK
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 	.rddm_timeout_us = 400000,
-#endif
 #endif
 };
 #endif
