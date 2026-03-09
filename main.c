@@ -37,6 +37,8 @@
 #endif
 #include <linux/firmware.h>
 #include <linux/major.h>
+/* Use ktime for non-sleeping time checks in panic context */
+#include <linux/ktime.h>
 
 #ifdef CONFIG_CNSS2_KERNEL_SSR_FRAMEWORK
 #include <soc/qcom/subsystem_notif.h>
@@ -3543,9 +3545,6 @@ int cnss_wlan_probe_driver(void)
 		schedule_work(&plat_priv->soft_switch_work);
 		atomic_inc(&cal_in_progress_count);
 	}
-
-	if (parallel_probe_enabled)
-		return 0;
 
 	while (atomic_read(&cal_in_progress_count)) {
 		msleep(FW_READY_DELAY);
@@ -7839,7 +7838,6 @@ static int cnss_panic_handler(struct notifier_block *this,
 {
 	struct cnss_plat_data *plat_priv = NULL;
 	struct cnss_pci_data *pci_priv = NULL;
-	int timeout;
 	int i;
 
 	for (i = 0; i < plat_env_index; i++) {
@@ -7852,11 +7850,15 @@ static int cnss_panic_handler(struct notifier_block *this,
 		pci_priv = plat_priv->bus_priv;
 		if (!pci_priv)
 			continue;
-		timeout = wait_event_timeout(plat_priv->panic_dump_waitq,
-					     test_bit(CNSS_MHI_RDDM_DONE, &pci_priv->mhi_state),
-					     (10 * HZ));
-		if (timeout <= 0)
-			cnss_pr_err("Panic FW dump collection timeout\n");
+
+		ktime_t stop = ktime_add_ms(ktime_get(), 10 * 1000);
+		while (!test_bit(CNSS_MHI_RDDM_DONE, &pci_priv->mhi_state) &&
+		       ktime_before(ktime_get(), stop)) {
+			cpu_relax();
+			udelay(1000);
+		}
+		if (!test_bit(CNSS_MHI_RDDM_DONE, &pci_priv->mhi_state))
+		    cnss_pr_err("Panic FW dump collection timeout\n");
 	}
 
 	return 0;
