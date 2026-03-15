@@ -35,6 +35,13 @@
 #include "qmi/qmi.h"
 #include "bus/bus.h"
 
+#define CNSS_DRIVER_NAME		"qca-cnss2"
+#define CNSS_DEBUG_DIR			"qca-cnss"
+#define CNSS_IPC_LOG_MODNAME		"qca-cnss"
+#define CNSS_IPC_LOG_LONG_MODNAME	"qca-cnss-long"
+#define CNSS_PCI_DRIVER_NAME			"qca_cnss_pci"
+#define CNSS_MHI_IPC_NAME_PREFIX		"qca-cnss-mhi"
+
 #define MAX_NO_OF_MAC_ADDR		4
 #define QMI_WLFW_MAX_TIMESTAMP_LEN	32
 #define CNSS_RDDM_TIMEOUT_MS		20000

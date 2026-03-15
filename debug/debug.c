@@ -2072,14 +2072,14 @@ int cnss_debug_init(void)
 	struct cnss_plat_data *plat_priv = NULL;
 
 	cnss_ipc_log_context = ipc_log_context_create(CNSS_IPC_LOG_PAGES,
-						      "cnss", 0);
+						      CNSS_IPC_LOG_MODNAME, 0);
 	if (!cnss_ipc_log_context) {
 		cnss_pr_info("IPC Logging is disabled!\n");
 		return -EINVAL;
 	}
 
 	cnss_ipc_log_long_context = ipc_log_context_create(CNSS_IPC_LOG_PAGES,
-							   "cnss-long", 0);
+							   CNSS_IPC_LOG_LONG_MODNAME, 0);
 	if (!cnss_ipc_log_long_context) {
 		cnss_pr_info("IPC long logging is disabled!\n");
 		ipc_log_context_destroy(cnss_ipc_log_context);

@@ -1128,7 +1128,7 @@ int cnss_debugfs_create(struct cnss_plat_data *plat_priv)
 	struct dentry *root_dentry = NULL;
 
 	if (!cnss_root_dentry) {
-		cnss_root_dentry = debugfs_create_dir("cnss", 0);
+		cnss_root_dentry = debugfs_create_dir(CNSS_DEBUG_DIR, 0);
 		if (IS_ERR(cnss_root_dentry)) {
 			ret = PTR_ERR(cnss_root_dentry);
 			cnss_pr_err("Unable to create debugfs %d\n", ret);

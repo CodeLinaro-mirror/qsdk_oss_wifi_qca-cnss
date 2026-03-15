@@ -8192,7 +8192,7 @@ static struct platform_driver cnss_platform_driver = {
 	.probe  = cnss_probe,
 	.remove = cnss_remove,
 	.driver = {
-		.name = "cnss2",
+		.name = CNSS_DRIVER_NAME,
 		.of_match_table = cnss_of_match_table,
 		.probe_type = PROBE_FORCE_SYNCHRONOUS,
 	},
@@ -8262,4 +8262,4 @@ module_exit(cnss_exit);
 
 MODULE_IMPORT_NS(VFS_internal_I_am_really_a_filesystem_and_am_NOT_a_driver);
 MODULE_LICENSE("GPL v2");
-MODULE_DESCRIPTION("CNSS2 Platform Driver");
+MODULE_DESCRIPTION("QCA-CNSS2 Platform Driver");
