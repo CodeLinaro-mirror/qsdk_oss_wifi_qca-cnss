@@ -6251,7 +6251,7 @@ static u32 cnss_get_dump_desc_size(struct cnss_plat_data *plat_priv)
 int cnss_register_ramdump(struct cnss_plat_data *plat_priv)
 {
 	struct cnss_ramdump_info_v2 *info_v2 = &plat_priv->ramdump_info_v2;
-	struct cnss_dump_data *dump_data = dump_data = &info_v2->dump_data;
+	struct cnss_dump_data *dump_data = &info_v2->dump_data;
 	struct device *dev = &plat_priv->plat_dev->dev;
 	int gfp = GFP_KERNEL;
 	u32 ramdump_size = 0;
@@ -6269,7 +6269,8 @@ int cnss_register_ramdump(struct cnss_plat_data *plat_priv)
 	  * before allocating again
 	  */
 	info_v2->ramdump_dev = NULL;
-	kfree(info_v2->dump_data_vaddr);
+	if (info_v2->dump_data_vaddr)
+		kfree(info_v2->dump_data_vaddr);
 	info_v2->dump_data_vaddr = NULL;
 	info_v2->dump_data_valid = false;
 
