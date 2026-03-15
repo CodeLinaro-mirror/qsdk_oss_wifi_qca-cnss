@@ -67,6 +67,7 @@ ifeq ($(CONFIG_BUILD_YOCTO),y)
 	ccflags-y += -DCONFIG_CNSS2_SMMU
 	ccflags-y += -DCONFIG_TARGET_SDX_WKK
 	ccflags-y += -DCONFIG_CNSS2_SSR_UEVENT
+	ccflags-${CONFIG_IOT_DRONE_WIFI} += -DCONFIG_IOT_DRONE_WIFI
 else ifeq ($(CONFIG_BUILD_OWRT),y)
 	ccflags-y += -DCONFIG_CNSS2_DMA_ALLOC
 	ccflags-y += -DCONFIG_CNSS2_SMMU

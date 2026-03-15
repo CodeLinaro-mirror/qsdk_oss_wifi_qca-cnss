@@ -3272,12 +3272,15 @@ int cnss_pci_alloc_fw_mem(struct cnss_plat_data *plat_priv)
 	int i;
 	struct cnss_pci_data *pci_priv = plat_priv->bus_priv;
 	struct pci_dev *pci_dev = (struct pci_dev *)plat_priv->pci_dev;
+#ifndef CONFIG_IOT_DRONE_WIFI
 	int ret;
+#endif
 
 	dev = &plat_priv->plat_dev->dev;
 
 	if (plat_priv->dma_alloc_supported) {
 		for (i = 0; i < plat_priv->fw_mem_seg_len; i++) {
+#ifndef CONFIG_IOT_DRONE_WIFI
 			if (fw_mem[i].type ==
 					QMI_WLFW_MLO_GLOBAL_MEM_V01 &&
 					fw_mem[i].size) {
@@ -3288,8 +3291,10 @@ int cnss_pci_alloc_fw_mem(struct cnss_plat_data *plat_priv)
 					return ret;
 				}
 			}
+#endif
 
 			if (!fw_mem[i].va && fw_mem[i].size) {
+#ifndef CONFIG_IOT_DRONE_WIFI
 				if (((fw_mem[i].type ==
 					QMI_WLFW_MEM_CAL_V01) &&
 					(!plat_priv->cold_boot_support)) ||
@@ -3297,6 +3302,7 @@ int cnss_pci_alloc_fw_mem(struct cnss_plat_data *plat_priv)
 						QMI_WLFW_MLO_GLOBAL_MEM_V01)) {
 					continue;
 				}
+#endif
 
 				fw_mem[i].va =
 					dma_alloc_attrs(&pci_dev->dev,
