@@ -8280,7 +8280,6 @@ static void __exit cnss_exit(void)
 #endif
 	cnss_plat_ipc_unregister(CNSS_PLAT_IPC_DAEMON_QMI_CLIENT_V01, NULL);
 	cnss_plat_ipc_qmi_svc_exit();
-	cnss_pci_deinit(NULL);
 #ifdef CONFIG_CNSS2_LEGACY_IRQ
 	cnss_legacy_irq_deinit();
 #endif
