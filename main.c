@@ -1031,6 +1031,7 @@ static int cnss_reset_bdf_and_fw_name(struct cnss_plat_data *plat_priv)
 	return ret;
 }
 
+#ifndef CONFIG_CNSS2_KERNEL_5_15
 static int cnss_update_board_info(struct cnss_plat_data *plat_priv)
 {
 	struct device *dev;
@@ -1076,6 +1077,7 @@ static int cnss_update_board_info(struct cnss_plat_data *plat_priv)
 
 	return ret;
 }
+#endif
 
 int cnss_reset_board_info(struct cnss_plat_data *plat_priv)
 {
@@ -7541,6 +7543,7 @@ static void cnss_get_legacy_intx_support(struct cnss_plat_data *plat_priv)
 	}
 }
 #endif
+#ifndef CONFIG_CNSS2_KERNEL_5_15
 int cnss_enable_dynamic_mode_switch(struct device *dev, bool disable_ramdump)
 {
 	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
@@ -7567,6 +7570,7 @@ int cnss_enable_dynamic_mode_switch(struct device *dev, bool disable_ramdump)
 	return 0;
 }
 EXPORT_SYMBOL(cnss_enable_dynamic_mode_switch);
+#endif
 
 static u32 cnss_get_bdf_mod_param(int slot_id)
 {

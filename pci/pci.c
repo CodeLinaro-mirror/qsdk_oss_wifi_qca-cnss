@@ -5083,7 +5083,7 @@ static irqreturn_t qdss_irq_handler(int irq, void *context)
 
 static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 {
-	int ret = 0, idx = 0;
+	int ret = 0;
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 	struct pci_dev *pci_dev = pci_priv->pci_dev;
 	struct mhi_controller *mhi_ctrl;
@@ -5095,6 +5095,7 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 #ifndef CONFIG_CNSS2_SMMU
 	struct device_node *dev_node;
 	struct resource memory;
+	int idx = 0;
 #endif
 
 #ifdef CONFIG_CNSS2_KERNEL_MSM

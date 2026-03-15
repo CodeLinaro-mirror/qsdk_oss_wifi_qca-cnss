@@ -22,6 +22,9 @@
 #if defined CNSS_PCI_SUPPORT
 #include "pci/pci.h"
 #endif
+#ifdef CNSS_DEBUG_SUPPORT
+#include "debug/debug.h"
+#endif
 #include "cnss_common/cnss_common.h"
 
 static ssize_t cnss_coredump_read_q6dump(char *buffer, loff_t offset,
