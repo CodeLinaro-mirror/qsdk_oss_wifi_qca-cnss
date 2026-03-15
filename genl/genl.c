@@ -22,8 +22,8 @@
 #include "debug/debug.h"
 #endif
 
-#define CNSS_GENL_FAMILY_NAME "cnss-genl"
-#define CNSS_GENL_MCAST_GROUP_NAME "cnss-genl-grp"
+#define CNSS_GENL_FAMILY_NAME "qca-cnss-genl"
+#define CNSS_GENL_MCAST_GROUP_NAME "qca-cnss-genl-g"
 #define CNSS_GENL_VERSION 1
 #define CNSS_GENL_DATA_LEN_MAX 4000
 

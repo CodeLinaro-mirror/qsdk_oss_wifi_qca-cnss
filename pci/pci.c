@@ -3729,6 +3729,77 @@ static int cnss_pci_smmu_fault_handler(struct iommu_domain *domain,
 	return -ENOSYS;
 }
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 5, 0))
+int cnss_pci_get_iommu_addr(struct cnss_pci_data *pci_priv,
+			    struct device_node *iommu_group_node)
+{
+	struct pci_dev *pci_dev = pci_priv->pci_dev;
+	struct device_node *of_node;
+	const u32 *maps;
+	const u32 *end;
+	int size;
+
+	of_node = of_find_node_by_name(pci_dev->dev.of_node,
+				       "cnss_pci0_iommu_region_partition");
+	if (!of_node)
+		return -EINVAL;
+
+	maps = of_get_property(of_node, "iommu-addresses", &size);
+	if (!maps) {
+		of_node_put(of_node);
+		return -EINVAL;
+	}
+
+	end = maps + size / sizeof(u32);
+
+	pci_priv->smmu_iova_start = 0;
+
+	while (maps < end) {
+		phys_addr_t iova;
+		size_t length;
+
+		/*
+		 * Skip the device phandle and if required later, we can
+		 * check if the device phandle matches with pci_dev->dev.of_node
+		 */
+		maps++;
+
+		maps = of_translate_dma_region(pci_dev->dev.of_node, maps,
+					       &iova, &length);
+
+		/*
+		 * Assuming a single contiguous DMA address range
+		 */
+		if (!pci_priv->smmu_iova_start)
+			pci_priv->smmu_iova_start = length;
+		else
+			pci_priv->smmu_iova_len =
+					iova - pci_priv->smmu_iova_start;
+	}
+
+	of_node_put(of_node);
+
+	return (pci_priv->smmu_iova_start && pci_priv->smmu_iova_len) ?
+		0 : -EINVAL;
+}
+#else
+int cnss_pci_get_iommu_addr(struct cnss_pci_data *pci_priv,
+			    struct device_node *iommu_group_node)
+{
+	u32 addr_win[2];
+	int ret;
+
+	ret = of_property_read_u32_array(iommu_group_node,
+					 "qcom,iommu-dma-addr-pool",
+					 addr_win, ARRAY_SIZE(addr_win));
+
+	pci_priv->smmu_iova_start = addr_win[0];
+	pci_priv->smmu_iova_len = addr_win[1];
+
+	return ret;
+}
+#endif
+
 static int cnss_pci_init_smmu(struct cnss_pci_data *pci_priv)
 {
 	struct pci_dev *pci_dev = pci_priv->pci_dev;
@@ -3736,11 +3807,6 @@ static int cnss_pci_init_smmu(struct cnss_pci_data *pci_priv)
 	struct device_node *of_node;
 	struct resource *res;
 	const char *iommu_dma_type;
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
-	u32 addr_win[4];
-#else
-	u32 addr_win[2];
-#endif
 	int ret = 0;
 
 	of_node = of_parse_phandle(pci_dev->dev.of_node, "qcom,iommu-group", 0);
@@ -3767,21 +3833,7 @@ static int cnss_pci_init_smmu(struct cnss_pci_data *pci_priv)
 					cnss_pci_smmu_fault_handler, pci_priv);
 	}
 
-	ret = of_property_read_u32_array(of_node,  "qcom,iommu-dma-addr-pool",
-					 addr_win, ARRAY_SIZE(addr_win));
-	if (ret) {
-		cnss_pr_err("Invalid SMMU size window, err = %d\n", ret);
-		of_node_put(of_node);
-		return ret;
-	}
-
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
-	pci_priv->smmu_iova_start = addr_win[1];
-	pci_priv->smmu_iova_len = addr_win[3];
-#else
-	pci_priv->smmu_iova_start = addr_win[0];
-	pci_priv->smmu_iova_len = addr_win[1];
-#endif
+	cnss_pci_get_iommu_addr(pci_priv, of_node);
 	cnss_pr_dbg("smmu_iova_start: %pa, smmu_iova_len: 0x%zx\n",
 		    &pci_priv->smmu_iova_start,
 		    pci_priv->smmu_iova_len);

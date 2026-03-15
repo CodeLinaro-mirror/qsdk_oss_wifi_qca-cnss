@@ -4297,34 +4297,6 @@ int cnss_unregister_qcn9000_cb(struct cnss_plat_data *plat_priv)
 #endif
 #endif
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
-static int cnss_get_node_id(struct platform_device *plat_dev,
-			    unsigned long device_id, u32 *node_id)
-{
-	struct cnss_plat_data *plat_priv = NULL;
-
-	if (of_property_read_u32(plat_dev->dev.of_node,
-				 "node_id", node_id)) {
-		cnss_pr_err("Error: No node_id in device_tree\n");
-		CNSS_ASSERT(0);
-		return -ENODEV;
-	}
-
-	switch (device_id) {
-	case QCN9000_DEVICE_ID:
-		*node_id = *node_id + QCN9000_0;
-		break;
-	case QCN9224_DEVICE_ID:
-		*node_id = *node_id + QCN9224_0;
-		break;
-	default:
-		cnss_pr_dbg("Invalid device id 0x%lx", device_id);
-		break;
-	}
-
-	return 0;
-}
-#else
 static int cnss_get_node_id(struct platform_device *plat_dev,
 			    unsigned long device_id, u32 *node_id)
 {
@@ -4339,8 +4311,6 @@ static int cnss_get_node_id(struct platform_device *plat_dev,
 
 	return 0;
 }
-#endif
-
 
 void cnss_bus_dev_to_plat_priv_wrapper(struct device *dev,
 				       int device_id,
@@ -6414,10 +6384,11 @@ static void cnss_unregister_ramdump_v1(struct cnss_plat_data *plat_priv)
 	if (ramdump_info->ramdump_dev)
 		destroy_ramdump_device(ramdump_info->ramdump_dev);
 
-	if (ramdump_info->ramdump_va)
+	if (ramdump_info->ramdump_va) {
 		dma_free_coherent(dev, ramdump_info->ramdump_size,
 				  ramdump_info->ramdump_va,
 				  ramdump_info->ramdump_pa);
+	}
 }
 
 #ifdef CONFIG_QTI_MEMORY_DUMP_V2
