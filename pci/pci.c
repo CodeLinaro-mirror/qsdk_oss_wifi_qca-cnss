@@ -5564,6 +5564,8 @@ unregister_subsys:
 #else
 	cnss_bus_dev_shutdown(plat_priv);
 #endif
+	devm_kfree(&pci_dev->dev, pci_priv);
+	cnss_set_pci_priv(pci_dev, NULL);
 	plat_priv->bus_priv = NULL;
 	return ret;
 }
@@ -5624,7 +5626,6 @@ void cnss_pci_remove(struct pci_dev *pci_dev)
 #ifdef CONFIG_CNSS2_KERNEL_IPQ
 	cnss_unregister_ramdump(plat_priv);
 #endif
-	plat_priv->bus_priv = NULL;
 }
 EXPORT_SYMBOL(cnss_pci_remove);
 
@@ -5903,7 +5904,6 @@ void cnss_pci_remove_basic(struct pci_dev *pci_dev)
 	}
 #endif
 	cnss_pci_free_mhi_controller(pci_priv);
-	plat_priv->bus_priv = NULL;
 	cnss_pr_info("Removing PCI device %p\n", plat_priv->pci_dev);
 	cnss_pci_free_m3_mem(plat_priv);
 	plat_priv->pci_dev_id = NULL;
