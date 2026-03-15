@@ -1329,6 +1329,11 @@ EXPORT_SYMBOL(cnss_wlan_disable);
 #define OF_GPIO_ACTIVE_LOW 0x1
 #endif
 
+#ifdef CONFIG_CNSS2_KERNEL_5_15
+void cnss_set_led_gpio(int led_gpio, unsigned int value, unsigned int flags)
+{
+}
+#else
 void cnss_set_led_gpio(int led_gpio, unsigned int value, unsigned int flags)
 {
 	struct gpio_desc *led_gpio_desc;
@@ -1345,6 +1350,7 @@ void cnss_set_led_gpio(int led_gpio, unsigned int value, unsigned int flags)
 	}
 	gpiod_set_value(led_gpio_desc, value);
 }
+#endif
 EXPORT_SYMBOL(cnss_set_led_gpio);
 
 int cnss_athdiag_read(struct device *dev, u32 offset, u32 mem_type,
