@@ -959,9 +959,21 @@ static void cnss_hif_notifier(struct cnss_plat_data *plat_priv,
 static int cnss_hif_power_up(struct cnss_plat_data *plat_priv)
 {
 	int ret = 0;
+	static atomic_t pip = ATOMIC_INIT(1);
 
 	if (!plat_priv)
 		return -ENODEV;
+
+	if (plat_priv->powered_on) {
+		cnss_pr_info("Already powered on, ignored\n");
+		return 0;
+	}
+
+	if (!atomic_dec_and_test(&pip)) {
+		cnss_pr_info("Powerup in progress, ignored\n");
+		atomic_set(&pip, 0);
+		return 0;
+	}
 
 	cnss_hif_notifier(plat_priv, CNSS_BEFORE_POWERUP);
 	plat_priv->target_asserted = 0;
@@ -973,6 +985,7 @@ static int cnss_hif_power_up(struct cnss_plat_data *plat_priv)
 			plat_priv);
 	if (ret) {
 		pr_err("ERROR : %s:%d ret %d\n", __func__, __LINE__, ret);
+		atomic_set(&pip, 1);
 		return -ENODEV;
 	}
 #endif
@@ -983,6 +996,9 @@ static int cnss_hif_power_up(struct cnss_plat_data *plat_priv)
 		CNSS_ASSERT(0);
 	}
 	cnss_hif_notifier(plat_priv, CNSS_AFTER_POWERUP);
+
+	plat_priv->powered_on = 1;
+	atomic_set(&pip, 1);
 
 	return ret;
 }
@@ -1095,22 +1111,35 @@ int cnss_reset_board_info(struct cnss_plat_data *plat_priv)
 static int cnss_hif_shutdown(struct cnss_plat_data *plat_priv)
 {
 	int ret = 0;
+	static atomic_t sip = ATOMIC_INIT(1);
 
 	if (!plat_priv)
 		return -ENODEV;
 
-	cnss_hif_notifier(plat_priv, CNSS_BEFORE_SHUTDOWN);
-
-	if (!plat_priv->driver_state) {
-		cnss_pr_dbg("shutdown is ignored\n");
+	if (!atomic_dec_and_test(&sip)) {
+		cnss_pr_info("Shutdown in progress, ignored\n");
+		atomic_set(&sip, 0);
 		return 0;
 	}
+
+	cnss_hif_notifier(plat_priv, CNSS_BEFORE_SHUTDOWN);
+
+	if (!plat_priv->powered_on) {
+		cnss_pr_info("Shutdown is ignored, powered_on:%d\n",
+			     plat_priv->powered_on);
+		atomic_set(&sip, 1);
+		return 0;
+	}
+
 	ret = cnss_bus_dev_shutdown(plat_priv);
 	if (ret != 0) {
 		cnss_pr_err("%s: cnss_bus_dev_shutdown failed(%d)\n", __func__,
 			    ret);
 	}
 	cnss_hif_notifier(plat_priv, CNSS_AFTER_SHUTDOWN);
+
+	plat_priv->powered_on = 0;
+	atomic_set(&sip, 1);
 
 	return 0;
 }
@@ -1143,10 +1172,10 @@ fail:
 
 void __cnss_hif_put(struct cnss_plat_data *plat_priv)
 {
-	set_bit(CNSS_DRIVER_UNLOADING, &plat_priv->driver_state);
-
 	if (!plat_priv)
 		return;
+
+	set_bit(CNSS_DRIVER_UNLOADING, &plat_priv->driver_state);
 
 	cnss_hif_shutdown(plat_priv);
 	plat_priv->driver_state = 0;
@@ -6833,7 +6862,10 @@ static void cnss_report_crash_work(struct work_struct *work)
 	cnss_hif_shutdown(plat_priv);
 	cnss_hif_notifier(plat_priv, CNSS_RAMDUMP_NOTIFICATION);
 	cnss_bus_dev_ramdump(plat_priv);
-	cnss_hif_power_up(plat_priv);
+
+	/* Shutdown was skipped if recovery is disabled. */
+	if (plat_priv->recovery_enabled)
+		cnss_hif_power_up(plat_priv);
 }
 #endif
 
