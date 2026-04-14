@@ -43,7 +43,10 @@
 #else
 #include <soc/qcom/ramdump.h>
 #endif
-
+#if IS_ENABLED(CONFIG_QCOM_MINIDUMP) && defined(CONFIG_TARGET_SDX85)
+#include <soc/qcom/memory_dump.h>
+#include <soc/qcom/minidump.h>
+#endif
 /* WINDOW0 address ranges are PCIE_PCIE_LOCAL_REG amd PCIE_MHI_REG */
 #define PCIE_LOCAL_REG_BASE     0x1E00000
 #define PCIE_LOCAL_REG_END	     0x1E03FFF
@@ -4544,6 +4547,111 @@ void cnss_get_crash_reason(struct cnss_pci_data *pci_priv)
 			    msg);
 }
 
+#if IS_ENABLED(CONFIG_QCOM_MINIDUMP) && defined(CONFIG_TARGET_SDX85)
+static int cnss_minidump_add_region(struct cnss_pci_data *pci_priv,
+				    struct cnss_dump_seg *dump_seg)
+{
+	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
+	struct device *dev = &pci_priv->pci_dev->dev;
+	struct sg_table sgt;
+	struct md_region md_entry;
+	int ret;
+
+	switch (dump_seg->type) {
+	case CNSS_FW_IMAGE:
+		snprintf(md_entry.name, sizeof(md_entry.name), "FBC[%x]",
+			 plat_priv->wlfw_service_instance_id);
+		break;
+	case CNSS_FW_RDDM:
+		snprintf(md_entry.name, sizeof(md_entry.name), "RDDM[%x]",
+			 plat_priv->wlfw_service_instance_id);
+		break;
+	case CNSS_FW_REMOTE_HEAP:
+		snprintf(md_entry.name, sizeof(md_entry.name), "RHEAP[%x]",
+			 plat_priv->wlfw_service_instance_id);
+		break;
+	case CNSS_FW_REMOTE_M3_DUMP:
+		snprintf(md_entry.name, sizeof(md_entry.name), "M3[%x]",
+			 plat_priv->wlfw_service_instance_id);
+		break;
+	case CNSS_FW_REMOTE_ETR:
+		snprintf(md_entry.name, sizeof(md_entry.name), "ETR[%x]",
+			 plat_priv->wlfw_service_instance_id);
+		break;
+	case CNSS_FW_REMOTE_CALDB:
+		snprintf(md_entry.name, sizeof(md_entry.name), "CALDB[%x]",
+			 plat_priv->wlfw_service_instance_id);
+		break;
+	case CNSS_FW_REMOTE_AFC:
+		snprintf(md_entry.name, sizeof(md_entry.name), "AFC[%x]",
+			 plat_priv->wlfw_service_instance_id);
+		break;
+	case CNSS_FW_REMOTE_MLO_GLOBAL:
+		snprintf(md_entry.name, sizeof(md_entry.name), "MLO[%x]",
+			 plat_priv->wlfw_service_instance_id);
+		break;
+	case CNSS_FW_PAGEABLE:
+		snprintf(md_entry.name, sizeof(md_entry.name), "FWPAGE[%x]",
+			 plat_priv->wlfw_service_instance_id);
+		break;
+	default:
+		cnss_pr_err("Unknown dump type ID: %d\n", dump_seg->type);
+		return -EINVAL;
+	}
+
+	md_entry.virt_addr = (uintptr_t)dump_seg->v_address;
+	md_entry.size = dump_seg->size;
+
+	ret = dma_get_sgtable_attrs(dev, &sgt, dump_seg->v_address,
+				    dump_seg->address, dump_seg->size,
+				    DMA_ATTR_FORCE_CONTIGUOUS);
+	if (ret){
+		cnss_pr_err("Failed to get sgtable for va: 0x%pK, dma: %pa, size: 0x%zx, attrs: 0x%lx\n",
+			    dump_seg->v_address, &dump_seg->address,
+			    dump_seg->size, DMA_ATTR_FORCE_CONTIGUOUS);
+	}
+	md_entry.phys_addr = page_to_phys(sg_page(sgt.sgl));
+	sg_free_table(&sgt);
+
+	cnss_pr_dbg("Mini dump region: %s, va: 0x%llx, pa: 0x%llx, size: 0x%llx\n",
+		    md_entry.name, md_entry.virt_addr, md_entry.phys_addr,
+		    md_entry.size);
+
+	ret = msm_minidump_add_region(&md_entry);
+	if (ret < 0)
+		cnss_pr_err("Failed to add mini dump region, err = %d\n", ret);
+
+	return ret;
+
+}
+static int cnss_update_minidump_segment(struct cnss_dump_seg *seg,
+					unsigned long address, void *vaddr,
+					unsigned long size, u32 type)
+{
+	if (!seg)
+		return -EINVAL;
+
+	seg->size = size;
+	seg->address = address;
+	seg->v_address = vaddr;
+	seg->type = type;
+
+	return 0;
+}
+#else
+static int cnss_minidump_add_region(struct cnss_pci_data *pci_priv,
+				    struct cnss_dump_seg *dump_seg)
+{
+	return 0;
+}
+static int cnss_update_minidump_segment(struct cnss_dump_seg *seg,
+					unsigned long address, void *vaddr,
+					unsigned long size, u32 type)
+{
+	return 0;
+}
+#endif
+
 void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 {
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
@@ -4555,6 +4663,7 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 	struct cnss_fw_mem *fw_mem = plat_priv->fw_mem;
 	struct cnss_fw_mem qdss_mem = plat_priv->qdss_mem;
 	int ret, i, skip_count = 0;
+	struct cnss_dump_seg minidump_seg;
 
 	/*
 	 * If RDDM is already collected, skip early without toggling
@@ -4607,6 +4716,12 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 	cnss_pr_dbg("Collect FW image dump segment, nentries %d\n",
 		    fw_image->entries);
 
+	cnss_update_minidump_segment(&minidump_seg,
+				     fw_image->mhi_buf[0].dma_addr,
+				     fw_image->mhi_buf[0].buf,
+				     0,
+				     CNSS_FW_IMAGE);
+
 	for (i = 0; i < fw_image->entries; i++) {
 		if (!fw_image->mhi_buf[i].dma_addr) {
 			skip_count++;
@@ -4620,13 +4735,25 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 		cnss_pr_dbg("seg-%d: address 0x%lx, v_address %pK, size 0x%lx\n",
 			    i, dump_seg->address,
 			    dump_seg->v_address, dump_seg->size);
+		minidump_seg.size += dump_seg->size;
 		dump_seg++;
 	}
 
 	dump_data->nentries += fw_image->entries - skip_count;
 
+	ret = cnss_minidump_add_region(pci_priv, &minidump_seg);
+	if (ret < 0)
+		cnss_pr_err("Failed to add minidump region, err = %d\n",
+			    ret);
+
 	cnss_pr_dbg("Collect RDDM image dump segment, nentries %d\n",
 		    rddm_image->entries);
+
+	cnss_update_minidump_segment(&minidump_seg,
+				     rddm_image->mhi_buf[0].dma_addr,
+				     rddm_image->mhi_buf[0].buf,
+				     0,
+				     CNSS_FW_RDDM);
 
 	for (i = 0; i < rddm_image->entries; i++) {
 		dump_seg->address = rddm_image->mhi_buf[i].dma_addr;
@@ -4636,10 +4763,16 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 		cnss_pr_dbg("seg-%d: address 0x%lx, v_address %pK, size 0x%lx\n",
 			    i, dump_seg->address,
 			    dump_seg->v_address, dump_seg->size);
+		minidump_seg.size += dump_seg->size;
 		dump_seg++;
 	}
 
 	dump_data->nentries += rddm_image->entries;
+
+	ret = cnss_minidump_add_region(pci_priv, &minidump_seg);
+	if (ret < 0)
+		cnss_pr_err("Failed to add minidump region, err = %d\n",
+			    ret);
 
 	cnss_pr_dbg("Collect remote heap dump segment\n");
 	for (i = 0; i < plat_priv->fw_mem_seg_len; i++) {
@@ -4653,6 +4786,11 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 			cnss_pr_dbg("seg-%d: address 0x%lx, v_address %pK, size 0x%lx\n",
 				    i, dump_seg->address, dump_seg->v_address,
 				    dump_seg->size);
+
+			ret = cnss_minidump_add_region(pci_priv, dump_seg);
+			if (ret < 0)
+				cnss_pr_err("Failed to add minidump region, err = %d\n",
+					    ret);
 			dump_seg++;
 			dump_data->nentries++;
 		}
@@ -4670,6 +4808,11 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 			cnss_pr_dbg("seg-%d: address 0x%lx, v_address %pK, size 0x%lx\n",
 				    i, dump_seg->address, dump_seg->v_address,
 				    dump_seg->size);
+
+			ret = cnss_minidump_add_region(pci_priv, dump_seg);
+			if (ret < 0)
+				cnss_pr_err("Failed to add minidump region, err = %d\n",
+					    ret);
 			dump_seg++;
 			dump_data->nentries++;
 		}
@@ -4684,6 +4827,11 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 		cnss_pr_dbg("QDSS seg-%d: address 0x%lx, v_address %pK, size 0x%lx\n",
 			    i, dump_seg->address, dump_seg->v_address,
 			    dump_seg->size);
+
+		ret = cnss_minidump_add_region(pci_priv, dump_seg);
+		if (ret < 0)
+			cnss_pr_err("Failed to add minidump region, err = %d\n",
+				    ret);
 		dump_seg++;
 		dump_data->nentries++;
 	}
@@ -4700,6 +4848,11 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 			cnss_pr_dbg("seg-%d: address 0x%lx, v_address %pK, size 0x%lx\n",
 				    i, dump_seg->address, dump_seg->v_address,
 				    dump_seg->size);
+
+			ret = cnss_minidump_add_region(pci_priv, dump_seg);
+			if (ret < 0)
+				cnss_pr_err("Failed to add minidump region, err = %d\n",
+					    ret);
 			dump_seg++;
 			dump_data->nentries++;
 		}
@@ -4717,6 +4870,11 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 			cnss_pr_dbg("seg-%d: address 0x%lx, v_address %pK, size 0x%lx\n",
 				    i, dump_seg->address, dump_seg->v_address,
 				    dump_seg->size);
+
+			ret = cnss_minidump_add_region(pci_priv, dump_seg);
+			if (ret < 0)
+				cnss_pr_err("Failed to add minidump region, err = %d\n",
+					    ret);
 			dump_seg++;
 			dump_data->nentries++;
 		}
@@ -4734,6 +4892,11 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 			cnss_pr_dbg("seg-%d: address 0x%lx, v_address %pK, size 0x%lx\n",
 				    i, dump_seg->address, dump_seg->v_address,
 				    dump_seg->size);
+
+			ret = cnss_minidump_add_region(pci_priv, dump_seg);
+			if (ret < 0)
+				cnss_pr_err("Failed to add minidump region, err = %d\n",
+					    ret);
 			dump_seg++;
 			dump_data->nentries++;
 		}
@@ -4752,6 +4915,11 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 				    i, dump_seg->address,
 				    dump_seg->v_address,
 				    dump_seg->size);
+
+			ret = cnss_minidump_add_region(pci_priv, dump_seg);
+			if (ret < 0)
+				cnss_pr_err("Failed to add mini dumpregion, err = %d\n",
+					    ret);
 			dump_seg++;
 			dump_data->nentries++;
 		}
