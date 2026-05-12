@@ -4555,7 +4555,7 @@ static int cnss_minidump_add_region(struct cnss_pci_data *pci_priv,
 	struct device *dev = &pci_priv->pci_dev->dev;
 	struct sg_table sgt;
 	struct md_region md_entry;
-	int ret;
+	int ret, entry_num = 0;
 
 	switch (dump_seg->type) {
 	case CNSS_FW_IMAGE:
@@ -4613,13 +4613,18 @@ static int cnss_minidump_add_region(struct cnss_pci_data *pci_priv,
 	md_entry.phys_addr = page_to_phys(sg_page(sgt.sgl));
 	sg_free_table(&sgt);
 
-	cnss_pr_dbg("Mini dump region: %s, va: 0x%llx, pa: 0x%llx, size: 0x%llx\n",
-		    md_entry.name, md_entry.virt_addr, md_entry.phys_addr,
+	cnss_pr_dbg("Mini dump region: %s, va: 0x%llx, pa: 0x%llx (0x%lx), size: 0x%llx\n",
+		    md_entry.name, md_entry.virt_addr, md_entry.phys_addr, dump_seg->address,
 		    md_entry.size);
 
 	ret = msm_minidump_add_region(&md_entry);
-	if (ret < 0)
+	if (ret == -EEXIST) {
+		ret = msm_minidump_update_region(entry_num, &md_entry);
+		if (ret < 0)
+			cnss_pr_err("Failed to update mini dump region, err = %d\n", ret);
+	} else if (ret < 0) {
 		cnss_pr_err("Failed to add mini dump region, err = %d\n", ret);
+	}
 
 	return ret;
 
@@ -4732,7 +4737,7 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 		dump_seg->v_address = fw_image->mhi_buf[i].buf;
 		dump_seg->size = fw_image->mhi_buf[i].len;
 		dump_seg->type = CNSS_FW_IMAGE;
-		cnss_pr_dbg("seg-%d: address 0x%lx, v_address %pK, size 0x%lx\n",
+		cnss_pr_dbg("seg-%d: address 0x%lx, v_address %px, size 0x%lx\n",
 			    i, dump_seg->address,
 			    dump_seg->v_address, dump_seg->size);
 		minidump_seg.size += dump_seg->size;
@@ -4760,7 +4765,7 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 		dump_seg->v_address = rddm_image->mhi_buf[i].buf;
 		dump_seg->size = rddm_image->mhi_buf[i].len;
 		dump_seg->type = CNSS_FW_RDDM;
-		cnss_pr_dbg("seg-%d: address 0x%lx, v_address %pK, size 0x%lx\n",
+		cnss_pr_dbg("seg-%d: address 0x%lx, v_address %px, size 0x%lx\n",
 			    i, dump_seg->address,
 			    dump_seg->v_address, dump_seg->size);
 		minidump_seg.size += dump_seg->size;
@@ -4783,7 +4788,7 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 			dump_seg->v_address = fw_mem[i].va;
 			dump_seg->size = fw_mem[i].size;
 			dump_seg->type = CNSS_FW_REMOTE_HEAP;
-			cnss_pr_dbg("seg-%d: address 0x%lx, v_address %pK, size 0x%lx\n",
+			cnss_pr_dbg("seg-%d: address 0x%lx, v_address %px, size 0x%lx\n",
 				    i, dump_seg->address, dump_seg->v_address,
 				    dump_seg->size);
 
@@ -4805,7 +4810,7 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 			dump_seg->v_address = fw_mem[i].va;
 			dump_seg->size = fw_mem[i].size;
 			dump_seg->type = CNSS_FW_REMOTE_M3_DUMP;
-			cnss_pr_dbg("seg-%d: address 0x%lx, v_address %pK, size 0x%lx\n",
+			cnss_pr_dbg("seg-%d: address 0x%lx, v_address %px, size 0x%lx\n",
 				    i, dump_seg->address, dump_seg->v_address,
 				    dump_seg->size);
 
@@ -4824,7 +4829,7 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 		dump_seg->v_address = qdss_mem.va;
 		dump_seg->size = qdss_mem.size;
 		dump_seg->type = CNSS_FW_REMOTE_ETR;
-		cnss_pr_dbg("QDSS seg-%d: address 0x%lx, v_address %pK, size 0x%lx\n",
+		cnss_pr_dbg("QDSS seg-%d: address 0x%lx, v_address %px, size 0x%lx\n",
 			    i, dump_seg->address, dump_seg->v_address,
 			    dump_seg->size);
 
@@ -4845,7 +4850,7 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 			dump_seg->v_address = fw_mem[i].va;
 			dump_seg->size = fw_mem[i].size;
 			dump_seg->type = CNSS_FW_REMOTE_CALDB;
-			cnss_pr_dbg("seg-%d: address 0x%lx, v_address %pK, size 0x%lx\n",
+			cnss_pr_dbg("seg-%d: address 0x%lx, v_address %px, size 0x%lx\n",
 				    i, dump_seg->address, dump_seg->v_address,
 				    dump_seg->size);
 
@@ -4867,7 +4872,7 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 			dump_seg->v_address = fw_mem[i].va;
 			dump_seg->size = fw_mem[i].size;
 			dump_seg->type = CNSS_FW_REMOTE_AFC;
-			cnss_pr_dbg("seg-%d: address 0x%lx, v_address %pK, size 0x%lx\n",
+			cnss_pr_dbg("seg-%d: address 0x%lx, v_address %px, size 0x%lx\n",
 				    i, dump_seg->address, dump_seg->v_address,
 				    dump_seg->size);
 
@@ -4889,7 +4894,7 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 			dump_seg->v_address = fw_mem[i].va;
 			dump_seg->size = fw_mem[i].size;
 			dump_seg->type = CNSS_FW_REMOTE_MLO_GLOBAL;
-			cnss_pr_dbg("seg-%d: address 0x%lx, v_address %pK, size 0x%lx\n",
+			cnss_pr_dbg("seg-%d: address 0x%lx, v_address %px, size 0x%lx\n",
 				    i, dump_seg->address, dump_seg->v_address,
 				    dump_seg->size);
 
@@ -4911,7 +4916,7 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 			dump_seg->v_address = fw_mem[i].va;
 			dump_seg->size = fw_mem[i].size;
 			dump_seg->type = CNSS_FW_PAGEABLE;
-			cnss_pr_dbg("seg-%d: address 0x%lx, v_address %pK, size 0x%lx\n",
+			cnss_pr_dbg("seg-%d: address 0x%lx, v_address %px, size 0x%lx\n",
 				    i, dump_seg->address,
 				    dump_seg->v_address,
 				    dump_seg->size);
