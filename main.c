@@ -6900,7 +6900,8 @@ void cnss_config_param_update_cb(uint32_t instance_id,
 			     value, instance_id);
 		break;
 	case CNSS_PLAT_IPC_PARAM_TYPE_COLD_BOOT_SUPPORT_V01:
-		plat_priv->cold_boot_support = value;
+		if(!IS_ENABLED(CONFIG_WLAN_LITE))
+			plat_priv->cold_boot_support = value;
 		cnss_pr_info("Setting cold_boot_support=%llu for instance_id 0x%x\n",
 			     value, instance_id);
 		break;
@@ -7717,7 +7718,8 @@ void cnss_update_platform_feature_support(u8 type, u32 instance_id, u32 value)
 			     value, instance_id);
 		break;
 	case CNSS_GENL_MSG_TYPE_COLD_BOOT_SUPPORT:
-		plat_priv->cold_boot_support = value;
+		if(!IS_ENABLED(CONFIG_WLAN_LITE))
+			plat_priv->cold_boot_support = value;
 		cnss_pr_info("Setting cold_boot_support=%d for instance_id 0x%x\n",
 			     value, instance_id);
 		break;
