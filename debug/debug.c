@@ -1719,7 +1719,8 @@ static ssize_t cnss_platform_features_write(struct file *fp,
 		return -EINVAL;
 
 	if (strcmp(cmd, "enable_cold_boot_support") == 0) {
-		plat_priv->cold_boot_support = val;
+		if(!IS_ENABLED(CONFIG_WLAN_LITE))
+			plat_priv->cold_boot_support = val;
 		cnss_pr_info("Setting cold_boot_support=%u for instance_id 0x%x\n",
 			     val, plat_priv->wlfw_service_instance_id);
 	} else if (strcmp(cmd, "enable_qdss_tracing") == 0) {
