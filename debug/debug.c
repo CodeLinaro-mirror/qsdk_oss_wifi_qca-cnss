@@ -460,6 +460,7 @@ static int cnss_debug_read_sbl_data(struct cnss_pci_data *pci_priv,
 			break;
 	}
 	pbl_sbl_err->sbl_vals = buf;
+	pbl_sbl_err->sbl_len = i;
 
 	return 0;
 }
